@@ -3,7 +3,7 @@
 
 from django.urls import re_path
 
-from awx.api.views import RoleList, RoleDetail, RoleUsersList, RoleTeamsList, RoleParentsList, RoleChildrenList
+from awx.api.views import RoleList, RoleDetail, RoleUsersList, RoleTeamsList, RoleParentsList, RoleAncestorsList, RoleChildrenList
 
 
 urls = [
@@ -12,6 +12,7 @@ urls = [
     re_path(r'^(?P<pk>[0-9]+)/users/$', RoleUsersList.as_view(), name='role_users_list'),
     re_path(r'^(?P<pk>[0-9]+)/teams/$', RoleTeamsList.as_view(), name='role_teams_list'),
     re_path(r'^(?P<pk>[0-9]+)/parents/$', RoleParentsList.as_view(), name='role_parents_list'),
+    re_path(r'^(?P<pk>[0-9]+)/ancestors/$', RoleAncestorsList.as_view(), name='role_ancestors_list'),
     re_path(r'^(?P<pk>[0-9]+)/children/$', RoleChildrenList.as_view(), name='role_children_list'),
 ]
 

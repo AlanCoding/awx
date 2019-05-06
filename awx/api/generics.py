@@ -806,12 +806,12 @@ class ResourceAccessList(ParentMixin, ListAPIView):
         obj = self.get_parent_object()
 
         content_type = ContentType.objects.get_for_model(obj)
-        roles = set(Role.objects.filter(content_type=content_type, object_id=obj.id))
+        roles = set(Role.objects.filter(content_type=content_type, object_id=obj.id).prefetch_related('ancestors'))
 
         ancestors = set()
         for r in roles:
             ancestors.update(set(r.ancestors.all()))
-        return User.objects.filter(roles__in=list(ancestors)).distinct()
+        return User.objects.filter(roles__in=list(ancestors)).prefetch_related('profile').distinct()
 
 
 def trigger_delayed_deep_copy(*args, **kwargs):

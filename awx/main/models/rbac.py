@@ -6,6 +6,7 @@ import logging
 import threading
 import contextlib
 import re
+import json
 
 # Django
 from django.db import models, transaction, connection
@@ -437,6 +438,68 @@ class Role(models.Model):
 
     def is_ancestor_of(self, role):
         return role.ancestors.filter(id=self.id).exists()
+
+    def is_team_parent_of(self, child_role):
+        if self.role_field != 'member_role':
+            return False
+        return self.pk not in json.loads(child_role.implicit_parents)
+
+    def iter_ancestor_paths(self):
+        cached_roles = {}
+        for role in self.ancestors.all():
+            cached_roles[role.pk] = role
+
+        this_role = cached_roles[self.pk]
+        path = [this_role]
+        parent_iters = [iter(this_role.parents.all())]
+        context_and_seen = [(None, set()),]
+
+        while path:
+            team_context, seen = context_and_seen[-1]
+
+            parent_iter = parent_iters[-1]
+            try:
+                parent = next(parent_iter)
+                # This optimization should not be necessary, but the Django ORM is not perfect
+                parent = cached_roles[parent.pk]
+            except StopIteration:
+                parent = None
+
+            if parent:
+                if parent.is_team_parent_of(path[-1]):
+                    if parent.pk in set(team_role_pk for team_role_pk, seen in context_and_seen):
+                        continue
+                    team_context, seen = (parent.pk, set())
+                    context_and_seen.append((team_context, seen))
+
+                if parent.pk in seen:
+                    continue
+                parent_iters.append(iter(parent.parents.all()))
+                seen.add(parent.pk)
+                path.append(parent)
+                yield path.copy()
+            else:
+                rm_role = path.pop()
+                if team_context and rm_role.pk == team_context:
+                    context_and_seen.pop()
+                parent_iters.pop()
+
+    def get_ancestry_paths(self, ancestor_role):
+        '''For a given ancestor_role, known to be an ancestor of this role
+        return a list of pathways (each as list of roles) which are chains of
+        parent roles from this role to the ancestor role
+
+        The paths must all contain at least one distinct removable parentage
+        linkage, which is needed for team-team permissions presentation
+
+        This should only be called from a role which has already prefetched ancestors
+        '''
+        all_paths = []
+        for path in self.iter_ancestor_paths():
+            if path[-1] == ancestor_role:
+                all_paths.append(path)
+        return all_paths
+
 
     def is_singleton(self):
         return self.singleton_name in [ROLE_SINGLETON_SYSTEM_ADMINISTRATOR, ROLE_SINGLETON_SYSTEM_AUDITOR]

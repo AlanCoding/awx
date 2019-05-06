@@ -2370,6 +2370,10 @@ class RoleSerializer(BaseSerializer):
         ret = super(RoleSerializer, self).get_related(obj)
         ret['users'] = self.reverse('api:role_users_list', kwargs={'pk': obj.pk})
         ret['teams'] = self.reverse('api:role_teams_list', kwargs={'pk': obj.pk})
+        if not obj.singleton_name:
+            ret['parents'] = self.reverse('api:role_parents_list', kwargs={'pk': obj.pk})
+            ret['ancestors'] = self.reverse('api:role_ancestors_list', kwargs={'pk': obj.pk})
+        ret['children'] = self.reverse('api:role_children_list', kwargs={'pk': obj.pk})
         try:
             if obj.content_object:
                 ret.update(reverse_gfk(obj.content_object, self.context.get('request')))
@@ -2383,6 +2387,29 @@ class RoleSerializer(BaseSerializer):
 
 class RoleSerializerWithParentAccess(RoleSerializer):
     show_capabilities = ['unattach']
+
+
+class RoleAncestorSerializer(RoleSerializer):
+
+    def get_summary_fields(self, obj):
+        summary_dict = super(RoleAncestorSerializer, self).get_summary_fields(obj)
+        view = self.context['view']
+        descendant_role = view.get_parent_object()
+        ancestry = descendant_role.get_ancestry_paths(obj)
+        summary_dict['paths'] = []
+        for path in ancestry:
+            this_path = []
+            last_role = None
+            for role in path:
+                this_path.append({
+                    'role_field': role.role_field,
+                    'content_type': getattr(role.content_type, 'model', None),
+                    'removable': role.is_team_parent_of(last_role)
+                })
+                last_role = role
+            summary_dict['paths'].append(this_path)
+
+        return summary_dict
 
 
 class ResourceAccessListElementSerializer(UserSerializer):

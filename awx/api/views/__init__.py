@@ -4251,6 +4251,35 @@ class RoleParentsList(SubListAPIView):
         return models.Role.filter_visible_roles(self.request.user, role.parents.all())
 
 
+class RoleAncestorsList(SubListAPIView):
+
+    model = models.Role
+    serializer_class = serializers.RoleAncestorSerializer
+    parent_model = models.Role
+    relationship = 'ancestors'
+    permission_classes = (IsAuthenticated,)
+    search_fields = ('role_field', 'content_type__model',)
+
+    def get_parent_object(self):
+        if self.parent_object is not None:
+            return self.parent_object
+        parent_filter = {
+            self.lookup_field: self.kwargs.get(self.lookup_field, None),
+        }
+        self.parent_object = get_object_or_404(
+            self.parent_model.objects.prefetch_related(
+                'ancestors__parents', 'ancestors__content_type',
+            ),
+            **parent_filter
+        )
+        return self.parent_object
+
+    def get_queryset(self):
+        role = models.Role.objects.get(pk=self.kwargs['pk'])
+        self.check_parent_access(role)
+        return role.ancestors.all().prefetch_related('content_object')
+
+
 class RoleChildrenList(SubListAPIView):
     model = models.Role
     serializer_class = serializers.RoleSerializer
