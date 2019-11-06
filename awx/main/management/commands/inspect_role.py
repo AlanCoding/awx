@@ -27,6 +27,8 @@ class Command(BaseCommand):
         parser.add_argument('--method', dest='method', type=str, default='up',
                             choices=['up', 'down', 'downup'],
                             help='What directions to crawl to find the graph nodes.')
+        parser.add_argument('--ext', dest='ext', type=str, default='png',
+                            help='Extension')
 
     def handle(self, **options):
         role_pk = int(options['role'])
@@ -37,7 +39,11 @@ class Command(BaseCommand):
         except ModuleNotFoundError as e:
             raise CommandError('You need graphviz to run this command, `pip install graphviz` {}'.format(e))
 
-        dot = Digraph(format='png')
+        dot = Digraph(
+            format=options['ext'],
+            comment='Ancestry structure for role={}'.format(role_pk)
+        )
+        dot.graph_attr['rankdir'] = 'LR'
 
         role = Role.objects.prefetch_related(
             'ancestors__content_type', 'parents',
