@@ -23,6 +23,7 @@ from django.utils.timezone import now
 
 # AWX
 from awx.api.versioning import reverse
+from awx.main.constants import PERM_RW
 from awx.main.fields import (
     ImplicitRoleField,
     CredentialInputField,
@@ -506,7 +507,7 @@ class CredentialType(CommonModelNameNotUnique):
             _, path = tempfile.mkstemp(dir=os.path.join(private_data_dir, 'env'))
             with open(path, 'w') as f:
                 f.write(data)
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            os.chmod(path, PERM_RW)
             container_path = to_container_path(path, private_data_dir)
 
             # determine if filename indicates single file or many

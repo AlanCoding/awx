@@ -9,7 +9,6 @@ import logging
 import os
 import subprocess
 import re
-import stat
 import subprocess
 import urllib.parse
 import threading
@@ -39,6 +38,7 @@ from django.utils.timezone import now
 from django.apps import apps
 
 # AWX
+from awx.main.constants import PERM_RW
 from awx.conf.license import get_license
 
 logger = logging.getLogger('awx.main.utils')
@@ -994,7 +994,7 @@ def create_temporary_fifo(data):
     :param data(bytes): Data to write to the pipe.
     """
     path = os.path.join(tempfile.mkdtemp(), next(tempfile._get_candidate_names()))
-    os.mkfifo(path, stat.S_IRUSR | stat.S_IWUSR)
+    os.mkfifo(path, PERM_RW)
 
     threading.Thread(target=lambda p, d: open(p, 'wb').write(d), args=(path, data)).start()
     return path

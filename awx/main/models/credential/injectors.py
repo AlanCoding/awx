@@ -6,6 +6,7 @@ import tempfile
 
 from django.conf import settings
 
+from awx.main.constants import PERM_RW
 from awx.main.utils.execution_environments import to_container_path
 
 
@@ -31,7 +32,7 @@ def gce(cred, env, private_data_dir):
     f = os.fdopen(handle, 'w')
     json.dump(json_cred, f, indent=2)
     f.close()
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    os.chmod(path, PERM_RW)
     container_path = to_container_path(path, private_data_dir)
     env['GCE_CREDENTIALS_FILE_PATH'] = container_path
     env['GCP_SERVICE_ACCOUNT_FILE'] = container_path
@@ -104,7 +105,7 @@ def openstack(cred, env, private_data_dir):
     openstack_data = _openstack_data(cred)
     yaml.safe_dump(openstack_data, f, default_flow_style=False, allow_unicode=True)
     f.close()
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    os.chmod(path, PERM_RW)
     env['OS_CLIENT_CONFIG_FILE'] = to_container_path(path, private_data_dir)
 
 
@@ -115,7 +116,7 @@ def kubernetes_bearer_token(cred, env, private_data_dir):
         env['K8S_AUTH_VERIFY_SSL'] = 'True'
         handle, path = tempfile.mkstemp(dir=os.path.join(private_data_dir, 'env'))
         with os.fdopen(handle, 'w') as f:
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            os.chmod(path, PERM_RW)
             f.write(cred.get_input('ssl_ca_cert'))
         env['K8S_AUTH_SSL_CA_CERT'] = to_container_path(path, private_data_dir)
     else:

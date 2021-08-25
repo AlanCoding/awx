@@ -897,7 +897,7 @@ class BaseTask(object):
             if cred.has_inputs(field_names=('host', 'username', 'password')):
                 path = os.path.split(private_data_dir)[0]
                 with open(path + '/auth.json', 'w') as authfile:
-                    os.chmod(authfile.name, stat.S_IRUSR | stat.S_IWUSR)
+                    os.chmod(authfile.name, PERM_RW)
 
                     host = cred.get_input('host')
                     username = cred.get_input('username')
@@ -932,12 +932,12 @@ class BaseTask(object):
         Create a temporary directory for job-related files.
         """
         pdd_wrapper_path = tempfile.mkdtemp(prefix=f'pdd_wrapper_{instance.pk}_', dir=settings.AWX_ISOLATION_BASE_PATH)
-        os.chmod(pdd_wrapper_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+        os.chmod(pdd_wrapper_path, PERM_RWX)
         if settings.AWX_CLEANUP_PATHS:
             self.cleanup_paths.append(pdd_wrapper_path)
 
         path = tempfile.mkdtemp(prefix='awx_%s_' % instance.pk, dir=pdd_wrapper_path)
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+        os.chmod(path, PERM_RWX)
         # Ansible runner requires that project exists,
         # and we will write files in the other folders without pre-creating the folder
         for subfolder in ('project', 'inventory', 'env'):
@@ -991,7 +991,7 @@ class BaseTask(object):
                     f = os.fdopen(handle, 'w')
                     f.write(data)
                     f.close()
-                    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+                    os.chmod(path, PERM_RW)
                 private_data_files['credentials'][credential] = path
             for credential, data in private_data.get('certificates', {}).items():
                 artifact_dir = os.path.join(private_data_dir, 'artifacts', str(self.instance.id))
@@ -1001,7 +1001,7 @@ class BaseTask(object):
                 with open(path, 'w') as f:
                     f.write(data)
                     f.close()
-                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+                os.chmod(path, PERM_RW)
         return private_data_files
 
     def build_passwords(self, instance, runtime_passwords):
@@ -1072,7 +1072,7 @@ class BaseTask(object):
                 host = ee_cred.get_input('host')
 
                 with open(registries_conf_path, 'w') as registries_conf:
-                    os.chmod(registries_conf.name, stat.S_IRUSR | stat.S_IWUSR)
+                    os.chmod(registries_conf.name, PERM_RW)
 
                     lines = [
                         '[[registry]]',
@@ -2569,7 +2569,7 @@ class RunInventoryUpdate(BaseTask):
             inventory_path = os.path.join(private_data_dir, 'inventory', injector.filename)
             with open(inventory_path, 'w') as f:
                 f.write(content)
-            os.chmod(inventory_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+            os.chmod(inventory_path, PERM_RWX)
 
             rel_path = os.path.join('inventory', injector.filename)
         elif src == 'scm':

@@ -2,6 +2,7 @@
 # All Rights Reserved.
 
 import re
+import stat
 
 from django.utils.translation import ugettext_lazy as _
 
@@ -81,3 +82,7 @@ LOGGER_BLOCKLIST = (
 # Reported version for node seen in receptor mesh but for which capacity check
 # failed or is in progress
 RECEPTOR_PENDING = 'ansible-runner-???'
+
+# File permissions to use when preparing the job directory
+PERM_RW = stat.S_IRUSR | stat.S_IWUSR
+PERM_RWX = PERM_RW | stat.S_IXUSR
