@@ -16,7 +16,12 @@ class Project(HasCopy, HasCreate, HasNotifications, UnifiedJobTemplate):
     optional_schedule_fields = tuple()
     NATURAL_KEY = ('organization', 'name')
 
-    def payload(self, organization, scm_type='git', **kwargs):
+    def payload(self, organization, scm_type='git', **kwargs_in):
+        # HACK: use a custom branch for python compat
+        kwargs = kwargs_in.copy()
+        if kwargs.get('scm_url') in ('', 'https://github.com/ansible/test-playbooks.git') and not kwargs.get('scm_branch'):
+            kwargs['scm_branch'] = 'python3'
+
         payload = PseudoNamespace(
             name=kwargs.get('name') or 'Project - {}'.format(random_title()),
             description=kwargs.get('description') or random_title(10),
