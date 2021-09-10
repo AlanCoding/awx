@@ -2052,10 +2052,13 @@ class RunProjectUpdate(BaseTask):
                 env[f'ANSIBLE_GALAXY_SERVER_SERVER{i}_URL'] = cred.get_input('url')
                 auth_url = cred.get_input('auth_url', default=None)
                 token = cred.get_input('token', default=None)
+                verify_ssl = cred.get_input('verify_ssl', default=None)
                 if token:
                     env[f'ANSIBLE_GALAXY_SERVER_SERVER{i}_TOKEN'] = token
                 if auth_url:
                     env[f'ANSIBLE_GALAXY_SERVER_SERVER{i}_AUTH_URL'] = auth_url
+                if verify_ssl is not None:
+                    env[f'ANSIBLE_GALAXY_SERVER_SERVER{i}_VERIFY_SSL'] = verify_ssl
                 galaxy_server_list.append(f'server{i}')
 
         if galaxy_server_list:

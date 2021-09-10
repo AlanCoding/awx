@@ -1166,6 +1166,12 @@ ManagedCredentialType(
                 'secret': True,
                 'help_text': ugettext_noop('A token to use for authentication against the Galaxy instance.'),
             },
+            {
+                'id': 'verify_ssl',
+                'label': ugettext_noop('Verify SSL'),
+                'type': 'boolean',
+                'default': True,
+            },
         ],
         'required': ['url'],
     },
