@@ -236,9 +236,9 @@ class RunnerCallback:
                 if os.path.exists(key_data_file) and stat.S_ISFIFO(os.stat(key_data_file).st_mode):
                     os.remove(key_data_file)
         elif status_data['status'] == 'error':
-            result_traceback = status_data.get('result_traceback', None)
-            if result_traceback:
-                self.delay_update(result_traceback=result_traceback)
+            for potential_field in ('result_traceback', 'job_explanation'):
+                if status_data.get(potential_field, None):
+                    self.delay_update(**{potential_field: status_data[potential_field]})
 
 
 class RunnerCallbackForProjectUpdate(RunnerCallback):
