@@ -422,6 +422,18 @@ class AutoscalePool(WorkerPool):
             running_uuids.extend(list(worker.managed_tasks.keys()))
         reaper.reap(excluded_uuids=running_uuids)
 
+    def cancel_job(self, celery_task_id):
+        for w in self.workers:
+            task = w.current_task
+            if not task:
+                continue
+            if task['uuid'] == celery_task_id:
+                logger.warn(f'Found process to cancel!\n{task}')
+                os.kill(w.pid, signal.SIGTERM)
+                break
+        else:
+            logger.warn(f'Could not find running process to cancel {celery_task_id}')
+
     def up(self):
         if self.full:
             # if we can't spawn more workers, just toss this message into a
@@ -435,9 +447,13 @@ class AutoscalePool(WorkerPool):
         if 'guid' in body:
             GuidMiddleware.set_guid(body['guid'])
         try:
-            # when the cluster heartbeat occurs, clean up internally
-            if isinstance(body, dict) and 'cluster_node_heartbeat' in body['task']:
-                self.cleanup()
+            if isinstance(body, dict):
+                # special local cancel triggered by job canceling
+                if 'cancel_unified_job' in body['task']:
+                    self.cancel_job(body['args'][0])
+                # when the cluster heartbeat occurs, clean up internally
+                if 'cluster_node_heartbeat' in body['task']:
+                    self.cleanup()
             if self.should_grow:
                 self.up()
             # we don't care about "preferred queue" round robin distribution, just

@@ -1393,9 +1393,9 @@ class UnifiedJob(
                     x.cancel(job_explanation=self._build_job_explanation(), is_chain=True)
 
             if not self.cancel_flag:
-                self.cancel_flag = True
+                # self.cancel_flag = True
                 self.start_args = ''  # blank field to remove encrypted passwords
-                cancel_fields = ['cancel_flag', 'start_args']
+                cancel_fields = ['start_args']
                 if self.status in ('pending', 'waiting', 'new'):
                     self.status = 'canceled'
                     cancel_fields.append('status')
@@ -1407,7 +1407,10 @@ class UnifiedJob(
                     cancel_fields.append('job_explanation')
                 self.save(update_fields=cancel_fields)
                 self.websocket_emit_status("canceled")
-        return self.cancel_flag
+                from awx.main.tasks import cancel_unified_job
+
+                cancel_unified_job.delay(self.celery_task_id)
+        return True
 
     @property
     def preferred_instance_groups(self):

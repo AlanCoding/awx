@@ -14,6 +14,7 @@ import os
 from io import StringIO
 from contextlib import redirect_stdout
 import shutil
+import signal
 import stat
 import tempfile
 import time
@@ -312,6 +313,11 @@ def handle_setting_changes(setting_keys):
 
     if any([setting.startswith('LOG_AGGREGATOR') for setting in setting_keys]):
         reconfigure_rsyslog()
+
+
+@task(queue=get_local_queuename)
+def cancel_unified_job(celery_task_id):
+    logger.info(f'Local dispatcher processed request to cancel job with task id {celery_task_id}')
 
 
 @task(queue='tower_broadcast_all')
@@ -3060,11 +3066,23 @@ class TransmitterThread(threading.Thread):
             self.exc = sys.exc_info()
 
 
+class GracefulKiller:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+
+    def exit_gracefully(self, *args):
+        self.kill_now = True
+
+
 class AWXReceptorJob:
     def __init__(self, task, runner_params=None):
         self.task = task
         self.runner_params = runner_params
         self.unit_id = None
+        self.killer = GracefulKiller()
 
         if self.task and not self.task.instance.is_container_group_task:
             execution_environment_params = self.task.build_execution_environment_params(self.task.instance, runner_params['private_data_dir'])
@@ -3255,11 +3273,11 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.task.cancel_callback():
+            if self.killer.kill_now:
                 result = namedtuple('result', ['status', 'rc'])
                 return result('canceled', 1)
 
-            time.sleep(1)
+            time.sleep(0.5)
 
     @property
     def pod_definition(self):
