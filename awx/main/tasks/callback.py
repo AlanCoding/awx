@@ -6,9 +6,9 @@ import os
 import stat
 
 # Django
-from django.utils.timezone import now
 from django.conf import settings
 from django_guid.middleware import GuidMiddleware
+from django.db import connections
 
 # AWX
 from awx.main.redact import UriCleaner
@@ -142,22 +142,6 @@ class RunnerCallback:
 
         return False
 
-    def cancel_callback(self):
-        """
-        Ansible runner callback to tell the job when/if it is canceled
-        """
-        unified_job_id = self.instance.pk
-        self.instance.refresh_from_db()
-        if not self.instance:
-            logger.error('unified job {} was deleted while running, canceling'.format(unified_job_id))
-            return True
-        if self.instance.cancel_flag or self.instance.status == 'canceled':
-            cancel_wait = (now() - self.instance.modified).seconds if self.instance.modified else 0
-            if cancel_wait > 5:
-                logger.warn('Request to cancel {} took {} seconds to complete.'.format(self.instance.log_format, cancel_wait))
-            return True
-        return False
-
     def finished_callback(self, runner_obj):
         """
         Ansible runner callback triggered on finished run
@@ -186,6 +170,8 @@ class RunnerCallback:
 
             with disable_activity_stream():
                 self.instance = self.update_model(self.instance.pk, job_args=json.dumps(runner_config.command), job_cwd=runner_config.cwd, job_env=job_env)
+            # We opened a connection just for that save, close it here now
+            connections.close_all()
         elif status_data['status'] == 'failed':
             # For encrypted ssh_key_data, ansible-runner worker will open and write the
             # ssh_key_data to a named pipe. Then, once the podman container starts, ssh-agent will

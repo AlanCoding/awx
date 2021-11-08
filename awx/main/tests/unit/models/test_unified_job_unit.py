@@ -34,7 +34,8 @@ def unified_job(mocker):
 
 def test_cancel(unified_job):
 
-    unified_job.cancel()
+    with mock.patch('awx.main.models.unified_jobs.connection.on_commit'):
+        unified_job.cancel()
 
     assert unified_job.cancel_flag is True
     assert unified_job.status == 'canceled'
@@ -49,7 +50,8 @@ def test_cancel(unified_job):
 def test_cancel_job_explanation(unified_job):
     job_explanation = 'giggity giggity'
 
-    unified_job.cancel(job_explanation=job_explanation)
+    with mock.patch('awx.main.models.unified_jobs.connection.on_commit'):
+        unified_job.cancel(job_explanation=job_explanation)
 
     assert unified_job.job_explanation == job_explanation
     unified_job.save.assert_called_with(update_fields=['cancel_flag', 'start_args', 'status', 'job_explanation'])

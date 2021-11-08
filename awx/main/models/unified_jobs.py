@@ -1407,6 +1407,21 @@ class UnifiedJob(
                     cancel_fields.append('job_explanation')
                 self.save(update_fields=cancel_fields)
                 self.websocket_emit_status("canceled")
+
+            def actually_cancel():
+                if self.celery_task_id:
+                    from awx.main.tasks.system import cancel_control_process
+
+                    # This task runs logic in the main dispatcher process
+                    # so the sigterm will be issued without waiting in the multiprocessing queue
+                    # this is important so users can cancel jobs in an overloaded system
+                    cancel_control_process.apply_async([self.celery_task_id], queue=self.get_queue_name())
+                else:
+                    from awx.main.tasks.system import cancel_unified_job
+
+                    cancel_unified_job.apply_async([self.id], queue=self.get_queue_name())
+
+            connection.on_commit(actually_cancel)
         return self.cancel_flag
 
     @property

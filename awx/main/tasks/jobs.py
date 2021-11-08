@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
+import signal
 import stat
 import yaml
 import tempfile
@@ -86,6 +87,21 @@ from django.utils.translation import ugettext_lazy as _
 logger = logging.getLogger('awx.main.tasks.jobs')
 
 
+class SigtermWatcher:
+    SIGNALS = (signal.SIGTERM, signal.SIGINT)
+
+    def __init__(self):
+        self.sigterm_flag = False
+        for s in self.SIGNALS:
+            signal.signal(s, self.set_flag)
+
+    def set_flag(self, *args):
+        self.sigterm_flag = True
+
+    def cancel_callback(self):
+        return self.sigterm_flag
+
+
 def with_path_cleanup(f):
     @functools.wraps(f)
     def _wrapped(self, *args, **kwargs):
@@ -111,9 +127,14 @@ class BaseTask(object):
     abstract = True
     callback_class = RunnerCallback
 
-    def __init__(self):
+    def __init__(self, sigterm_watcher=None):
         self.cleanup_paths = []
         self.runner_callback = self.callback_class(model=self.model)
+        # start watching for SIGTERM before loading the model to catch cancel signal at any time
+        if sigterm_watcher:
+            self.sigterm_watcher = sigterm_watcher  # inherit watcher from parent if local dependent task
+        else:
+            self.sigterm_watcher = SigtermWatcher()
 
     def update_model(self, pk, _attempt=0, **updates):
         return update_model(self.model, pk, _attempt=0, **updates)
@@ -455,8 +476,10 @@ class BaseTask(object):
             private_data_dir = self.build_private_data_dir(self.instance)
             self.pre_run_hook(self.instance, private_data_dir)
             self.instance.log_lifecycle("preparing_playbook")
-            if self.instance.cancel_flag:
+
+            if self.instance.cancel_flag or self.sigterm_watcher.cancel_callback():
                 self.instance = self.update_model(self.instance.pk, status='canceled')
+
             if self.instance.status != 'running':
                 # Stop the task chain and prevent starting the job if it has
                 # already been canceled.
@@ -551,7 +574,7 @@ class BaseTask(object):
                     event_handler=self.runner_callback.event_handler,
                     finished_callback=self.runner_callback.finished_callback,
                     status_handler=self.runner_callback.status_handler,
-                    cancel_callback=self.runner_callback.cancel_callback,
+                    cancel_callback=self.sigterm_watcher.cancel_callback,
                     **params,
                 )
             else:
@@ -941,7 +964,7 @@ class RunJob(BaseTask):
             project_update_task = local_project_sync._get_task_class()
             try:
                 # the job private_data_dir is passed so sync can download roles and collections there
-                sync_task = project_update_task(job_private_data_dir=private_data_dir)
+                sync_task = project_update_task(job_private_data_dir=private_data_dir, sigterm_watcher=self.sigterm_watcher)
                 sync_task.run(local_project_sync.id)
                 local_project_sync.refresh_from_db()
                 job = self.update_model(job.pk, scm_revision=local_project_sync.scm_revision)
@@ -1225,7 +1248,7 @@ class RunProjectUpdate(BaseTask):
                 local_inv_update.log_lifecycle("execution_node_chosen")
             try:
                 create_partition(local_inv_update.event_class._meta.db_table, start=local_inv_update.created)
-                inv_update_class().run(local_inv_update.id)
+                inv_update_class(sigterm_watcher=self.sigterm_watcher).run(local_inv_update.id)
             except Exception:
                 logger.exception('{} Unhandled exception updating dependent SCM inventory sources.'.format(project_update.log_format))
 
@@ -1684,7 +1707,7 @@ class RunInventoryUpdate(BaseTask):
 
             project_update_task = local_project_sync._get_task_class()
             try:
-                sync_task = project_update_task(job_private_data_dir=private_data_dir)
+                sync_task = project_update_task(job_private_data_dir=private_data_dir, sigterm_watcher=self.sigterm_watcher)
                 sync_task.run(local_project_sync.id)
                 local_project_sync.refresh_from_db()
                 inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
@@ -1744,7 +1767,7 @@ class RunInventoryUpdate(BaseTask):
 
         handler = SpecialInventoryHandler(
             self.runner_callback.event_handler,
-            self.runner_callback.cancel_callback,
+            self.sigterm_watcher.cancel_callback,
             verbosity=inventory_update.verbosity,
             job_timeout=self.get_instance_timeout(self.instance),
             start_time=inventory_update.started,
