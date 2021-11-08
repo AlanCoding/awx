@@ -247,6 +247,21 @@ def handle_setting_changes(setting_keys):
         reconfigure_rsyslog()
 
 
+@task(queue=get_local_queuename)
+def cancel_unified_job(unified_job_id):
+    try:
+        unified_job = UnifiedJob.objects.get(pk=unified_job_id)
+    except UnifiedJob.DoesNotExist:
+        logger.info(f'Job id {unified_job_id} has been deleted, aborting cancel')
+        return
+    receptor_ctl = get_receptor_ctl()
+    try:
+        receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
+    finally:
+        receptor_ctl.close()
+    # potentially submit task here to SIGTERM the running control process
+
+
 @task(queue='tower_broadcast_all')
 def delete_project_files(project_path):
     # TODO: possibly implement some retry logic

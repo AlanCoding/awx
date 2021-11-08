@@ -1,7 +1,5 @@
 # Python
 from base64 import b64encode
-from collections import namedtuple
-import concurrent.futures
 from enum import Enum
 import logging
 import os
@@ -339,59 +337,46 @@ class AWXReceptorJob:
             shutil.rmtree(artifact_dir)
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
-        # Both "processor" and "cancel_watcher" are spawned in separate threads.
-        # We wait for the first one to return. If cancel_watcher returns first,
-        # we yank the socket out from underneath the processor, which will cause it
-        # to exit. A reference to the processor_future is passed into the cancel_watcher_future,
-        # Which exits if the job has finished normally. The context manager ensures we do not
-        # leave any threads laying around.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            processor_future = executor.submit(self.processor, resultfile)
-            cancel_watcher_future = executor.submit(self.cancel_watcher, processor_future)
-            futures = [processor_future, cancel_watcher_future]
-            first_future = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
 
-            res = list(first_future.done)[0].result()
-            if res.status == 'canceled':
-                receptor_ctl.simple_command(f"work cancel {self.unit_id}")
-                resultsock.shutdown(socket.SHUT_RDWR)
-                resultfile.close()
-            elif res.status == 'error':
+        res = self.processor(resultfile)
+
+        if res.status == 'error':
+            try:
+                unit_status = receptor_ctl.simple_command(f'work status {self.unit_id}')
+                logger.info(f'work status: {unit_status}')
+                detail = unit_status.get('Detail', None)
+                state_name = unit_status.get('StateName', None)
+            except Exception:
+                detail = ''
+                state_name = ''
+                logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
+
+            if 'exceeded quota' in detail:
+                logger.warn(detail)
+                log_name = self.task.instance.log_format
+                logger.warn(f"Could not launch pod for {log_name}. Exceeded quota.")
+                self.task.update_model(self.task.instance.pk, status='pending')
+                return
+            # If ansible-runner ran, but an error occured at runtime, the traceback information
+            # is saved via the status_handler passed in to the processor.
+            if state_name == 'Succeeded':
+                return res
+
+            if not self.task.instance.result_traceback:
                 try:
-                    unit_status = receptor_ctl.simple_command(f'work status {self.unit_id}')
-                    detail = unit_status.get('Detail', None)
-                    state_name = unit_status.get('StateName', None)
+                    resultsock = receptor_ctl.get_work_results(self.unit_id, return_sockfile=True)
+                    lines = resultsock.readlines()
+                    receptor_output = b"".join(lines).decode()
+                    if receptor_output:
+                        self.task.instance.result_traceback = receptor_output
+                        self.task.instance.save(update_fields=['result_traceback'])
+                    elif detail:
+                        self.task.instance.result_traceback = detail
+                        self.task.instance.save(update_fields=['result_traceback'])
+                    else:
+                        logger.warn(f'No result details or output from {self.task.instance.log_format}, status:\n{state_name}')
                 except Exception:
-                    detail = ''
-                    state_name = ''
-                    logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
-
-                if 'exceeded quota' in detail:
-                    logger.warn(detail)
-                    log_name = self.task.instance.log_format
-                    logger.warn(f"Could not launch pod for {log_name}. Exceeded quota.")
-                    self.task.update_model(self.task.instance.pk, status='pending')
-                    return
-                # If ansible-runner ran, but an error occured at runtime, the traceback information
-                # is saved via the status_handler passed in to the processor.
-                if state_name == 'Succeeded':
-                    return res
-
-                if not self.task.instance.result_traceback:
-                    try:
-                        resultsock = receptor_ctl.get_work_results(self.unit_id, return_sockfile=True)
-                        lines = resultsock.readlines()
-                        receptor_output = b"".join(lines).decode()
-                        if receptor_output:
-                            self.task.instance.result_traceback = receptor_output
-                            self.task.instance.save(update_fields=['result_traceback'])
-                        elif detail:
-                            self.task.instance.result_traceback = detail
-                            self.task.instance.save(update_fields=['result_traceback'])
-                        else:
-                            logger.warn(f'No result details or output from {self.task.instance.log_format}, status:\n{state_name}')
-                    except Exception:
-                        raise RuntimeError(detail)
+                    raise RuntimeError(detail)
 
         return res
 
@@ -451,18 +436,6 @@ class AWXReceptorJob:
         if self.task.instance.execution_node == settings.CLUSTER_HOST_ID or self.task.instance.execution_node == self.task.instance.controller_node:
             return 'local'
         return 'ansible-runner'
-
-    @cleanup_new_process
-    def cancel_watcher(self, processor_future):
-        while True:
-            if processor_future.done():
-                return processor_future.result()
-
-            if self.task.cancel_callback():
-                result = namedtuple('result', ['status', 'rc'])
-                return result('canceled', 1)
-
-            time.sleep(1)
 
     @property
     def pod_definition(self):

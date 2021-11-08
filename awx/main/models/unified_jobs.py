@@ -1407,6 +1407,9 @@ class UnifiedJob(
                     cancel_fields.append('job_explanation')
                 self.save(update_fields=cancel_fields)
                 self.websocket_emit_status("canceled")
+            from awx.main.tasks.system import cancel_unified_job
+
+            cancel_unified_job.apply_async([self.id], queue=self.get_queue_name())
         return self.cancel_flag
 
     @property
