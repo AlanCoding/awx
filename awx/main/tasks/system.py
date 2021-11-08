@@ -245,6 +245,37 @@ def handle_setting_changes(setting_keys):
         reconfigure_rsyslog()
 
 
+@task(queue=get_local_queuename)
+def cancel_control_process(celery_task_id):
+    """Triggers special action in awx.main.dispatch.pool, this is a placeholder"""
+    pass
+
+
+@task(queue=get_local_queuename)
+def cancel_unified_job(unified_job_id):
+    """
+    This method exits to assure cancelation of jobs which had not yet been assigned
+    a celery_task_id, which should be pending and waiting jobs
+    """
+    try:
+        unified_job = UnifiedJob.objects.get(pk=unified_job_id)
+    except UnifiedJob.DoesNotExist:
+        logger.info(f'Job id {unified_job_id} has been deleted, aborting cancel')
+        return
+    while unified_job.status in ACTIVE_STATES:
+        if unified_job.celery_task_id:
+            cancel_control_process.apply_async([unified_job.celery_task_id], queue=unified_job.get_queue_name())
+            logger.warning(f'sigterm issued to {unified_job.log_format} after it obtained a task id')
+            return
+        try:
+            unified_job.refresh_from_db(fields=['status', 'controller_node', 'execution_node'])
+        except unified_job.DoesNotExist:
+            logger.info(f'Job id {unified_job_id} has been deleted, cancel aborted')
+            return
+        time.sleep(1)
+    logger.info(f'{unified_job.log_format} stopped before obtaining a task id, sigterm not needed')
+
+
 @task(queue='tower_broadcast_all')
 def delete_project_files(project_path):
     # TODO: possibly implement some retry logic

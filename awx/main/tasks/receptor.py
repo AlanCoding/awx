@@ -12,6 +12,8 @@ import yaml
 
 # Django
 from django.conf import settings
+from django.db import connections
+from django.utils.translation import ugettext_lazy as _
 
 # Runner
 import ansible_runner
@@ -25,6 +27,7 @@ from awx.main.utils.common import (
     cleanup_new_process,
 )
 from awx.main.constants import MAX_ISOLATED_PATH_COLON_DELIMITER
+from awx.main.tasks.signals import signal_callback
 
 # Receptorctl
 from receptorctl.socket_interface import ReceptorControl
@@ -274,6 +277,7 @@ class AWXReceptorJob:
                     receptor_ctl.simple_command(f"work release {self.unit_id}")
                 except Exception:
                     logger.exception(f"Error releasing work unit {self.unit_id}.")
+            receptor_ctl.close()
 
     @property
     def sign_work(self):
@@ -329,6 +333,9 @@ class AWXReceptorJob:
             shutil.rmtree(artifact_dir)
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
+
+        connections.close_all()
+
         # Both "processor" and "cancel_watcher" are spawned in separate threads.
         # We wait for the first one to return. If cancel_watcher returns first,
         # we yank the socket out from underneath the processor, which will cause it
@@ -344,8 +351,6 @@ class AWXReceptorJob:
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
-                resultsock.shutdown(socket.SHUT_RDWR)
-                resultfile.close()
             elif res.status == 'error':
                 # If ansible-runner ran, but an error occured at runtime, the traceback information
                 # is saved via the status_handler passed in to the processor.
@@ -446,11 +451,10 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.task.runner_callback.cancel_callback():
-                result = namedtuple('result', ['status', 'rc'])
-                return result('canceled', 1)
+            if signal_callback():
+                return namedtuple('result', ['status', 'rc'])('canceled', 1)
 
-            time.sleep(1)
+            time.sleep(0.5)
 
     @property
     def pod_definition(self):
