@@ -12,6 +12,8 @@ import yaml
 
 # Django
 from django.conf import settings
+from django.db import connections
+from django.utils.translation import ugettext_lazy as _
 
 # Runner
 import ansible_runner
@@ -247,8 +249,11 @@ def worker_cleanup(node_name, vargs, timeout=300.0):
     return stdout
 
 
+AnsibleRunnerResult = namedtuple('result', ['status', 'rc'])
+
+
 class AWXReceptorJob:
-    def __init__(self, task, runner_params=None):
+    def __init__(self, task, runner_params=None, sigterm_watcher=None):
         self.task = task
         self.runner_params = runner_params
         self.unit_id = None
@@ -259,6 +264,8 @@ class AWXReceptorJob:
 
         if not settings.IS_K8S and self.work_type == 'local' and 'only_transmit_kwargs' not in self.runner_params:
             self.runner_params['only_transmit_kwargs'] = True
+
+        self.sigterm_watcher = sigterm_watcher
 
     def run(self):
         # We establish a connection to the Receptor socket
@@ -275,6 +282,7 @@ class AWXReceptorJob:
                     receptor_ctl.simple_command(f"work release {self.unit_id}")
                 except Exception:
                     logger.exception(f"Error releasing work unit {self.unit_id}.")
+            receptor_ctl.close()
 
     @property
     def sign_work(self):
@@ -330,6 +338,9 @@ class AWXReceptorJob:
             shutil.rmtree(artifact_dir)
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
+
+        connections.close_all()
+
         # Both "processor" and "cancel_watcher" are spawned in separate threads.
         # We wait for the first one to return. If cancel_watcher returns first,
         # we yank the socket out from underneath the processor, which will cause it
@@ -345,8 +356,12 @@ class AWXReceptorJob:
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
-                resultsock.shutdown(socket.SHUT_RDWR)
-                resultfile.close()
+                # TODO: abort without status transition, recover later by restarting the processing step
+                self.task.instance.refresh_from_db(fields=['cancel_flag'])
+                if not self.task.instance.cancel_flag:
+                    self.task.instance.job_explanation = _('Control process received shutdown signal and aborted job')
+                    self.task.instance.save(update_fields=['job_explanation'])
+                    return AnsibleRunnerResult('error', 1)
             elif res.status == 'error':
                 try:
                     unit_status = receptor_ctl.simple_command(f'work status {self.unit_id}')
@@ -449,11 +464,10 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.task.runner_callback.cancel_callback():
-                result = namedtuple('result', ['status', 'rc'])
-                return result('canceled', 1)
+            if self.sigterm_watcher.cancel_callback():
+                return AnsibleRunnerResult('canceled', 1)
 
-            time.sleep(1)
+            time.sleep(0.5)
 
     @property
     def pod_definition(self):
