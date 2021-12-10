@@ -428,7 +428,7 @@ class AutoscalePool(WorkerPool):
             if not task:
                 continue
             if task['uuid'] == celery_task_id:
-                logger.warn(f'Found process to cancel!\n{task}')
+                logger.warn(f'Canceling task with id={celery_task_id}, task={task.get("task")}, args={task.get("args")}')
                 os.kill(w.pid, signal.SIGTERM)
                 break
         else:

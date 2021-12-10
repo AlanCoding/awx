@@ -3066,23 +3066,13 @@ class TransmitterThread(threading.Thread):
             self.exc = sys.exc_info()
 
 
-class GracefulKiller:
-    kill_now = False
-
-    def __init__(self):
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-
-    def exit_gracefully(self, *args):
-        self.kill_now = True
-
-
 class AWXReceptorJob:
+    sigterm_flag = False
+
     def __init__(self, task, runner_params=None):
         self.task = task
         self.runner_params = runner_params
         self.unit_id = None
-        self.killer = GracefulKiller()
 
         if self.task and not self.task.instance.is_container_group_task:
             execution_environment_params = self.task.build_execution_environment_params(self.task.instance, runner_params['private_data_dir'])
@@ -3090,6 +3080,12 @@ class AWXReceptorJob:
 
         if not settings.IS_K8S and self.work_type == 'local' and 'only_transmit_kwargs' not in self.runner_params:
             self.runner_params['only_transmit_kwargs'] = True
+
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+
+    def exit_gracefully(self, *args):
+        self.sigterm_flag = True
 
     def run(self):
         # We establish a connection to the Receptor socket
@@ -3273,7 +3269,7 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.killer.kill_now:
+            if self.sigterm_flag:
                 result = namedtuple('result', ['status', 'rc'])
                 return result('canceled', 1)
 
