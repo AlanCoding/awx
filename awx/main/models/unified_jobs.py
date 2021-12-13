@@ -1410,7 +1410,7 @@ class UnifiedJob(
             if self.celery_task_id:
                 from awx.main.tasks import cancel_unified_job
 
-                cancel_unified_job.delay(self.celery_task_id)
+                cancel_unified_job.apply_async([self.celery_task_id], queue=self.get_queue_name())
         return True
 
     @property
