@@ -901,6 +901,19 @@ def delete_inventory(inventory_id, user_id, retries=5):
                 delete_inventory(inventory_id, user_id, retries=retries - 1)
 
 
+class SigtermWatcher:
+    def __init__(self):
+        self.sigterm_flag = False
+        signal.signal(signal.SIGTERM, self.set_flag)
+        signal.signal(signal.SIGINT, self.set_flag)
+
+    def set_flag(self, *args):
+        self.sigterm_flag = True
+
+    def cancel_callback(self):
+        return self.sigterm_flag
+
+
 def with_path_cleanup(f):
     @functools.wraps(f)
     def _wrapped(self, *args, **kwargs):
@@ -1355,22 +1368,6 @@ class BaseTask(object):
 
         return False
 
-    def cancel_callback(self):
-        """
-        Ansible runner callback to tell the job when/if it is canceled
-        """
-        unified_job_id = self.instance.pk
-        self.instance = self.update_model(unified_job_id)
-        if not self.instance:
-            logger.error('unified job {} was deleted while running, canceling'.format(unified_job_id))
-            return True
-        if self.instance.cancel_flag or self.instance.status == 'canceled':
-            cancel_wait = (now() - self.instance.modified).seconds if self.instance.modified else 0
-            if cancel_wait > 5:
-                logger.warn('Request to cancel {} took {} seconds to complete.'.format(self.instance.log_format, cancel_wait))
-            return True
-        return False
-
     def finished_callback(self, runner_obj):
         """
         Ansible runner callback triggered on finished run
@@ -1420,6 +1417,9 @@ class BaseTask(object):
             with disable_activity_stream():
                 self.instance = self.update_model(self.instance.pk, execution_environment=self.instance.resolve_execution_environment())
 
+        # start watching for SIGTERM before the model refresh to be sure to catch cancel signal at any time
+        self.sigterm_watcher = SigtermWatcher()
+
         # self.instance because of the update_model pattern and when it's used in callback handlers
         self.instance = self.update_model(pk, status='running', start_args='')  # blank field to remove encrypted passwords
         self.instance.websocket_emit_status("running")
@@ -1447,8 +1447,10 @@ class BaseTask(object):
             private_data_dir = self.build_private_data_dir(self.instance)
             self.pre_run_hook(self.instance, private_data_dir)
             self.instance.log_lifecycle("preparing_playbook")
-            if self.instance.cancel_flag:
+
+            if self.instance.cancel_flag or self.sigterm_watcher.cancel_callback():
                 self.instance = self.update_model(self.instance.pk, status='canceled')
+
             if self.instance.status != 'running':
                 # Stop the task chain and prevent starting the job if it has
                 # already been canceled.
@@ -1535,11 +1537,11 @@ class BaseTask(object):
                     event_handler=self.event_handler,
                     finished_callback=self.finished_callback,
                     status_handler=self.status_handler,
-                    cancel_callback=self.cancel_callback,
+                    cancel_callback=self.sigterm_watcher.cancel_callback(),
                     **params,
                 )
             else:
-                receptor_job = AWXReceptorJob(self, params)
+                receptor_job = AWXReceptorJob(self, params, sigterm_watcher=self.sigterm_watcher)
                 res = receptor_job.run()
                 self.unit_id = receptor_job.unit_id
 
@@ -2751,7 +2753,7 @@ class RunInventoryUpdate(BaseTask):
 
         handler = SpecialInventoryHandler(
             self.event_handler,
-            self.cancel_callback,
+            self.sigterm_watcher.cancel_callback(),
             verbosity=inventory_update.verbosity,
             job_timeout=self.get_instance_timeout(self.instance),
             start_time=inventory_update.started,
@@ -3067,9 +3069,7 @@ class TransmitterThread(threading.Thread):
 
 
 class AWXReceptorJob:
-    sigterm_flag = False
-
-    def __init__(self, task, runner_params=None):
+    def __init__(self, task, runner_params=None, sigterm_watcher=None):
         self.task = task
         self.runner_params = runner_params
         self.unit_id = None
@@ -3081,11 +3081,10 @@ class AWXReceptorJob:
         if not settings.IS_K8S and self.work_type == 'local' and 'only_transmit_kwargs' not in self.runner_params:
             self.runner_params['only_transmit_kwargs'] = True
 
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-
-    def exit_gracefully(self, *args):
-        self.sigterm_flag = True
+        if sigterm_watcher:
+            self.sigterm_watcher = sigterm_watcher
+        else:
+            self.sigterm_watcher = SigtermWatcher()
 
     def run(self):
         # We establish a connection to the Receptor socket
@@ -3269,7 +3268,7 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.sigterm_flag:
+            if self.sigterm_watcher.cancel_callback():
                 result = namedtuple('result', ['status', 'rc'])
                 return result('canceled', 1)
 

@@ -1411,7 +1411,7 @@ class UnifiedJob(
                 from awx.main.tasks import cancel_unified_job
 
                 cancel_unified_job.apply_async([self.celery_task_id], queue=self.get_queue_name())
-        return True
+        return self.cancel_flag
 
     @property
     def preferred_instance_groups(self):
