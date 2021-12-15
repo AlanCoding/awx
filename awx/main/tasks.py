@@ -1537,7 +1537,7 @@ class BaseTask(object):
                     event_handler=self.event_handler,
                     finished_callback=self.finished_callback,
                     status_handler=self.status_handler,
-                    cancel_callback=self.sigterm_watcher.cancel_callback(),
+                    cancel_callback=self.sigterm_watcher.cancel_callback,
                     **params,
                 )
             else:
@@ -2753,7 +2753,7 @@ class RunInventoryUpdate(BaseTask):
 
         handler = SpecialInventoryHandler(
             self.event_handler,
-            self.sigterm_watcher.cancel_callback(),
+            self.sigterm_watcher.cancel_callback,
             verbosity=inventory_update.verbosity,
             job_timeout=self.get_instance_timeout(self.instance),
             start_time=inventory_update.started,
