@@ -449,7 +449,7 @@ class AutoscalePool(WorkerPool):
         try:
             if isinstance(body, dict):
                 # special local cancel triggered by job canceling
-                if 'cancel_unified_job' in body['task']:
+                if (body['task'] == 'cancel_unified_job') or (body['task'] == 'cancel_unified_job_work_unit' and self.full):
                     self.cancel_job(body['args'][0])
                 # when the cluster heartbeat occurs, clean up internally
                 if 'cluster_node_heartbeat' in body['task']:

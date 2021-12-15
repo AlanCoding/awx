@@ -315,9 +315,41 @@ def handle_setting_changes(setting_keys):
         reconfigure_rsyslog()
 
 
+def _cancel_work_unit(work_unit_id):
+    receptor_ctl = get_receptor_ctl()
+    try:
+        r = receptor_ctl.simple_command(f'work cancel {work_unit_id}')
+        logger.info(f'successfully canceled work unit {work_unit_id}, result: {r}')
+    except Exception:
+        logger.exception(f'Error canceling {work_unit_id}')
+    finally:
+        receptor_ctl.close()
+
+
 @task(queue=get_local_queuename)
-def cancel_unified_job(celery_task_id):
-    logger.info(f'Local dispatcher processed request to cancel job with task id {celery_task_id}')
+def cancel_unified_job(celery_task_id, job_id, check_work_unit):
+    """Cancels the control process for a job with code in awx.main.dispatch.pool
+    and makes extra sure that the remote unit is canceled as well."""
+    if check_work_unit:
+        time.sleep(1)
+        try:
+            job = UnifiedJob.objects.get(pk=job_id)
+        except Exception:
+            logger.info(f'Cancel request halted because job {job_id} was deleted from database')
+            return
+        if job.work_unit_id:
+            # work unit was submitted after the cancel request, so close that timing loophole
+            logger.warn(f'Running backup receptor cancel request for job {job_id}')
+            _cancel_work_unit(job.work_unit_id)
+    else:
+        logger.info(f'Local dispatcher processed request to cancel job with task id {celery_task_id}')
+
+
+@task(queue=get_local_queuename)
+def cancel_unified_job_work_unit(celery_task_id, work_unit_id, job_id):
+    """First method called in order to cancel a job, cancels remote unit and queues main cancel"""
+    _cancel_work_unit(work_unit_id)
+    cancel_unified_job.delay(celery_task_id, job_id, False)
 
 
 @task(queue='tower_broadcast_all')
@@ -3163,7 +3195,6 @@ class AWXReceptorJob:
 
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
-                receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
             elif res.status == 'error':
