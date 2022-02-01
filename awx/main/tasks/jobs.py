@@ -110,8 +110,8 @@ class BaseTask(object):
     callback_class = RunnerCallback
 
     def __init__(self):
-        self.runner_callback = self.callback_class()
         self.cleanup_paths = []
+        self.runner_callback = self.callback_class()
 
     def update_model(self, pk, _attempt=0, **updates):
         """Reload the model instance from the database and update the
@@ -640,9 +640,6 @@ class RunJob(BaseTask):
 
     model = Job
     event_model = JobEvent
-
-    def __init__(self):
-        super(RunJob, self).__init__()
 
     def build_private_data(self, job, private_data_dir):
         """
@@ -1528,9 +1525,6 @@ class RunInventoryUpdate(BaseTask):
     event_model = InventoryUpdateEvent
     callback_class = RunnerCallbackForInventoryUpdate
 
-    def __init__(self):
-        self.runner_callback = self.callback_class()
-
     def build_private_data(self, inventory_update, private_data_dir):
         """
         Return private data needed for inventory update.
@@ -1828,9 +1822,6 @@ class RunAdHocCommand(BaseTask):
     event_model = AdHocCommandEvent
     callback_class = RunnerCallbackForAdHocCommand
 
-    def __init__(self):
-        self.runner_callback = self.callback_class()
-
     def build_private_data(self, ad_hoc_command, private_data_dir):
         """
         Return SSH private key data needed for this ad hoc command (only if
@@ -1988,9 +1979,6 @@ class RunSystemJob(BaseTask):
     model = SystemJob
     event_model = SystemJobEvent
     callback_class = RunnerCallbackForSystemJob
-
-    def __init__(self):
-        self.runner_callback = self.callback_class()
 
     def build_execution_environment_params(self, system_job, private_data_dir):
         return {}

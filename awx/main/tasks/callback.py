@@ -11,13 +11,11 @@ from django_guid.middleware import GuidMiddleware
 
 # AWX
 from awx.main.redact import UriCleaner
-from awx.main.constants import (
-    MINIMAL_EVENTS,
-)
+from awx.main.constants import MINIMAL_EVENTS
 
 from awx.main.queue import CallbackQueueDispatcher
 
-logger = logging.getLogger('awx.main.tasks.jobs')
+logger = logging.getLogger('awx.main.tasks.callback')
 
 
 class RunnerCallback:
@@ -205,12 +203,13 @@ class RunnerCallbackForProjectUpdate(RunnerCallback):
         self.host_map = {}
 
     def event_handler(self, event_data):
-        super(RunnerCallbackForProjectUpdate, self).event_handler(event_data)
+        super_return_value = super(RunnerCallbackForProjectUpdate, self).event_handler(event_data)
         returned_data = event_data.get('event_data', {})
         if returned_data.get('task_action', '') == 'set_fact':
             returned_facts = returned_data.get('res', {}).get('ansible_facts', {})
             if 'scm_version' in returned_facts:
                 self.playbook_new_revision = returned_facts['scm_version']
+        return super_return_value
 
 
 class RunnerCallbackForInventoryUpdate(RunnerCallback):
@@ -218,7 +217,8 @@ class RunnerCallbackForInventoryUpdate(RunnerCallback):
     event_data_key = 'inventory_update_id'
 
     def __init__(self):
-        super(RunnerCallbackForInventoryUpdate, self).__init()
+        super(RunnerCallbackForInventoryUpdate, self).__init__()
+        self.end_line = 0
 
     def event_handler(self, event_data):
         self.end_line = event_data['end_line']
@@ -238,6 +238,3 @@ class RunnerCallbackForAdHocCommand(RunnerCallback):
 class RunnerCallbackForSystemJob(RunnerCallback):
 
     event_data_key = 'system_job_id'
-
-    def __init__(self):
-        super(RunnerCallbackForSystemJob, self).__init__()

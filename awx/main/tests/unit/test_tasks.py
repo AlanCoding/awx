@@ -509,21 +509,21 @@ class TestGenericRun:
 
     def test_event_count(self):
         task = tasks.jobs.RunJob()
-        task.dispatcher = mock.MagicMock()
-        task.instance = Job()
-        task.event_ct = 0
+        task.runner_callback.dispatcher = mock.MagicMock()
+        task.runner_callback.instance = Job()
+        task.runner_callback.event_ct = 0
         event_data = {}
 
-        [task.event_handler(event_data) for i in range(20)]
-        assert 20 == task.event_ct
+        [task.runner_callback.event_handler(event_data) for i in range(20)]
+        assert 20 == task.runner_callback.event_ct
 
     def test_finished_callback_eof(self):
         task = tasks.jobs.RunJob()
-        task.dispatcher = mock.MagicMock()
-        task.instance = Job(pk=1, id=1)
-        task.event_ct = 17
-        task.finished_callback(None)
-        task.dispatcher.dispatch.assert_called_with({'event': 'EOF', 'final_counter': 17, 'job_id': 1, 'guid': None})
+        task.runner_callback.dispatcher = mock.MagicMock()
+        task.runner_callback.instance = Job(pk=1, id=1)
+        task.runner_callback.event_ct = 17
+        task.runner_callback.finished_callback(None)
+        task.runner_callback.dispatcher.dispatch.assert_called_with({'event': 'EOF', 'final_counter': 17, 'job_id': 1, 'guid': None})
 
     def test_save_job_metadata(self, job, update_model_wrapper):
         class MockMe:
@@ -531,13 +531,13 @@ class TestGenericRun:
 
         task = tasks.jobs.RunJob()
         task.instance = job
-        task.safe_env = {'secret_key': 'redacted_value'}
+        task.runner_callback.safe_env = {'secret_key': 'redacted_value'}
         task.update_model = mock.Mock(wraps=update_model_wrapper)
         runner_config = MockMe()
         runner_config.command = {'foo': 'bar'}
         runner_config.cwd = '/foobar'
         runner_config.env = {'switch': 'blade', 'foot': 'ball', 'secret_key': 'secret_value'}
-        task.status_handler({'status': 'starting'}, runner_config)
+        task.runner_callback.status_handler({'status': 'starting'}, runner_config)
 
         task.update_model.assert_called_with(
             1, job_args=json.dumps({'foo': 'bar'}), job_cwd='/foobar', job_env={'switch': 'blade', 'foot': 'ball', 'secret_key': 'redacted_value'}
