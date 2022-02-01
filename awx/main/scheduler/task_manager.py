@@ -252,7 +252,7 @@ class TaskManager:
                     schedule_task_manager()
         return result
 
-    def start_task(self, task, rampart_group, dependent_tasks=None, instance=None):
+    def start_task(self, task, dependent_tasks=None):
         self.start_task_limit -= 1
         if self.start_task_limit == 0:
             # schedule another run immediately after this task manager
@@ -283,46 +283,15 @@ class TaskManager:
                 task.send_notification_templates('running')
                 logger.debug('Transitioning %s to running status.', task.log_format)
                 schedule_task_manager()
-            elif rampart_group.is_container_group:
-                task.instance_group = rampart_group
-                if task.capacity_type == 'execution':
-                    # find one real, non-containerized instance with capacity to
-                    # act as the controller for k8s API interaction
-                    try:
-                        task.controller_node = Instance.choose_online_control_plane_node()
-                        task.log_lifecycle("controller_node_chosen")
-                    except IndexError:
-                        logger.warning("No control plane nodes available to run containerized job {}".format(task.log_format))
-                        return
-                else:
-                    # project updates and system jobs don't *actually* run in pods, so
-                    # just pick *any* non-containerized host and use it as the execution node
-                    task.execution_node = Instance.choose_online_control_plane_node()
-                    task.log_lifecycle("execution_node_chosen")
-                    logger.debug('Submitting containerized {} to queue {}.'.format(task.log_format, task.execution_node))
             else:
-                task.instance_group = rampart_group
-                task.execution_node = instance.hostname
-                task.log_lifecycle("execution_node_chosen")
-                if instance.node_type == 'execution':
-                    try:
-                        task.controller_node = Instance.choose_online_control_plane_node()
-                        task.log_lifecycle("controller_node_chosen")
-                    except IndexError:
-                        logger.warning("No control plane nodes available to manage {}".format(task.log_format))
-                        return
-                else:
-                    # control plane nodes will manage jobs locally for performance and resilience
-                    task.controller_node = task.execution_node
-                    task.log_lifecycle("controller_node_chosen")
                 logger.debug('Submitting job {} to queue {} controlled by {}.'.format(task.log_format, task.execution_node, task.controller_node))
             with disable_activity_stream():
                 task.celery_task_id = str(uuid.uuid4())
                 task.save()
                 task.log_lifecycle("waiting")
 
-            if rampart_group is not None:
-                self.consume_capacity(task, rampart_group.name, instance=instance)
+            if task.instance_group is not None:
+                self.consume_capacity(task, task.instance_group.name, instance=task.instance)
 
         def post_commit():
             if task.status != 'failed' and type(task) is not WorkflowJob:
@@ -507,20 +476,23 @@ class TaskManager:
                         continue
                 else:
                     running_workflow_templates.add(task.unified_job_template_id)
-                self.start_task(task, None, task.get_jobs_fail_chain(), None)
+                self.start_task(task, task.get_jobs_fail_chain())
                 continue
+            else:
+                control_node
+                if task.capacity_type == 'control':
+                    task.execution_node = task.control_node = control_node
+                    self.start_task(task, task.get_jobs_fail_chain())
+                    continue
 
             for rampart_group in preferred_instance_groups:
                 if task.capacity_type == 'execution' and rampart_group.is_container_group:
                     self.graph[rampart_group.name]['graph'].add_job(task)
+                    task.instance_group = rampart_group
+                    task.controller_node = control_node
                     self.start_task(task, rampart_group, task.get_jobs_fail_chain(), None)
                     found_acceptable_queue = True
                     break
-
-                # TODO: remove this after we have confidence that OCP control nodes are reporting node_type=control
-                if settings.IS_K8S and task.capacity_type == 'execution':
-                    logger.debug("Skipping group {}, task cannot run on control plane".format(rampart_group.name))
-                    continue
 
                 remaining_capacity = self.get_remaining_capacity(rampart_group.name, capacity_type=task.capacity_type)
                 if task.task_impact > 0 and remaining_capacity <= 0:
