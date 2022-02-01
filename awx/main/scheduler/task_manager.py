@@ -479,18 +479,22 @@ class TaskManager:
                 self.start_task(task, task.get_jobs_fail_chain())
                 continue
             else:
-                control_node
+                controlplane_instances = self.graph['controlplane']['instances']
+                control_node = InstanceGroup.fit_task_to_most_remaining_capacity_instance(
+                    task, controlplane_instances
+                ) or InstanceGroup.find_largest_idle_instance(controlplane_instances, capacity_type='control')
                 if task.capacity_type == 'control':
                     task.execution_node = task.control_node = control_node
+                    task.instance_group = InstanceGroup.objects.get(name='controlplane')  # TODO: cache
                     self.start_task(task, task.get_jobs_fail_chain())
                     continue
 
             for rampart_group in preferred_instance_groups:
-                if task.capacity_type == 'execution' and rampart_group.is_container_group:
+                if rampart_group.is_container_group:
                     self.graph[rampart_group.name]['graph'].add_job(task)
                     task.instance_group = rampart_group
                     task.controller_node = control_node
-                    self.start_task(task, rampart_group, task.get_jobs_fail_chain(), None)
+                    self.start_task(task, task.get_jobs_fail_chain())
                     found_acceptable_queue = True
                     break
 
@@ -503,15 +507,14 @@ class TaskManager:
                     task, self.graph[rampart_group.name]['instances']
                 ) or InstanceGroup.find_largest_idle_instance(self.graph[rampart_group.name]['instances'], capacity_type=task.capacity_type)
 
-                if execution_instance or rampart_group.is_container_group:
-                    if not rampart_group.is_container_group:
-                        execution_instance.remaining_capacity = max(0, execution_instance.remaining_capacity - task.task_impact)
-                        execution_instance.jobs_running += 1
-                        logger.debug(
-                            "Starting {} in group {} instance {} (remaining_capacity={})".format(
-                                task.log_format, rampart_group.name, execution_instance.hostname, remaining_capacity
-                            )
+                if execution_instance:
+                    execution_instance.remaining_capacity = max(0, execution_instance.remaining_capacity - task.task_impact)
+                    execution_instance.jobs_running += 1
+                    logger.debug(
+                        "Starting {} in group {} instance {} (remaining_capacity={})".format(
+                            task.log_format, rampart_group.name, execution_instance.hostname, remaining_capacity
                         )
+                    )
 
                     if execution_instance:
                         execution_instance = self.real_instances[execution_instance.hostname]
