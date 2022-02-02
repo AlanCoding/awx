@@ -69,6 +69,7 @@ class TaskManager:
         Init AFTER we know this instance of the task manager will run because the lock is acquired.
         """
         instances = Instance.objects.filter(hostname__isnull=False, enabled=True).exclude(node_type='hop')
+        self.real_instances = {i.hostname: i for i in instances}
 
         instances_partial = [
             SimpleNamespace(
@@ -290,7 +291,7 @@ class TaskManager:
                 task.log_lifecycle("waiting")
 
             if task.instance_group is not None:
-                self.consume_capacity(task, task.instance_group.name, instance=task.instance)
+                self.consume_capacity(task, task.instance_group.name)
 
         def post_commit():
             if task.status != 'failed' and type(task) is not WorkflowJob:
@@ -579,16 +580,26 @@ class TaskManager:
     def calculate_capacity_consumed(self, tasks):
         self.graph = InstanceGroup.objects.capacity_values(tasks=tasks, graph=self.graph)
 
-    def consume_capacity(self, task, instance_group, instance=None):
+    def consume_capacity(self, task, instance_group):
         logger.debug(
             '{} consumed {} capacity units from {} with prior total of {}'.format(
                 task.log_format, task.task_impact, instance_group, self.graph[instance_group]['consumed_capacity']
             )
         )
         self.graph[instance_group]['consumed_capacity'] += task.task_impact
+        if task.execution_node:
+            instance = self.real_instances[task.execution_node]
+        else:
+            instance = None
+        if task.controller_node:
+            control_node = self.real_instances[task.controller_node]
+        else:
+            control_node = None
         for capacity_type in ('control', 'execution'):
             if instance is None or instance.node_type in ('hybrid', capacity_type):
                 self.graph[instance_group][f'consumed_{capacity_type}_capacity'] += task.task_impact
+            if control_node and control_node.node_type in ('hybrid', capacity_type):
+                self.graph['controlplane']['consumed_control_capacity'] += settings.AWX_CONTROL_NODE_TASK_IMPACT
 
     def get_remaining_capacity(self, instance_group, capacity_type='execution'):
         return self.graph[instance_group][f'{capacity_type}_capacity'] - self.graph[instance_group][f'consumed_{capacity_type}_capacity']
