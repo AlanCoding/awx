@@ -69,7 +69,6 @@ class TaskManager:
         Init AFTER we know this instance of the task manager will run because the lock is acquired.
         """
         instances = Instance.objects.filter(hostname__isnull=False, enabled=True).exclude(node_type='hop')
-        self.real_instances = {i.hostname: i for i in instances}
 
         instances_partial = [
             SimpleNamespace(
@@ -483,8 +482,11 @@ class TaskManager:
                 control_node = InstanceGroup.fit_task_to_most_remaining_capacity_instance(
                     task, controlplane_instances
                 ) or InstanceGroup.find_largest_idle_instance(controlplane_instances, capacity_type='control')
+                if not control_node:
+                    logger.debug(f"No controlplane capacity to run {task.log_format} w/ capacity requirement {task.task_impact}")
+                    continue
                 if task.capacity_type == 'control':
-                    task.execution_node = task.control_node = control_node
+                    task.execution_node = task.control_node = control_node.hostname
                     task.instance_group = InstanceGroup.objects.get(name='controlplane')  # TODO: cache
                     self.start_task(task, task.get_jobs_fail_chain())
                     continue
@@ -493,12 +495,13 @@ class TaskManager:
                 if rampart_group.is_container_group:
                     self.graph[rampart_group.name]['graph'].add_job(task)
                     task.instance_group = rampart_group
-                    task.controller_node = control_node
+                    task.controller_node = control_node.hostname
                     self.start_task(task, task.get_jobs_fail_chain())
                     found_acceptable_queue = True
                     break
 
-                remaining_capacity = self.get_remaining_capacity(rampart_group.name, capacity_type=task.capacity_type)
+                # TODO: we would like to get rid of this condition, because it should be covered by subsequent conditions
+                remaining_capacity = self.get_remaining_capacity(rampart_group.name)
                 if task.task_impact > 0 and remaining_capacity <= 0:
                     logger.debug("Skipping group {}, remaining_capacity {} <= 0".format(rampart_group.name, remaining_capacity))
                     continue
@@ -516,10 +519,11 @@ class TaskManager:
                         )
                     )
 
-                    if execution_instance:
-                        execution_instance = self.real_instances[execution_instance.hostname]
                     self.graph[rampart_group.name]['graph'].add_job(task)
-                    self.start_task(task, rampart_group, task.get_jobs_fail_chain(), execution_instance)
+                    task.controller_node = control_node.hostname
+                    task.execution_node = execution_instance.hostname
+                    task.instance_group = rampart_group
+                    self.start_task(task, task.get_jobs_fail_chain())
                     found_acceptable_queue = True
                     break
                 else:
