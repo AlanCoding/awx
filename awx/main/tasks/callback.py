@@ -12,6 +12,7 @@ from django_guid.middleware import GuidMiddleware
 # AWX
 from awx.main.redact import UriCleaner
 from awx.main.constants import MINIMAL_EVENTS
+from awx.main.tasks.utils import update_model
 
 from awx.main.queue import CallbackQueueDispatcher
 
@@ -21,7 +22,7 @@ logger = logging.getLogger('awx.main.tasks.callback')
 class RunnerCallback:
     event_data_key = 'job_id'
 
-    def __init__(self):
+    def __init__(self, model=None):
         self.parent_workflow_job_id = None
         self.host_map = {}
         self.guid = GuidMiddleware.get_guid()
@@ -30,6 +31,10 @@ class RunnerCallback:
         self.dispatcher = CallbackQueueDispatcher()
         self.safe_env = {}
         self.event_ct = 0
+        self.model = model
+
+    def update_model(self, pk, _attempt=0, **updates):
+        return update_model(self.model, pk, _attempt=0, **updates)
 
     def event_handler(self, event_data):
         #
@@ -184,6 +189,7 @@ class RunnerCallback:
                 self.instance.job_cwd = runner_config.cwd
                 self.instance.job_env = job_env
                 self.instance.save()
+                # self.update_model()  # TODO
         elif status_data['status'] == 'error':
             result_traceback = status_data.get('result_traceback', None)
             if result_traceback:
