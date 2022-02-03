@@ -530,7 +530,7 @@ class TestGenericRun:
             pass
 
         task = tasks.jobs.RunJob()
-        task.instance = job
+        task.runner_callback.instance = job
         task.runner_callback.safe_env = {'secret_key': 'redacted_value'}
         task.update_model = mock.Mock(wraps=update_model_wrapper)
         runner_config = MockMe()
