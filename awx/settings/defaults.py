@@ -214,7 +214,7 @@ LOCAL_STDOUT_EXPIRE_TIME = 2592000
 
 # The number of processes spawned by the callback receiver to process job
 # events into the database
-JOB_EVENT_WORKERS = 4
+JOB_EVENT_WORKERS = 1
 
 # The number of seconds to buffer callback receiver bulk
 # writes in memory before flushing via JobEvent.objects.bulk_create()
@@ -438,6 +438,7 @@ CELERYBEAT_SCHEDULE = {
     'send_subsystem_metrics': {'task': 'awx.main.analytics.analytics_tasks.send_subsystem_metrics', 'schedule': timedelta(seconds=20)},
     'cleanup_images': {'task': 'awx.main.tasks.system.cleanup_images_and_files', 'schedule': timedelta(hours=3)},
 }
+CELERYBEAT_SCHEDULE = {}
 
 # Django Caching Configuration
 DJANGO_REDIS_IGNORE_EXCEPTIONS = True

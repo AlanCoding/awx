@@ -15,7 +15,10 @@ logger = logging.getLogger('awx.main.dispatch.periodic')
 
 class Scheduler(Scheduler):
     def run_continuously(self):
-        idle_seconds = max(1, min(self.jobs).period.total_seconds() / 2)
+        if not self.jobs:
+            idle_seconds = 60 * 60 * 24
+        else:
+            idle_seconds = max(1, min(self.jobs).period.total_seconds() / 2)
 
         def run():
             ppid = os.getppid()

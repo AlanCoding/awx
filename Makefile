@@ -187,7 +187,7 @@ uwsgi: collectstatic
 	    --home=/var/lib/awx/venv/awx \
 	    --chdir=/awx_devel/ \
 	    --vacuum \
-	    --processes=5 \
+	    --processes=1 \
 	    --harakiri=120 --master \
 	    --no-orphans \
 	    --py-autoreload 1 \
@@ -400,7 +400,7 @@ ui-lint:
 
 ui-test:
 	$(NPM_BIN) --prefix awx/ui install
-	$(NPM_BIN) run --prefix awx/ui test 
+	$(NPM_BIN) run --prefix awx/ui test
 
 
 # Build a pip-installable package into dist/ with a timestamped version number.
