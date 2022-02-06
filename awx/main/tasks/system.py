@@ -603,6 +603,12 @@ def awx_receptor_workunit_reaper():
         receptor_ctl.simple_command(f"work cancel {job.work_unit_id}")
         receptor_ctl.simple_command(f"work release {job.work_unit_id}")
 
+    # if a job controlled by this node is canceled but the work unit is still active then raise a stink
+    # maybe try to cancel again but little expectation it will work
+
+    # if a job controlled by this node is active but its work unit is finished, then give a grace period
+    # after that grace period has expired, SIGKILL the control process, because it is likely hanging
+
     administrative_workunit_reaper(receptor_work_list)
 
 
