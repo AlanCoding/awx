@@ -14,6 +14,7 @@ import yaml
 
 # Django
 from django.conf import settings
+from django.db import connections
 
 # Runner
 import ansible_runner
@@ -341,6 +342,9 @@ class AWXReceptorJob:
             shutil.rmtree(artifact_dir)
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
+
+        connections.close_all()
+
         # Both "processor" and "cancel_watcher" are spawned in separate threads.
         # We wait for the first one to return. If cancel_watcher returns first,
         # we yank the socket out from underneath the processor, which will cause it
@@ -355,7 +359,6 @@ class AWXReceptorJob:
 
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
-                receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
             elif res.status == 'error':
