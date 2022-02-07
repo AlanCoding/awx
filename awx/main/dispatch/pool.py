@@ -422,7 +422,7 @@ class AutoscalePool(WorkerPool):
             running_uuids.extend(list(worker.managed_tasks.keys()))
         reaper.reap(excluded_uuids=running_uuids)
 
-    def cancel_job(self, celery_task_id):
+    def cancel_worker_process(self, celery_task_id):
         for w in self.workers:
             task = w.current_task
             if task and task['uuid'] == celery_task_id:
@@ -446,8 +446,8 @@ class AutoscalePool(WorkerPool):
             GuidMiddleware.set_guid(body['guid'])
         try:
             if isinstance(body, dict) and 'task' in body:
-                if body['task'].endswith('.cancel_unified_job'):  # special local cancel triggered by job canceling
-                    self.cancel_job(body['args'][0])
+                if body['task'].endswith('.cancel_control_process'):  # special local cancel triggered by job canceling
+                    self.cancel_worker_process(body['args'][0])
                 if 'cluster_node_heartbeat' in body['task']:  # when the cluster heartbeat occurs, clean up internally
                     self.cleanup()
             if self.should_grow:

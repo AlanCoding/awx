@@ -22,7 +22,7 @@ from uuid import uuid4
 # Django
 from django_guid.middleware import GuidMiddleware
 from django.conf import settings
-from django.db import transaction, DatabaseError
+from django.db import transaction, DatabaseError, connections
 
 
 # Runner
@@ -599,6 +599,8 @@ class BaseTask(object):
 
             with disable_activity_stream():
                 self.instance = self.update_model(self.instance.pk, job_args=json.dumps(runner_config.command), job_cwd=runner_config.cwd, job_env=job_env)
+            # We opened a connection just for that save, close it here now
+            connections.close_all()
         elif status_data['status'] == 'failed':
             # For encrypted ssh_key_data, ansible-runner worker will open and write the
             # ssh_key_data to a named pipe. Then, once the podman container starts, ssh-agent will
