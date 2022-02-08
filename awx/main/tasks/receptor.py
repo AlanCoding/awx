@@ -359,6 +359,7 @@ class AWXReceptorJob:
 
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
+                # Do not cancel receptor job here, that is responsibility of task managing cancel
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
             elif res.status == 'error':
@@ -370,6 +371,11 @@ class AWXReceptorJob:
                     detail = ''
                     state_name = ''
                     logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
+
+                # If the receptor cancel command happened first, then we need to identify that and mark canceled
+                if detail == 'Killed':
+                    result = namedtuple('result', ['status', 'rc'])
+                    return result('canceled', 1)
 
                 if 'exceeded quota' in detail:
                     logger.warn(detail)
