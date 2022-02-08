@@ -15,6 +15,7 @@ import yaml
 # Django
 from django.conf import settings
 from django.db import connections
+from django.utils.translation import ugettext_lazy as _
 
 # Runner
 import ansible_runner
@@ -248,6 +249,9 @@ def worker_cleanup(node_name, vargs, timeout=300.0):
     return stdout
 
 
+AnsibleRunnerResult = namedtuple('result', ['status', 'rc'])
+
+
 class TransmitterThread(threading.Thread):
     def run(self):
         self.exc = None
@@ -359,9 +363,19 @@ class AWXReceptorJob:
 
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
-                # Do not cancel receptor job here, that is responsibility of task managing cancel
+                self.task.instance.refresh_from_db()
+                # If normal cancel, receptor cancel is responsibility of canceling task
+                if not self.task.instance.cancel_flag:
+                    # got SIGTERM but not a legitimate cancel
+                    # received sigterm without the receptor process also being canceled
+                    # TODO: remove this cancel, recover later by restarting the processing step
+                    receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
+                if not self.task.instance.cancel_flag:
+                    self.task.instance.job_explanation = _('Control process received shutdown signal and aborted job')
+                    self.task.instance.save(update_fields=['job_explanation'])
+                    return AnsibleRunnerResult('error', 1)
             elif res.status == 'error':
                 try:
                     unit_status = receptor_ctl.simple_command(f'work status {self.unit_id}')
@@ -372,10 +386,9 @@ class AWXReceptorJob:
                     state_name = ''
                     logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
 
-                # If the receptor cancel command happened first, then we need to identify that and mark canceled
+                # If the receptor cancel command happened first, then identify that and mark canceled
                 if detail == 'Killed':
-                    result = namedtuple('result', ['status', 'rc'])
-                    return result('canceled', 1)
+                    return AnsibleRunnerResult('canceled', 1)
 
                 if 'exceeded quota' in detail:
                     logger.warn(detail)
@@ -470,8 +483,7 @@ class AWXReceptorJob:
                 return processor_future.result()
 
             if self.sigterm_watcher.cancel_callback():
-                result = namedtuple('result', ['status', 'rc'])
-                return result('canceled', 1)
+                return AnsibleRunnerResult('canceled', 1)
 
             time.sleep(0.5)
 
