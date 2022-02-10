@@ -264,14 +264,19 @@ def cancel_unified_job(unified_job_id):
     if unified_job.work_unit_id:
         receptor_ctl = get_receptor_ctl()
         try:
-            receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
-        except Exception:
-            logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
+            try:
+                receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
+            except Exception:
+                logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
+            try:
+                receptor_ctl.simple_command(f"work release {unified_job.work_unit_id}")
+            except Exception:
+                logger.exception(f'Failed to release {unified_job.log_format} work unit {unified_job.work_unit_id}')
         finally:
             receptor_ctl.close()
         time.sleep(1)
         unified_job.refresh_from_db()
-    if unified_job.celery_task_id:
+    if unified_job.status == 'running' and unified_job.celery_task_id:
         cancel_control_process.delay(unified_job.celery_task_id)
 
 
