@@ -381,7 +381,11 @@ class AWXReceptorJob:
                     unit_status = receptor_ctl.simple_command(f'work status {self.unit_id}')
                     detail = unit_status.get('Detail', None)
                     state_name = unit_status.get('StateName', None)
-                except Exception:
+                except Exception as exc:
+                    if 'unknown work unit' in str(exc):
+                        self.task.instance.refresh_from_db()
+                        if self.task.cancel_flag:
+                            return AnsibleRunnerResult('canceled', 1)  # was canceled and work already released
                     detail = ''
                     state_name = ''
                     logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
