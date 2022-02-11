@@ -261,23 +261,33 @@ def cancel_unified_job(unified_job_id):
     except UnifiedJob.DoesNotExist:
         logger.info(f'Job id {unified_job_id} has been deleted, aborting cancel')
         return
+    canceled_work_unit = False
     if unified_job.work_unit_id:
         receptor_ctl = get_receptor_ctl()
         try:
-            try:
-                receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
-            except Exception:
-                logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
-            try:
-                receptor_ctl.simple_command(f"work release {unified_job.work_unit_id}")
-            except Exception:
-                logger.exception(f'Failed to release {unified_job.log_format} work unit {unified_job.work_unit_id}')
+            receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
+            canceled_work_unit = True
+        except Exception:
+            logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
         finally:
             receptor_ctl.close()
         time.sleep(1)
         unified_job.refresh_from_db()
     if unified_job.status == 'running' and unified_job.celery_task_id:
         cancel_control_process.delay(unified_job.celery_task_id)
+    if not canceled_work_unit:
+        # Double-check in case sigterm was sent during transmit phase
+        time.sleep(1)
+        unified_job.refresh_from_db()
+        if unified_job.work_unit_id:
+            receptor_ctl = get_receptor_ctl()
+            try:
+                receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
+                canceled_work_unit = True
+            except Exception:
+                logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
+            finally:
+                receptor_ctl.close()
 
 
 @task(queue='tower_broadcast_all')
