@@ -384,7 +384,7 @@ class AWXReceptorJob:
                 except Exception as exc:
                     if 'unknown work unit' in str(exc):
                         self.task.instance.refresh_from_db()
-                        if self.task.cancel_flag:
+                        if self.task.instance.cancel_flag:
                             return AnsibleRunnerResult('canceled', 1)  # was canceled and work already released
                     detail = ''
                     state_name = ''
