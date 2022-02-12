@@ -255,7 +255,6 @@ def cancel_control_process(celery_task_id):
 
 @task(queue=get_local_queuename)
 def cancel_unified_job(unified_job_id):
-    """Triggers special action in awx.main.dispatch.pool, this is a placeholder"""
     try:
         unified_job = UnifiedJob.objects.get(pk=unified_job_id)
     except UnifiedJob.DoesNotExist:
@@ -271,7 +270,6 @@ def cancel_unified_job(unified_job_id):
             logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
         finally:
             receptor_ctl.close()
-        time.sleep(1)
         unified_job.refresh_from_db()
     if unified_job.status == 'running' and unified_job.celery_task_id:
         cancel_control_process.delay(unified_job.celery_task_id)
