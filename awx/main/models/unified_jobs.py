@@ -1412,7 +1412,7 @@ class UnifiedJob(
                 if self.celery_task_id:
                     from awx.main.tasks.system import cancel_control_process
 
-                    cancel_control_process.apply_async(self.celery_task_id, queue=self.get_queue_name())
+                    cancel_control_process.apply_async([self.celery_task_id], queue=self.get_queue_name())
                 else:
                     from awx.main.tasks.system import cancel_unified_job
 
