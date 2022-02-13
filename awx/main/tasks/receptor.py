@@ -363,15 +363,12 @@ class AWXReceptorJob:
 
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
-                self.task.instance.refresh_from_db()
                 # If normal cancel, receptor cancel is responsibility of canceling task
-                if not self.task.instance.cancel_flag:
-                    # got SIGTERM but not a legitimate cancel
-                    # received sigterm without the receptor process also being canceled
-                    # TODO: remove this cancel, recover later by restarting the processing step
-                    receptor_ctl.simple_command(f"work cancel {self.unit_id}")
+                receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
+                # TODO: abort without status transition, recover later by restarting the processing step
+                self.task.instance.refresh_from_db(fields=['cancel_flag'])
                 if not self.task.instance.cancel_flag:
                     self.task.instance.job_explanation = _('Control process received shutdown signal and aborted job')
                     self.task.instance.save(update_fields=['job_explanation'])
@@ -385,10 +382,6 @@ class AWXReceptorJob:
                     detail = ''
                     state_name = ''
                     logger.exception(f'An error was encountered while getting status for work unit {self.unit_id}')
-
-                # If the receptor cancel command happened first, then identify that and mark canceled
-                if detail == 'Killed':
-                    return AnsibleRunnerResult('canceled', 1)
 
                 if 'exceeded quota' in detail:
                     logger.warn(detail)

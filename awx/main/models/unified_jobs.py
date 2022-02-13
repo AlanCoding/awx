@@ -1409,9 +1409,14 @@ class UnifiedJob(
                 self.websocket_emit_status("canceled")
 
             def actually_cancel():
-                from awx.main.tasks.system import cancel_unified_job
+                if self.celery_task_id:
+                    from awx.main.tasks.system import cancel_control_process
 
-                cancel_unified_job.apply_async([self.id], queue=self.get_queue_name())
+                    cancel_control_process.apply_async(self.celery_task_id, queue=self.get_queue_name())
+                else:
+                    from awx.main.tasks.system import cancel_unified_job
+
+                    cancel_unified_job.apply_async([self.id], queue=self.get_queue_name())
 
             connection.on_commit(actually_cancel)
         return self.cancel_flag
