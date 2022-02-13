@@ -292,6 +292,7 @@ class AWXReceptorJob:
                     receptor_ctl.simple_command(f"work release {self.unit_id}")
                 except Exception:
                     logger.exception(f"Error releasing work unit {self.unit_id}.")
+            receptor_ctl.close()
 
     @property
     def sign_work(self):
