@@ -255,37 +255,27 @@ def cancel_control_process(celery_task_id):
 
 @task(queue=get_local_queuename)
 def cancel_unified_job(unified_job_id):
+    """
+    This method exits to assure cancelation of jobs which had not yet been assigned
+    a celery_task_id, which should be pending and waiting jobs
+    """
     try:
         unified_job = UnifiedJob.objects.get(pk=unified_job_id)
     except UnifiedJob.DoesNotExist:
         logger.info(f'Job id {unified_job_id} has been deleted, aborting cancel')
         return
-    canceled_work_unit = False
-    if unified_job.work_unit_id:
-        receptor_ctl = get_receptor_ctl()
+    while unified_job.status in ACTIVE_STATES:
+        if unified_job.celery_task_id:
+            cancel_control_process.delay(unified_job.celery_task_id)
+            logger.warning(f'sigterm issued to {unified_job.log_format} after it obtained a task id')
+            return
         try:
-            receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
-            canceled_work_unit = True
-        except Exception:
-            logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
-        finally:
-            receptor_ctl.close()
-        unified_job.refresh_from_db()
-    if unified_job.status == 'running' and unified_job.celery_task_id:
-        cancel_control_process.delay(unified_job.celery_task_id)
-    if not canceled_work_unit:
-        # Double-check in case sigterm was sent during transmit phase
+            unified_job.refresh_from_db(fields=['status'])
+        except unified_job.DoesNotExist:
+            logger.info(f'Job id {unified_job_id} has been deleted, cancel aborted')
+            return
         time.sleep(1)
-        unified_job.refresh_from_db()
-        if unified_job.work_unit_id:
-            receptor_ctl = get_receptor_ctl()
-            try:
-                receptor_ctl.simple_command(f"work cancel {unified_job.work_unit_id}")
-                canceled_work_unit = True
-            except Exception:
-                logger.exception(f'Failed to cancel {unified_job.log_format} work unit {unified_job.work_unit_id}')
-            finally:
-                receptor_ctl.close()
+    logger.info(f'{unified_job.log_format} stopped before obtaining a task id, sigterm not needed')
 
 
 @task(queue='tower_broadcast_all')
