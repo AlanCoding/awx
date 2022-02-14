@@ -365,8 +365,6 @@ class AWXReceptorJob:
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
-                # resultsock.shutdown(socket.SHUT_RDWR)
-                # resultfile.close()
                 # TODO: abort without status transition, recover later by restarting the processing step
                 self.task.instance.refresh_from_db(fields=['cancel_flag'])
                 if not self.task.instance.cancel_flag:
