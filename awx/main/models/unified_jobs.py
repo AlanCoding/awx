@@ -1412,6 +1412,9 @@ class UnifiedJob(
                 if self.celery_task_id:
                     from awx.main.tasks.system import cancel_control_process
 
+                    # This task runs logic in the main dispatcher process
+                    # so the sigterm will be issued without waiting in the multiprocessing queue
+                    # this is important so users can cancel jobs in an overloaded system
                     cancel_control_process.apply_async([self.celery_task_id], queue=self.get_queue_name())
                 else:
                     from awx.main.tasks.system import cancel_unified_job
