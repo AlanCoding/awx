@@ -139,6 +139,9 @@ class BaseTask(object):
             "container_options": ['--user=root'],
         }
 
+        if instance.execution_node == settings.CLUSTER_HOST_ID or instance.execution_node == instance.controller_node:
+            params['only_transmit_kwargs'] = True
+
         if settings.DEFAULT_CONTAINER_RUN_OPTIONS:
             params['container_options'].extend(settings.DEFAULT_CONTAINER_RUN_OPTIONS)
 
@@ -541,6 +544,12 @@ class BaseTask(object):
                 if not params[v]:
                     del params[v]
 
+            if self.instance.is_container_group_task or settings.IS_K8S:
+                params['envvars'].pop('HOME', None)
+            else:
+                ee_params = self.build_execution_environment_params(self.instance, private_data_dir)
+                params.update(ee_params)
+
             self.instance.log_lifecycle("running_playbook")
             if isinstance(self.instance, SystemJob):
                 res = ansible_runner.interface.run(
@@ -552,14 +561,6 @@ class BaseTask(object):
                     **params,
                 )
             else:
-                if self.instance.is_container_group_task or settings.IS_K8S:
-                    params['envvars'].pop('HOME', None)
-                else:
-                    ee_params = self.build_execution_environment_params(self.instance, private_data_dir)
-                    params.update(ee_params)
-                    if self.instance.execution_node == settings.CLUSTER_HOST_ID or self.instance.execution_node == self.instance.controller_node:
-                        params['only_transmit_kwargs'] = True
-
                 receptor_job = AWXReceptorJob(self, params)
                 res = receptor_job.run()
                 self.unit_id = receptor_job.unit_id
