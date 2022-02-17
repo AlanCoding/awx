@@ -537,18 +537,18 @@ class BaseTask(object):
                 # Disable Ansible fact cache.
                 params['fact_cache_type'] = ''
 
+            if self.instance.is_container_group_task or settings.IS_K8S:
+                params['envvars'].pop('HOME', None)
+            else:
+                ee_params = self.build_execution_environment_params(self.instance, private_data_dir)
+                params.update(ee_params)
+
             '''
             Delete parameters if the values are None or empty array
             '''
             for v in ['passwords', 'playbook', 'inventory']:
                 if not params[v]:
                     del params[v]
-
-            if self.instance.is_container_group_task or settings.IS_K8S:
-                params['envvars'].pop('HOME', None)
-            else:
-                ee_params = self.build_execution_environment_params(self.instance, private_data_dir)
-                params.update(ee_params)
 
             self.instance.log_lifecycle("running_playbook")
             if isinstance(self.instance, SystemJob):
