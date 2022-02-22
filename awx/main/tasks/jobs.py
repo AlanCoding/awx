@@ -135,11 +135,8 @@ class BaseTask(object):
             "container_image": image,
             "process_isolation": True,
             "process_isolation_executable": "podman",  # need to provide, runner enforces default via argparse
-            "container_options": ['--user=root'],
+            "container_options": settings.DEFAULT_CONTAINER_RUN_OPTIONS,
         }
-
-        if settings.DEFAULT_CONTAINER_RUN_OPTIONS:
-            params['container_options'].extend(settings.DEFAULT_CONTAINER_RUN_OPTIONS)
 
         if instance.execution_environment.credential:
             cred = instance.execution_environment.credential
