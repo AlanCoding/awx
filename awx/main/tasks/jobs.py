@@ -973,10 +973,21 @@ class RunJob(BaseTask):
             # the pre_run_hook method
             return
         if job.use_fact_cache:
+            logger.info('started waiting - job')
+            Path('/tmp/alan_job.txt').touch()
+            start = time.time()
+            while time.time() - start < 120.0:
+                if os.path.exists('/tmp/alan_inv.txt'):
+                    break
+                time.sleep(1)
+            os.remove('/tmp/alan_inv.txt')
+            logger.info('stopped waiting - job {}'.format(time.time() - start))
+            start = time.time()
             job.finish_job_fact_cache(
                 os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'),
                 fact_modification_times,
             )
+            logger.info('Took {} to finish job fact cache'.format(time.time() - start))
 
         try:
             inventory = job.inventory
@@ -1750,6 +1761,23 @@ class RunInventoryUpdate(BaseTask):
         inv_logger.handlers[0] = handler
 
         from awx.main.management.commands.inventory_import import Command as InventoryImportCommand
+
+        from pathlib import Path
+
+        if os.path.exists('/tmp/alan_inv0.txt'):
+            os.remove('/tmp/alan_inv0.txt')
+            logger.info('started waiting - inv')
+            Path('/tmp/alan_inv.txt').touch()
+            start = time.time()
+            while time.time() - start < 120.0:
+                if os.path.exists('/tmp/alan_job.txt'):
+                    break
+                time.sleep(1)
+            os.remove('/tmp/alan_job.txt')
+            logger.info('stopped waiting - inv {}'.format(time.time() - start))
+        else:
+            Path('/tmp/alan_inv0.txt').touch()
+        time.sleep(0.2)
 
         cmd = InventoryImportCommand()
         try:
