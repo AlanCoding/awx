@@ -12,6 +12,7 @@ import yaml
 
 # Django
 from django.conf import settings
+from django.db import connections
 
 # Runner
 import ansible_runner
@@ -293,6 +294,8 @@ class AWXReceptorJob:
             use_stream_tls = get_conn_type(work_submit_kw['node'], receptor_ctl).name == "STREAMTLS"
             work_submit_kw['tlsclient'] = get_tls_client(use_stream_tls)
 
+        connections.close_all()
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             transmitter_future = executor.submit(self.transmit, sockin)
 
@@ -328,6 +331,8 @@ class AWXReceptorJob:
         artifact_dir = os.path.join(self.runner_params['private_data_dir'], 'artifacts')
         if os.path.exists(artifact_dir):
             shutil.rmtree(artifact_dir)
+
+        connections.close_all()
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
         # Both "processor" and "cancel_watcher" are spawned in separate threads.
@@ -407,6 +412,7 @@ class AWXReceptorJob:
             status_handler=self.task.runner_callback.status_handler,
             **self.runner_params,
         )
+        connections.close_all()
 
     @property
     def receptor_params(self):
