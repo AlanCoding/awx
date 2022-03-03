@@ -406,8 +406,12 @@ class AutoscalePool(WorkerPool):
                             w.managed_tasks[current_task['uuid']]['started'] = time.time()
                         age = time.time() - current_task['started']
                         w.managed_tasks[current_task['uuid']]['age'] = age
-                        if age > current_task['timeout']:
-                            logger.error(f'{current_task.get("task" "unknown")} task ran for {current_task["timeout"]}, sending SIGTERM to {w.pid}')  # noqa
+                        timeout = current_task['timeout']
+                        if age > timeout + 20:
+                            logger.error(f'{current_task} task ran for {age}, over {timeout}, sending SIGKILL to {w.pid}')
+                            os.kill(w.pid, signal.SIGKILL)
+                        elif age > timeout:
+                            logger.error(f'{current_task} task ran for {age}, over {timeout}, sending SIGTERM to {w.pid}')
                             os.kill(w.pid, signal.SIGTERM)
 
         for m in orphaned:
