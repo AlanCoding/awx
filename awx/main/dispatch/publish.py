@@ -51,8 +51,9 @@ class task:
         print("Run this everywhere!")
     """
 
-    def __init__(self, queue=None):
+    def __init__(self, queue=None, timeout=0):
         self.queue = queue
+        self.timeout = timeout
 
     def __call__(self, fn=None):
         queue = self.queue
@@ -76,6 +77,8 @@ class task:
                     logger.error(msg)
                     raise ValueError(msg)
                 obj = {'uuid': task_id, 'args': args, 'kwargs': kwargs, 'task': cls.name}
+                if self.timeout:
+                    obj['timeout'] = self.timeout
                 guid = GuidMiddleware.get_guid()
                 if guid:
                     obj['guid'] = guid

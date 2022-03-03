@@ -363,7 +363,9 @@ def handle_removed_image(remove_images=None):
     _cleanup_images_and_files(remove_images=remove_images, file_pattern='')
 
 
-@task(queue=get_local_queuename)
+# Runs on a 3 hour schedule, but runs commands on execution nodes,
+# so we limit runtime to frequency in case of receptor hangs
+@task(queue=get_local_queuename, timeout=3 * 60 * 60)
 def cleanup_images_and_files():
     _cleanup_images_and_files()
 
@@ -555,7 +557,8 @@ def cluster_node_heartbeat():
                 logger.exception('Error marking {} as lost'.format(other_inst.hostname))
 
 
-@task(queue=get_local_queuename)
+# runs on a 1min schedule, timeout used in case receptor commands hang, so it will not cascade fail dispatcher
+@task(queue=get_local_queuename, timeout=60 * 2)
 def awx_receptor_workunit_reaper():
     """
     When an AWX job is launched via receptor, files such as status, stdin, and stdout are created
