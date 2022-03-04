@@ -9,6 +9,7 @@ from io import StringIO
 from contextlib import redirect_stdout
 import shutil
 import time
+import signal
 from distutils.version import LooseVersion as Version
 
 # Django
@@ -403,7 +404,20 @@ def execution_node_health_check(node):
     if instance.node_type != 'execution':
         raise RuntimeError(f'Execution node health check ran against {instance.node_type} node {instance.hostname}')
 
-    data = worker_info(node)
+    def handle_work_info_error(signum, frame):
+        logger.error(f'Worker info failed with signum {signum}, receptor may be hanging')
+        raise RuntimeError('Worker info did not return')
+
+    # worker_info itself has timeout set to 20 seconds, so if that did not work something is wrong
+    signal.signal(signal.SIGALRM, handle_work_info_error)
+    signal.alarm(40)
+
+    try:
+        data = worker_info(node)
+    except RuntimeError:
+        data = dict(uuid=instance.uuid, errors='Receptor service is unresponsive')
+    finally:
+        signal.alarm(0)  # disable alarm
 
     prior_capacity = instance.capacity
 
