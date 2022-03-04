@@ -415,7 +415,7 @@ def execution_node_health_check(node):
     try:
         data = worker_info(node)
     except RuntimeError:
-        data = dict(uuid=instance.uuid, errors='Receptor service is unresponsive')
+        data = dict(uuid=instance.uuid, errors=['Receptor service is unresponsive'])
     finally:
         signal.alarm(0)  # disable alarm
 
