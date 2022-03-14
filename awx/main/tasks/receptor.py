@@ -253,7 +253,7 @@ AnsibleRunnerResult = namedtuple('result', ['status', 'rc'])
 
 
 class AWXReceptorJob:
-    def __init__(self, task, runner_params=None, sigterm_watcher=None):
+    def __init__(self, task, runner_params=None):
         self.task = task
         self.runner_params = runner_params
         self.unit_id = None
@@ -264,8 +264,6 @@ class AWXReceptorJob:
 
         if not settings.IS_K8S and self.work_type == 'local' and 'only_transmit_kwargs' not in self.runner_params:
             self.runner_params['only_transmit_kwargs'] = True
-
-        self.sigterm_watcher = sigterm_watcher
 
     def run(self):
         # We establish a connection to the Receptor socket
@@ -464,7 +462,7 @@ class AWXReceptorJob:
             if processor_future.done():
                 return processor_future.result()
 
-            if self.sigterm_watcher.cancel_callback():
+            if self.task.sigterm_watcher.cancel_callback():
                 return AnsibleRunnerResult('canceled', 1)
 
             time.sleep(0.5)

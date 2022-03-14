@@ -385,11 +385,11 @@ def cancel_unified_job(unified_job_id):
         return
     while unified_job.status in ACTIVE_STATES:
         if unified_job.celery_task_id:
-            cancel_control_process.delay(unified_job.celery_task_id)
+            cancel_control_process.apply_async([unified_job.celery_task_id], queue=unified_job.get_queue_name())
             logger.warning(f'sigterm issued to {unified_job.log_format} after it obtained a task id')
             return
         try:
-            unified_job.refresh_from_db(fields=['status'])
+            unified_job.refresh_from_db(fields=['status', 'controller_node', 'execution_node'])
         except unified_job.DoesNotExist:
             logger.info(f'Job id {unified_job_id} has been deleted, cancel aborted')
             return
