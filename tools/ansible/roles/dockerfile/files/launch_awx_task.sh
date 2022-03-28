@@ -17,4 +17,4 @@ set -e
 
 wait-for-migrations
 
-supervisord -c /etc/supervisord_task.conf
+exec supervisord -c /etc/supervisord_task.conf
