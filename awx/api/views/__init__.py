@@ -404,23 +404,19 @@ class InstanceInstanceGroupsList(InstanceGroupMembershipMixin, SubListCreateAtta
     parent_model = models.Instance
     relationship = 'rampart_groups'
 
-    def unattach_validate(self, request):
-        sub_id, res = super().unattach_validate(request)
-        if res:
-            return (sub_id, res)
-        parent = self.get_parent_object()
-        sub = get_object_or_400(self.model, pk=sub_id)
-        if sub.name == 'controlplane' and parent.node_type == 'hybrid':
-            data = dict({'msg': _(f"Cannot disassociate hybrid instance {parent.hostname} from controlplane.")})
-            res = Response(data, status=status.HTTP_400_BAD_REQUEST)
-            return (sub_id, res)
-        return (sub_id, res)
-
     def is_valid_relation(self, parent, sub, created=False):
         if parent.node_type == 'control':
             return {'msg': _(f"Cannot change instance group membership of control-only node: {parent.hostname}.")}
         if parent.node_type == 'hop':
             return {'msg': _(f"Cannot change instance group membership of hop node : {parent.hostname}.")}
+        return None
+
+    def is_valid_removal(self, parent, sub):
+        res = self.is_valid_relation(parent, sub)
+        if res:
+            return res
+        if sub.name == settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME and parent.node_type == 'hybrid':
+            return {'msg': _(f"Cannot disassociate hybrid instance {parent.hostname} from controlplane.")}
         return None
 
 
@@ -518,23 +514,19 @@ class InstanceGroupInstanceList(InstanceGroupMembershipMixin, SubListAttachDetac
     relationship = "instances"
     search_fields = ('hostname',)
 
-    def unattach_validate(self, request):
-        sub_id, res = super().unattach_validate(request)
-        if res:
-            return (sub_id, res)
-        parent = self.get_parent_object()
-        sub = get_object_or_400(self.model, pk=sub_id)
-        if sub.node_type == 'hybrid' and parent.name == 'controlplane':
-            data = dict({'msg': _(f"Cannot disassociate hybrid node {sub.hostname} from controlplane.")})
-            res = Response(data, status=status.HTTP_400_BAD_REQUEST)
-            return (sub_id, res)
-        return (sub_id, res)
-
     def is_valid_relation(self, parent, sub, created=False):
         if sub.node_type == 'control':
             return {'msg': _(f"Cannot change instance group membership of control-only node: {sub.hostname}.")}
         if sub.node_type == 'hop':
             return {'msg': _(f"Cannot change instance group membership of hop node: {sub.hostname}.")}
+        return None
+
+    def is_valid_removal(self, parent, sub):
+        res = self.is_valid_relation(parent, sub)
+        if res:
+            return res
+        if sub.node_type == 'hybrid' and parent.name == settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME:
+            return {'msg': _(f"Cannot disassociate hybrid node {sub.hostname} from controlplane.")}
         return None
 
 
