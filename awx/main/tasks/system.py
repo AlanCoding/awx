@@ -735,6 +735,16 @@ def handle_success_and_failure_notifications(job_id):
     logger.warning(f"Failed to even try to send notifications for job '{uj}' due to job not being in finished state.")
 
 
+def ensure_success_and_failure_notifications(unified_job_id, caller=''):
+    with transaction.atomic():
+        unified_job = UnifiedJob.objects.only('id', 'notifications_processed').get(id=unified_job_id)
+        if not unified_job.notifications_processed:
+            unified_job.notifications_processed = True
+            unified_job.save(update_fields=['notifications_processed'])
+            handle_success_and_failure_notifications.delay(unified_job_id)
+            logger.debug(f'Triggered notification task from {caller} process')
+
+
 @task(queue=get_local_queuename)
 def update_inventory_computed_fields(inventory_id):
     """

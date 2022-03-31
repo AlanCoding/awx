@@ -619,6 +619,9 @@ class UnifiedJob(
     dependencies_processed = models.BooleanField(
         default=False, editable=False, help_text=_("If True, the task manager has already processed potential dependencies for this job.")
     )
+    notifications_processed = models.BooleanField(
+        default=False, editable=False, help_text=_("If True, the dispatcher has processed success or failure notifications for this job.")
+    )
     finished = models.DateTimeField(
         null=True,
         default=None,

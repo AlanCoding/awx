@@ -78,7 +78,7 @@ from awx.main.utils.common import (
 )
 from awx.conf.license import get_license
 from awx.main.utils.handlers import SpecialInventoryHandler
-from awx.main.tasks.system import handle_success_and_failure_notifications, update_smart_memberships_for_inventory, update_inventory_computed_fields
+from awx.main.tasks.system import ensure_success_and_failure_notifications, update_smart_memberships_for_inventory, update_inventory_computed_fields
 from awx.main.utils.update_model import update_model
 from rest_framework.exceptions import PermissionDenied
 from django.utils.translation import gettext_lazy as _
@@ -395,6 +395,9 @@ class BaseTask(object):
                 instance.ansible_version = ansible_version_info
                 instance.save(update_fields=['ansible_version'])
 
+        # will send success or failure notifications if this finishes after event processing does
+        ensure_success_and_failure_notifications(self.instance.id, caller='control')
+
     @with_path_cleanup
     def run(self, pk, **kwargs):
         """
@@ -553,8 +556,6 @@ class BaseTask(object):
                     status = 'failed'
 
                 extra_update_fields['job_explanation'] = self.instance.job_explanation
-                # ensure failure notification sends even if playbook_on_stats event is not triggered
-                handle_success_and_failure_notifications.apply_async([self.instance.id])
 
         except ReceptorNodeNotFound as exc:
             extra_update_fields['job_explanation'] = str(exc)
@@ -579,6 +580,8 @@ class BaseTask(object):
         # We really shouldn't get into this one but just in case....
         if 'got an unexpected keyword argument' in extra_update_fields.get('result_traceback', ''):
             extra_update_fields['result_traceback'] = "{}\n\n{}".format(extra_update_fields['result_traceback'], ANSIBLE_RUNNER_NEEDS_UPDATE_MESSAGE)
+
+        time.sleep(5)
 
         self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, emitted_events=self.runner_callback.event_ct, **extra_update_fields)

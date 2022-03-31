@@ -385,10 +385,10 @@ class BasePlaybookEvent(CreatedModifiedModel):
                     job.get_event_queryset().filter(uuid__in=failed).update(failed=True)
 
                     # send success/failure notifications when we've finished handling the playbook_on_stats event
-                    from awx.main.tasks.system import handle_success_and_failure_notifications  # circular import
+                    from awx.main.tasks.system import ensure_success_and_failure_notifications  # circular import
 
                     def _send_notifications():
-                        handle_success_and_failure_notifications.apply_async([job.id])
+                        ensure_success_and_failure_notifications(job.id)
 
                     connection.on_commit(_send_notifications)
 
