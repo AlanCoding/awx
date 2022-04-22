@@ -396,7 +396,7 @@ class BaseTask(object):
                 instance.save(update_fields=['ansible_version'])
 
         # will send success or failure notifications if this finishes after event processing does
-        ensure_success_and_failure_notifications(self.instance.id, caller='control')
+        ensure_success_and_failure_notifications(self.instance, status=status, caller='control process')
 
     @with_path_cleanup
     def run(self, pk, **kwargs):

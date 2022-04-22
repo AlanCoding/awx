@@ -719,29 +719,41 @@ def handle_work_error(task_id, *args, **kwargs):
 @task(queue=get_local_queuename)
 def handle_success_and_failure_notifications(job_id):
     uj = UnifiedJob.objects.get(pk=job_id)
+
+    # try to wait until all events are saved first, but give up shortly
     retries = 0
+    database_event_ct = 0
     while retries < settings.AWX_NOTIFICATION_JOB_FINISH_MAX_RETRY:
-        if uj.finished:
-            uj.send_notification_templates('succeeded' if uj.status == 'successful' else 'failed')
-            return
-        else:
-            # wait a few seconds to avoid a race where the
-            # events are persisted _before_ the UJ.status
-            # changes from running -> successful
-            retries += 1
-            time.sleep(1)
-            uj = UnifiedJob.objects.get(pk=job_id)
+        database_event_ct = uj.get_event_queryset().count()
+        if database_event_ct >= uj.emitted_events:
+            break
+        retries += 1
+        time.sleep(1)
+        uj = UnifiedJob.objects.get(pk=job_id)
+    else:
+        logger.info(f"Only collected {database_event_ct} of {uj.emitted_events} for unified job {uj.id} before sending notifications.")
 
-    logger.warning(f"Failed to even try to send notifications for job '{uj}' due to job not being in finished state.")
+    uj.send_notification_templates('succeeded' if uj.status == 'successful' else 'failed')
 
 
-def ensure_success_and_failure_notifications(unified_job_id, caller=''):
+def ensure_success_and_failure_notifications(unified_job, status=None, caller=''):
+    if status is None:
+        if unified_job.status == 'running':  # try to prevent race condition when callback receiver calling
+            unified_job.refresh_from_db(fields=['status'])
+        status = unified_job.status
+
+    # Avoid unwanted updates if there are no notification templates for this unified job
+    notification_templates = unified_job.get_notification_templates()
+    if not (notification_templates and notification_templates.get(unified_job.STATUS_TO_TEMPLATE_TYPE[status], [])):
+        logger.debug(f'No notification templates to trigger for unified job {unified_job.id} from {caller} process')
+        return
+
     with transaction.atomic():
-        unified_job = UnifiedJob.objects.only('id', 'notifications_processed').get(id=unified_job_id)
+        unified_job = UnifiedJob.objects.select_for_update().only('id', 'notifications_processed').get(id=unified_job.id)
         if not unified_job.notifications_processed:
             unified_job.notifications_processed = True
             unified_job.save(update_fields=['notifications_processed'])
-            handle_success_and_failure_notifications.delay(unified_job_id)
+            handle_success_and_failure_notifications.delay(unified_job.id)
             logger.debug(f'Triggered notification task from {caller} process')
 
 

@@ -388,7 +388,7 @@ class BasePlaybookEvent(CreatedModifiedModel):
                     from awx.main.tasks.system import ensure_success_and_failure_notifications  # circular import
 
                     def _send_notifications():
-                        ensure_success_and_failure_notifications(job.id)
+                        ensure_success_and_failure_notifications(job, caller='callback receiver')
 
                     connection.on_commit(_send_notifications)
 
