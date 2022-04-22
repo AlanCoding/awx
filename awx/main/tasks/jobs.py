@@ -543,6 +543,11 @@ class BaseTask(object):
             status = res.status
             rc = res.rc
 
+            # We call this to get the current values from the database, in case update_model was called
+            # within the threadpools inside of AWXReceptorJob. We use update_model instead of
+            # refresh_from_db here because it contains retry logic that is resilient to database failures.
+            self.instance = self.update_model(self.instance.pk)
+
             if status in ('timeout', 'error'):
                 self.runner_callback.delay_update(skip_if_already_set=True, job_explanation=f"Job terminated due to {status}")
                 if status == 'timeout':
@@ -567,7 +572,6 @@ class BaseTask(object):
         except Exception:
             logger.exception('{} Post run hook errored.'.format(self.instance.log_format))
 
-        self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
 
         # Field host_status_counts is used as a metric to check if event processing is finished
