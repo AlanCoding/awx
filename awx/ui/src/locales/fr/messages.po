@@ -10188,7 +10188,7 @@ msgstr "{numJobsToCancel, plural, one {This action will cancel the following job
 
 #: components/JobList/JobListCancelButton.js:91
 msgid "{numJobsToCancel, plural, one {{0}} other {{1}}}"
-msgstr "{numJobsToCancel, plural, one {{0} other {{1}}}"
+msgstr "{numJobsToCancel, plural, one {{0}} other {{1}}}"
 
 #: components/PaginatedTable/PaginatedTable.js:79
 msgid "{pluralizedItemName} List"
