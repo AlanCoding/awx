@@ -141,6 +141,8 @@ class CallbackBrokerWorker(BaseWorker):
             logger.error(f'profiling is disabled, wrote {filepath}')
 
     def work_loop(self, *args, **kw):
+        logger.info(f'entered work loop {self.pid}, kwargs {args}')
+        self.ipc_queue = args[0]
         if settings.AWX_CALLBACK_PROFILE:
             signal.signal(signal.SIGUSR1, self.toggle_profiling)
         return super(CallbackBrokerWorker, self).work_loop(*args, **kw)
@@ -220,6 +222,8 @@ class CallbackBrokerWorker(BaseWorker):
                 notification_trigger_event = bool(body.get('event') == cls.WRAPUP_EVENT)
 
                 if body.get('event') == 'EOF':
+                    self.ipc_queue.put(body)
+                    logger.info('wrote the EOF event to ipc_queue')
                     try:
                         if 'guid' in body:
                             set_guid(body['guid'])

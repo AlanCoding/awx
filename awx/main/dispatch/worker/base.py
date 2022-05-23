@@ -114,6 +114,7 @@ class AWXConsumerBase(object):
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
 
+        logger.info(f"Running worker {self.name} listening to queues {self.queues}")
         # Child should implement other things here
 
     def stop(self, signum, frame):
@@ -130,7 +131,18 @@ class AWXConsumerRedis(AWXConsumerBase):
 
         while True:
             logger.debug(f'{os.getpid()} is alive')
-            time.sleep(60)
+
+            for worker in self.pool.workers:
+                try:
+                    size = worker.queue.qsize()
+                    if size:
+                        result = worker.queue.get()
+                        if result:
+                            logger.warning(f'Got message from {worker} - {result}, type {type(result)}')
+                except Exception:
+                    logger.exception(f'Read did not work for {worker}')
+
+            time.sleep(5)
 
 
 class AWXConsumerPG(AWXConsumerBase):
@@ -144,7 +156,6 @@ class AWXConsumerPG(AWXConsumerBase):
     def run(self, *args, **kwargs):
         super(AWXConsumerPG, self).run(*args, **kwargs)
 
-        logger.info(f"Running worker {self.name} listening to queues {self.queues}")
         init = False
 
         while True:
