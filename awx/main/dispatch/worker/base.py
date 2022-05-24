@@ -161,9 +161,9 @@ class AWXConsumerRedis(AWXConsumerBase):
                 logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
                 if events_processed.get(job_id, 0) == emitted_events:
                     emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
-                if job_id in events_processed:
-                    del events_processed[job_id]
-                del events_total[job_id]
+                    if job_id in events_processed:
+                        del events_processed[job_id]
+                    del events_total[job_id]
 
             time.sleep(5)
 

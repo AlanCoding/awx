@@ -102,19 +102,19 @@ class CallbackBrokerWorker(BaseWorker):
         except (json.JSONDecodeError, KeyError):
             logger.exception("failed to decode JSON message from redis")
         finally:
-            self.report_counts()
+            self.report_counts(queue)
             self.record_statistics()
             self.record_read_metrics()
 
         return {'event': 'FLUSH'}
 
-    def report_counts(self):
+    def report_counts(self, queue):
         """Use the multiprocessing queue to report back to the parent process
         the number of events that have been saved by this worker.
         """
         try:
             if time.time() - self.last_report > settings.JOB_EVENT_BUFFER_SECONDS:
-                self.ipc_queue.put(self.work_report)
+                queue.put(self.work_report)
                 self.work_report = {'processed': {}, 'totals': {}}
                 self.last_report = time.time()
         except Exception:
@@ -156,7 +156,6 @@ class CallbackBrokerWorker(BaseWorker):
 
     def work_loop(self, *args, **kw):
         logger.info(f'entered work loop {self.pid}, kwargs {args}')
-        self.ipc_queue = args[0]
         if settings.AWX_CALLBACK_PROFILE:
             signal.signal(signal.SIGUSR1, self.toggle_profiling)
         return super(CallbackBrokerWorker, self).work_loop(*args, **kw)
