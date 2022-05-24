@@ -140,7 +140,11 @@ class AWXConsumerRedis(AWXConsumerBase):
                 try:
                     size = worker.queue.qsize()
                     for i in range(size):
-                        result = worker.queue.get()
+                        try:
+                            result = worker.queue.get(block=False)
+                        except QueueEmpty:
+                            logger.debug('Internal error reading to many from worker queue')
+                            continue
                         if not isinstance(result, dict):
                             logger.warning(f'Worker provided bad data type {type(result)}')
                         events_total.update(result['totals'])
