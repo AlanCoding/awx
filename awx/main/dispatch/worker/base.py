@@ -17,6 +17,7 @@ from django.conf import settings
 
 from awx.main.dispatch.pool import WorkerPool
 from awx.main.dispatch import pg_bus_conn
+from awx.main.consumers import emit_channel_notification
 
 if 'run_callback_receiver' in sys.argv:
     logger = logging.getLogger('awx.main.commands.run_callback_receiver')
@@ -128,6 +129,9 @@ class AWXConsumerRedis(AWXConsumerBase):
     def run(self, *args, **kwargs):
         super(AWXConsumerRedis, self).run(*args, **kwargs)
         self.worker.on_start()
+        self.work_report = {'processed': {}, 'totals': {}}
+        events_processed = {}
+        events_total = {}
 
         while True:
             logger.debug(f'{os.getpid()} is alive')
@@ -135,12 +139,27 @@ class AWXConsumerRedis(AWXConsumerBase):
             for worker in self.pool.workers:
                 try:
                     size = worker.queue.qsize()
-                    if size:
+                    for i in range(size):
                         result = worker.queue.get()
-                        if result:
-                            logger.warning(f'Got message from {worker} - {result}, type {type(result)}')
+                        if not isinstance(result, dict):
+                            logger.warning(f'Worker provided bad data type {type(result)}')
+                        events_total.update(result['totals'])
+                        for job_id, this_ct in result['processed'].items():
+                            events_processed.setdefault(job_id, 0)
+                            events_processed[job_id] += this_ct
                 except Exception:
                     logger.exception(f'Read did not work for {worker}')
+
+            if events_processed or events_total:
+                logger.warning(f'Rolling counts from parent: {events_processed}, {events_total}')
+
+            for job_id, emitted_events in events_total.copy().items():
+                logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
+                if events_processed.get(job_id, 0) == emitted_events:
+                    emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
+                if job_id in events_processed:
+                    del events_processed[job_id]
+                del events_total[job_id]
 
             time.sleep(5)
 

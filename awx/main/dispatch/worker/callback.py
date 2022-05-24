@@ -17,7 +17,6 @@ import psutil
 
 import redis
 
-from awx.main.consumers import emit_channel_notification
 from awx.main.models import JobEvent, AdHocCommandEvent, ProjectUpdateEvent, InventoryUpdateEvent, SystemJobEvent, UnifiedJob
 from awx.main.constants import ACTIVE_STATES
 from awx.main.models.events import emit_event_detail
@@ -77,6 +76,8 @@ class CallbackBrokerWorker(BaseWorker):
         self.queue_pop = 0
         self.queue_name = settings.CALLBACK_QUEUE
         self.prof = AWXProfiler("CallbackBrokerWorker")
+        self.work_report = {'processed': {}, 'totals': {}}
+        self.last_report = time.time()
         for key in self.redis.keys('awx_callback_receiver_statistics_*'):
             self.redis.delete(key)
 
@@ -101,10 +102,23 @@ class CallbackBrokerWorker(BaseWorker):
         except (json.JSONDecodeError, KeyError):
             logger.exception("failed to decode JSON message from redis")
         finally:
+            self.report_counts()
             self.record_statistics()
             self.record_read_metrics()
 
         return {'event': 'FLUSH'}
+
+    def report_counts(self):
+        """Use the multiprocessing queue to report back to the parent process
+        the number of events that have been saved by this worker.
+        """
+        try:
+            if time.time() - self.last_report > settings.JOB_EVENT_BUFFER_SECONDS:
+                self.ipc_queue.put(self.work_report)
+                self.work_report = {'processed': {}, 'totals': {}}
+                self.last_report = time.time()
+        except Exception:
+            logger.exception('Error reporting stats to parent process')
 
     def record_read_metrics(self):
         if self.queue_pop == 0:
@@ -222,18 +236,10 @@ class CallbackBrokerWorker(BaseWorker):
                 notification_trigger_event = bool(body.get('event') == cls.WRAPUP_EVENT)
 
                 if body.get('event') == 'EOF':
-                    self.ipc_queue.put(body)
-                    logger.info('wrote the EOF event to ipc_queue')
                     try:
                         if 'guid' in body:
                             set_guid(body['guid'])
-                        final_counter = body.get('final_counter', 0)
                         logger.info('Starting EOF event processing for Job {}'.format(job_identifier))
-                        # EOF events are sent when stdout for the running task is
-                        # closed. don't actually persist them to the database; we
-                        # just use them to report `summary` websocket events as an
-                        # approximation for when a job is "done"
-                        emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_identifier, final_counter=final_counter))
 
                         if notification_trigger_event:
                             job_stats_wrapup(job_identifier)
@@ -242,7 +248,13 @@ class CallbackBrokerWorker(BaseWorker):
                     finally:
                         self.subsystem_metrics.inc('callback_receiver_events_in_memory', -1)
                         set_guid('')
+
+                    self.work_report['totals'][job_identifier] = body.get('final_counter', 0)
+
                     return
+
+                self.work_report['processed'].setdefault(job_identifier, 0)
+                self.work_report['processed'][job_identifier] += 1
 
                 skip_websocket_message = body.pop('skip_websocket_message', False)
 
