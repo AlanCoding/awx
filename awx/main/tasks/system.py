@@ -717,21 +717,13 @@ def handle_work_error(task_id, *args, **kwargs):
 
 
 @task(queue=get_local_queuename)
-def job_events_wrapup(job_identifier, event=None, events_processed=True):
-    """Fill in the unified job host_status_counts, fire off notifications if needed"""
+def job_events_wrapup(job_identifier):
     try:
-        # empty dict (versus default of None) can still indicate that events have been processed
-        # for job types like system jobs, and jobs with no hosts matched
-        host_status_counts = {}
-        if event:
-            host_status_counts = event.get_host_status_counts()
-
-        # Update host_status_counts while holding the row lock
+        # Update while holding the row lock
         with transaction.atomic():
             uj = UnifiedJob.objects.select_for_update().get(pk=job_identifier)
-            uj.host_status_counts = host_status_counts
-            uj.event_processing_finished = events_processed
-            uj.save(update_fields=['host_status_counts', 'event_processing_finished'])
+            uj.event_processing_finished = True
+            uj.save(update_fields=['event_processing_finished'])
 
         uj.log_lifecycle("event_processing_finished")
 
