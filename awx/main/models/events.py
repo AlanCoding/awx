@@ -126,7 +126,6 @@ class BasePlaybookEvent(CreatedModifiedModel):
         'host_name',
         'verbosity',
     ]
-    WRAPUP_EVENT = 'playbook_on_stats'
 
     class Meta:
         abstract = True
@@ -636,7 +635,6 @@ class BaseCommandEvent(CreatedModifiedModel):
     """
 
     VALID_KEYS = ['event_data', 'created', 'counter', 'uuid', 'stdout', 'start_line', 'end_line', 'verbosity']
-    WRAPUP_EVENT = 'EOF'
 
     class Meta:
         abstract = True
@@ -732,7 +730,6 @@ class BaseCommandEvent(CreatedModifiedModel):
 class AdHocCommandEvent(BaseCommandEvent):
 
     VALID_KEYS = BaseCommandEvent.VALID_KEYS + ['ad_hoc_command_id', 'event', 'host_name', 'host_id', 'workflow_job_id', 'job_created']
-    WRAPUP_EVENT = 'playbook_on_stats'  # exception to BaseCommandEvent
     JOB_REFERENCE = 'ad_hoc_command_id'
 
     objects = DeferJobCreatedManager()

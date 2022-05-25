@@ -32,15 +32,10 @@ class RunnerCallback:
         self.event_ct = 0
         self.model = model
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
-        self.wrapup_event_dispatched = False
         self.extra_update_fields = {}
 
     def update_model(self, pk, _attempt=0, **updates):
         return update_model(self.model, pk, _attempt=0, _max_attempts=self.update_attempts, **updates)
-
-    @cached_property
-    def wrapup_event_type(self):
-        return self.instance.event_class.WRAPUP_EVENT
 
     @cached_property
     def event_data_key(self):
@@ -159,9 +154,6 @@ class RunnerCallback:
         elif self.recent_event_timings.maxlen:
             self.recent_event_timings.append(time.time())
 
-        if event_data.get('event', '') == self.wrapup_event_type:
-            self.wrapup_event_dispatched = True
-
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.dispatcher.dispatch(event_data)
         self.event_ct += 1
@@ -201,8 +193,6 @@ class RunnerCallback:
         }
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.dispatcher.dispatch(event_data)
-        if self.wrapup_event_type == 'EOF':
-            self.wrapup_event_dispatched = True
 
     def status_handler(self, status_data, runner_config):
         """

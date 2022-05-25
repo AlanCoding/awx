@@ -195,10 +195,18 @@ class CallbackBrokerWorker(BaseWorker):
             if flush:
                 self.last_event = ''
             if not flush:
+                event_map = {
+                    'job_id': JobEvent,
+                    'ad_hoc_command_id': AdHocCommandEvent,
+                    'project_update_id': ProjectUpdateEvent,
+                    'inventory_update_id': InventoryUpdateEvent,
+                    'system_job_id': SystemJobEvent,
+                }
+
                 job_identifier = 'unknown job'
-                for cls in (JobEvent, AdHocCommandEvent, ProjectUpdateEvent, InventoryUpdateEvent, SystemJobEvent):
-                    if cls.JOB_REFERENCE in body:
-                        job_identifier = body[cls.JOB_REFERENCE]
+                for key, cls in event_map.items():
+                    if key in body:
+                        job_identifier = body[key]
                         break
 
                 self.last_event = f'\n\t- {cls.__name__} for #{job_identifier} ({body.get("event", "")} {body.get("uuid", "")})'  # noqa
@@ -220,7 +228,7 @@ class CallbackBrokerWorker(BaseWorker):
 
                 event = cls.create_from_data(**body)
 
-                if skip_websocket_message:  # if this event sends websocket messages, fire them off on flush
+                if skip_websocket_message:
                     event._skip_websocket_message = True
 
                 self.buff.setdefault(cls, []).append(event)

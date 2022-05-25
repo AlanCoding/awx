@@ -1604,6 +1604,7 @@ class ProjectUpdateSerializer(UnifiedJobSerializer, ProjectOptionsSerializer):
 
 class ProjectUpdateDetailSerializer(ProjectUpdateSerializer):
 
+    host_status_counts = serializers.SerializerMethodField(help_text=_('A count of hosts uniquely assigned to each status.'))
     playbook_counts = serializers.SerializerMethodField(help_text=_('A count of all plays and tasks for the job run.'))
 
     class Meta:
@@ -1617,6 +1618,14 @@ class ProjectUpdateDetailSerializer(ProjectUpdateSerializer):
         data = {'play_count': play_count, 'task_count': task_count}
 
         return data
+
+    def get_host_status_counts(self, obj):
+        try:
+            counts = obj.project_update_events.only('event_data').get(event='playbook_on_stats').get_host_status_counts()
+        except ProjectUpdateEvent.DoesNotExist:
+            counts = {}
+
+        return counts
 
 
 class ProjectUpdateListSerializer(ProjectUpdateSerializer, UnifiedJobListSerializer):
@@ -3100,6 +3109,7 @@ class JobSerializer(UnifiedJobSerializer, JobOptionsSerializer):
 
 class JobDetailSerializer(JobSerializer):
 
+    host_status_counts = serializers.SerializerMethodField(help_text=_('A count of hosts uniquely assigned to each status.'))
     playbook_counts = serializers.SerializerMethodField(help_text=_('A count of all plays and tasks for the job run.'))
     custom_virtualenv = serializers.ReadOnlyField()
 
@@ -3114,6 +3124,14 @@ class JobDetailSerializer(JobSerializer):
         data = {'play_count': play_count, 'task_count': task_count}
 
         return data
+
+    def get_host_status_counts(self, obj):
+        try:
+            counts = obj.get_event_queryset().only('event_data').get(event='playbook_on_stats').get_host_status_counts()
+        except JobEvent.DoesNotExist:
+            counts = {}
+
+        return counts
 
 
 class JobCancelSerializer(BaseSerializer):
@@ -3303,9 +3321,20 @@ class AdHocCommandSerializer(UnifiedJobSerializer):
 
 
 class AdHocCommandDetailSerializer(AdHocCommandSerializer):
+
+    host_status_counts = serializers.SerializerMethodField(help_text=_('A count of hosts uniquely assigned to each status.'))
+
     class Meta:
         model = AdHocCommand
         fields = ('*', 'host_status_counts')
+
+    def get_host_status_counts(self, obj):
+        try:
+            counts = obj.ad_hoc_command_events.only('event_data').get(event='playbook_on_stats').get_host_status_counts()
+        except AdHocCommandEvent.DoesNotExist:
+            counts = {}
+
+        return counts
 
 
 class AdHocCommandCancelSerializer(AdHocCommandSerializer):

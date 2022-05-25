@@ -570,9 +570,8 @@ class BaseTask(object):
         self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
 
-        # Field host_status_counts is used as a metric to check if event processing is finished
-        # we send notifications if it is, if not, callback receiver will send them
-        if (self.instance.host_status_counts is not None) or (not self.runner_callback.wrapup_event_dispatched):
+        # If >1 events were sent callback receiver will send notifications, if not, send here
+        if (self.instance.host_status_counts is not None) or (not self.runner_callback.event_ct):
             self.instance.send_notification_templates('succeeded' if status == 'successful' else 'failed')
 
         try:
