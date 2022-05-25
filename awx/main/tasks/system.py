@@ -717,6 +717,34 @@ def handle_work_error(task_id, *args, **kwargs):
 
 
 @task(queue=get_local_queuename)
+def job_events_wrapup(job_identifier, event=None, events_processed=True):
+    """Fill in the unified job host_status_counts, fire off notifications if needed"""
+    try:
+        # empty dict (versus default of None) can still indicate that events have been processed
+        # for job types like system jobs, and jobs with no hosts matched
+        host_status_counts = {}
+        if event:
+            host_status_counts = event.get_host_status_counts()
+
+        # Update host_status_counts while holding the row lock
+        with transaction.atomic():
+            uj = UnifiedJob.objects.select_for_update().get(pk=job_identifier)
+            uj.host_status_counts = host_status_counts
+            uj.event_processing_finished = events_processed
+            uj.save(update_fields=['host_status_counts', 'event_processing_finished'])
+
+        uj.log_lifecycle("event_processing_finished")
+
+        # If the status was a finished state before this update was made, send notifications
+        # If not, we will send notifications when the status changes
+        if uj.status not in ACTIVE_STATES:
+            uj.send_notification_templates('succeeded' if uj.status == 'successful' else 'failed')
+
+    except Exception:
+        logger.exception('Worker failed to save stats or emit notifications: Job {}'.format(job_identifier))
+
+
+@task(queue=get_local_queuename)
 def update_inventory_computed_fields(inventory_id):
     """
     Signal handler and wrapper around inventory.update_computed_fields to
