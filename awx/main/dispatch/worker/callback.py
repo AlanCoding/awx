@@ -199,6 +199,7 @@ class CallbackBrokerWorker(BaseWorker):
                 for cls in (JobEvent, AdHocCommandEvent, ProjectUpdateEvent, InventoryUpdateEvent, SystemJobEvent):
                     if cls.JOB_REFERENCE in body:
                         job_identifier = body[cls.JOB_REFERENCE]
+                        break
 
                 self.last_event = f'\n\t- {cls.__name__} for #{job_identifier} ({body.get("event", "")} {body.get("uuid", "")})'  # noqa
 
