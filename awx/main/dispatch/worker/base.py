@@ -154,9 +154,6 @@ class AWXConsumerRedis(AWXConsumerBase):
                 except Exception:
                     logger.exception(f'Read did not work for {worker}')
 
-            if events_processed or events_total:
-                logger.warning(f'Rolling counts from parent: {events_processed}, {events_total}')
-
             for job_id, emitted_events in events_total.copy().items():
                 logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
                 if events_processed.get(job_id, 0) == emitted_events:
@@ -169,6 +166,9 @@ class AWXConsumerRedis(AWXConsumerBase):
                     if job_id in events_processed:
                         del events_processed[job_id]
                     del events_total[job_id]
+
+            if events_processed or events_total:
+                logger.warning(f'Rolling counts from parent: {events_processed}, {events_total}')
 
             time.sleep(5)
 
