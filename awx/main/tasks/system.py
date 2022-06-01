@@ -717,13 +717,14 @@ def handle_work_error(task_id, *args, **kwargs):
 
 
 @task(queue=get_local_queuename)
-def job_events_wrapup(job_identifier):
+def job_events_wrapup(job_identifier, failed_to_collect=False):
     try:
         # Update while holding the row lock
         with transaction.atomic():
             uj = UnifiedJob.objects.select_for_update().get(pk=job_identifier)
-            uj.event_processing_finished = True
-            uj.save(update_fields=['event_processing_finished'])
+            if not failed_to_collect:
+                uj.event_processing_finished = True
+                uj.save(update_fields=['event_processing_finished'])
 
         uj.log_lifecycle("event_processing_finished")
 

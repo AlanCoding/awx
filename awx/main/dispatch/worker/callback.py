@@ -77,7 +77,6 @@ class CallbackBrokerWorker(BaseWorker):
         finally:
             self.report_counts(queue)
             self.record_statistics()
-            self.record_read_metrics()
 
         return {'event': 'FLUSH'}
 
@@ -92,15 +91,6 @@ class CallbackBrokerWorker(BaseWorker):
                 self.last_report = time.time()
         except Exception:
             logger.exception('Error reporting stats to parent process')
-
-    def record_read_metrics(self):
-        if self.queue_pop == 0:
-            return
-        if self.subsystem_metrics.should_pipe_execute() is True:
-            queue_size = self.redis.llen(self.queue_name)
-            self.subsystem_metrics.set('callback_receiver_events_queue_size_redis', queue_size)
-            self.subsystem_metrics.pipe_execute()
-            self.queue_pop = 0
 
     def record_statistics(self):
         # buffer stat recording to once per (by default) 5s
@@ -128,7 +118,6 @@ class CallbackBrokerWorker(BaseWorker):
             logger.error(f'profiling is disabled, wrote {filepath}')
 
     def work_loop(self, *args, **kw):
-        logger.info(f'entered work loop {self.pid}, kwargs {args}')
         if settings.AWX_CALLBACK_PROFILE:
             signal.signal(signal.SIGUSR1, self.toggle_profiling)
         return super(CallbackBrokerWorker, self).work_loop(*args, **kw)

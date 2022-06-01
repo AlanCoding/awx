@@ -9,6 +9,8 @@ import redis
 import json
 import psycopg2
 import time
+from datetime import timedelta
+from django.utils.timezone import now
 from uuid import UUID
 from queue import Empty as QueueEmpty
 
@@ -18,6 +20,9 @@ from django.conf import settings
 from awx.main.dispatch.pool import WorkerPool
 from awx.main.dispatch import pg_bus_conn
 from awx.main.consumers import emit_channel_notification
+from awx.main.constants import ACTIVE_STATES
+from awx.main.models.unified_jobs import UnifiedJob
+import awx.main.analytics.subsystem_metrics as s_metrics
 
 if 'run_callback_receiver' in sys.argv:
     logger = logging.getLogger('awx.main.commands.run_callback_receiver')
@@ -126,51 +131,92 @@ class AWXConsumerBase(object):
 
 
 class AWXConsumerRedis(AWXConsumerBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.queue_pop = 0
+        self.redis_queue_size = 0
+        self.event_backup = False
+        self.subsystem_metrics = s_metrics.Metrics(auto_pipe_execute=False)
+        self.redis_queue_name = settings.CALLBACK_QUEUE
+        self.events_processed = {}
+        self.events_total = {}
+
     def run(self, *args, **kwargs):
         super(AWXConsumerRedis, self).run(*args, **kwargs)
         self.worker.on_start()
-        self.work_report = {'processed': {}, 'totals': {}}
-        events_processed = {}
-        events_total = {}
 
         while True:
             logger.debug(f'{os.getpid()} is alive')
 
+            # collect job event counts
             for worker in self.pool.workers:
                 try:
                     size = worker.queue.qsize()
                     for i in range(size):
                         try:
                             result = worker.queue.get(block=False)
+                            self.queue_pop += 1
                         except QueueEmpty:
-                            logger.debug('Internal error reading to many from worker queue')
-                            continue
+                            logger.warning(f'Callback error reading message {i + 1} of {size} from worker {worker.pid} queue')
+                            break
                         if not isinstance(result, dict):
                             logger.warning(f'Worker provided bad data type {type(result)}')
-                        events_total.update(result['totals'])
+                        self.events_total.update(result['totals'])
                         for job_id, this_ct in result['processed'].items():
-                            events_processed.setdefault(job_id, 0)
-                            events_processed[job_id] += this_ct
+                            self.events_processed.setdefault(job_id, 0)
+                            self.events_processed[job_id] += this_ct
                 except Exception:
-                    logger.exception(f'Read did not work for {worker}')
+                    logger.exception(f'Unexpected error reading from callback worker {worker.pid}')
 
-            for job_id, emitted_events in events_total.copy().items():
+            # trigger finalization task for finished jobs and clear memory
+            for job_id, emitted_events in self.events_total.copy().items():
                 logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
-                if events_processed.get(job_id, 0) == emitted_events:
+                if self.events_processed.get(job_id, 0) == emitted_events:
                     emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
 
-                    from awx.main.tasks.system import job_events_wrapup
+                    self.events_processed_trigger(job_id)
 
-                    job_events_wrapup.delay(job_id)
+            if self.events_processed or self.events_total:
+                logger.warning(f'Rolling counts from parent: {self.events_processed}, {self.events_total}')
 
-                    if job_id in events_processed:
-                        del events_processed[job_id]
-                    del events_total[job_id]
+            self.record_read_metrics()
 
-            if events_processed or events_total:
-                logger.warning(f'Rolling counts from parent: {events_processed}, {events_total}')
+            # abandon jobs that too too long to collect events
+            if self.redis_queue_size < 10:
+                if not self.event_backup:
+                    job_qs = UnifiedJob.objects.exclude(status__in=ACTIVE_STATES).filter(id__in=self.events_processed.keys())
+                    for id, finished in job_qs.values_list('id', 'finished'):
+                        if (not finished) or (finished + timedelta(seconds=10) > now()):
+                            logger.warning(
+                                f'Event collection for job {id} is incomplete, collected {self.events_processed.get(id, "none")} '
+                                f'out of {self.events_total.get(id, "unknown")}, sending notifications'
+                            )
+                            self.events_processed_trigger(job_id, failed_to_collect=True)
+                self.event_backup = False
+            else:
+                self.event_backup = True
 
-            time.sleep(5)
+            time.sleep(2)
+
+    def events_processed_trigger(self, job_id, failed_to_collect=False):
+        from awx.main.tasks.system import job_events_wrapup
+
+        job_events_wrapup.delay(job_id, failed_to_collect=failed_to_collect)
+
+        if job_id in self.events_processed:
+            del self.events_processed[job_id]
+        if job_id in self.events_total:
+            del self.events_total[job_id]
+
+    def record_read_metrics(self):
+        if (self.redis_queue_size >= 10) or ((self.subsystem_metrics.should_pipe_execute() is True) and (self.queue_pop != 0)):
+            self.redis_queue_size = self.redis.llen(self.redis_queue_name)
+        if self.queue_pop == 0:
+            return
+        if self.subsystem_metrics.should_pipe_execute() is True:
+            self.subsystem_metrics.set('callback_receiver_events_queue_size_redis', self.redis_queue_size)
+            self.subsystem_metrics.pipe_execute()
+            self.queue_pop = 0
 
 
 class AWXConsumerPG(AWXConsumerBase):
