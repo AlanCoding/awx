@@ -140,64 +140,89 @@ class AWXConsumerRedis(AWXConsumerBase):
         self.redis_queue_name = settings.CALLBACK_QUEUE
         self.events_processed = {}
         self.events_total = {}
+        self.abandon_check_interval = 10  # seconds
+        self.abandon_last_check = time.time()
 
     def run(self, *args, **kwargs):
         super(AWXConsumerRedis, self).run(*args, **kwargs)
         self.worker.on_start()
 
         while True:
-            logger.debug(f'{os.getpid()} is alive')
+            logger.debug(f'Callback receiver main process {os.getpid()} is alive')
 
-            # collect job event counts
-            for worker in self.pool.workers:
-                try:
-                    size = worker.queue.qsize()
-                    for i in range(size):
-                        try:
-                            result = worker.queue.get(block=False)
-                            self.queue_pop += 1
-                        except QueueEmpty:
-                            logger.warning(f'Callback error reading message {i + 1} of {size} from worker {worker.pid} queue')
-                            break
-                        if not isinstance(result, dict):
-                            logger.warning(f'Worker provided bad data type {type(result)}')
-                        self.events_total.update(result['totals'])
-                        for job_id, this_ct in result['processed'].items():
-                            self.events_processed.setdefault(job_id, 0)
-                            self.events_processed[job_id] += this_ct
-                except Exception:
-                    logger.exception(f'Unexpected error reading from callback worker {worker.pid}')
+            self.collect_event_counts()
 
-            # trigger finalization task for finished jobs and clear memory
-            for job_id, emitted_events in self.events_total.copy().items():
-                logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
-                if self.events_processed.get(job_id, 0) == emitted_events:
-                    emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
-
-                    self.events_processed_trigger(job_id)
-
-            if self.events_processed or self.events_total:
-                logger.warning(f'Rolling counts from parent: {self.events_processed}, {self.events_total}')
+            self.process_finished_jobs()
 
             self.record_read_metrics()
 
-            # abandon jobs that took too long to collect events
-            # TODO: what if someone deletes the job right after it finishes?
-            if self.redis_queue_size < 10 and self.events_processed:
-                if not self.event_backup:
-                    job_qs = UnifiedJob.objects.exclude(status__in=ACTIVE_STATES).filter(id__in=self.events_processed.keys())
-                    for id, finished in job_qs.values_list('id', 'finished'):
-                        if (not finished) or (finished + timedelta(seconds=10) > now()):
-                            logger.warning(
-                                f'Event collection for job {id} is incomplete, collected {self.events_processed.get(id, "none")} '
-                                f'out of {self.events_total.get(id, "unknown")}, sending notifications'
-                            )
-                            self.events_processed_trigger(job_id, failed_to_collect=True)
-                self.event_backup = False
-            else:
-                self.event_backup = True
+            self.abandon_broken_jobs()
 
             time.sleep(2)
+
+    def collect_event_counts(self):
+        for worker in self.pool.workers:
+            try:
+                size = worker.queue.qsize()
+                for i in range(size):
+                    try:
+                        result = worker.queue.get(block=False)
+                        self.queue_pop += 1
+                    except QueueEmpty:
+                        logger.warning(f'Callback worker {worker.pid} queue unexpectedly empty reading message {i + 1} of {size}')
+                        break
+                    if not isinstance(result, dict):
+                        logger.warning(f'Callback worker {worker.pid} gave bad data {type(result)} in message {i + 1} of {size}')
+                        continue
+                    self.events_total.update(result['totals'])
+                    for job_id, this_ct in result['processed'].items():
+                        self.events_processed.setdefault(job_id, 0)
+                        self.events_processed[job_id] += this_ct
+            except Exception:
+                logger.exception(f'Unexpected error reading from callback worker {worker.pid}')
+
+    def process_finished_jobs(self):
+        """Trigger finalization task for finished jobs and clear memory"""
+        for job_id, emitted_events in self.events_total.copy().items():
+            if self.events_processed.get(job_id, 0) == emitted_events:
+                # TODO: downgrade log level before merging
+                logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
+                emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
+
+                self.events_processed_trigger(job_id)
+
+        # TODO: remove log before merge
+        if self.events_processed or self.events_total:
+            logger.warning(f'Rolling counts from parent: {self.events_processed}, {self.events_total}')
+
+    def abandon_broken_jobs(self):
+        """Abandon jobs that took too long to process events, in which case we probably had lost events"""
+        if (time.time() - self.abandon_last_check) < self.abandon_check_interval:
+            return
+        self.abandon_last_check = time.time()
+
+        if (not self.event_backup) and self.events_processed:
+            job_qs = UnifiedJob.objects.filter(id__in=self.events_processed.keys())
+            database_job_ids = set()
+            for id, status, finished in job_qs.values_list('id', 'status', 'finished'):
+                database_job_ids.add(id)
+                if status in ACTIVE_STATES:
+                    continue  # job is moving along normally
+                if (not finished) or (finished + timedelta(seconds=self.abandon_check_interval) > now()):
+                    logger.warning(
+                        f'Event collection for job {id} is incomplete, collected {self.events_processed.get(id, "none")} '
+                        f'out of {self.events_total.get(id, "unknown")}, sending notifications'
+                    )
+                    self.events_processed_trigger(id, failed_to_collect=True)
+            for id in set(self.events_processed.keys()) - database_job_ids:
+                logger.warning(f'Job {id} was deleted, abandoning after tracking {self.events_processed.get(id, "none")} events')
+                self.events_processed_trigger(id, failed_to_collect=True)
+
+        # Track whether or not we have an event backlog to work through
+        if self.redis_queue_size < 10:
+            self.event_backup = False
+        else:
+            self.event_backup = True
 
     def events_processed_trigger(self, job_id, failed_to_collect=False):
         from awx.main.tasks.system import job_events_wrapup
@@ -210,12 +235,12 @@ class AWXConsumerRedis(AWXConsumerBase):
             del self.events_total[job_id]
 
     def record_read_metrics(self):
-        if (self.redis_queue_size >= 10) or ((self.subsystem_metrics.should_pipe_execute() is True) and (self.queue_pop != 0)):
+        if self.redis_queue_size or (self.queue_pop != 0):
             self.redis_queue_size = self.redis.llen(self.redis_queue_name)
         if self.queue_pop == 0:
             return
+        self.subsystem_metrics.set('callback_receiver_events_queue_size_redis', self.redis_queue_size)
         if self.subsystem_metrics.should_pipe_execute() is True:
-            self.subsystem_metrics.set('callback_receiver_events_queue_size_redis', self.redis_queue_size)
             self.subsystem_metrics.pipe_execute()
             self.queue_pop = 0
 
