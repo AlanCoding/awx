@@ -181,8 +181,9 @@ class AWXConsumerRedis(AWXConsumerBase):
 
             self.record_read_metrics()
 
-            # abandon jobs that too too long to collect events
-            if self.redis_queue_size < 10:
+            # abandon jobs that took too long to collect events
+            # TODO: what if someone deletes the job right after it finishes?
+            if self.redis_queue_size < 10 and self.events_processed:
                 if not self.event_backup:
                     job_qs = UnifiedJob.objects.exclude(status__in=ACTIVE_STATES).filter(id__in=self.events_processed.keys())
                     for id, finished in job_qs.values_list('id', 'finished'):
