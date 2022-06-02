@@ -570,8 +570,8 @@ class BaseTask(object):
         self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
 
-        # If >1 events were sent callback receiver will send notifications, if not, send here
-        if (self.instance.event_processing_finished is False) or (not self.runner_callback.event_ct):
+        # If callback receiver is still working on this job, it will send notifications, if not, send here
+        if self.instance.event_processing_finished is True:
             self.instance.send_notification_templates('succeeded' if status == 'successful' else 'failed')
 
         try:

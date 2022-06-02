@@ -59,6 +59,9 @@ class RunnerCallback:
         self.extra_update_fields['emitted_events'] = self.event_ct
         if 'got an unexpected keyword argument' in self.extra_update_fields.get('result_traceback', ''):
             self.delay_update(result_traceback=ANSIBLE_RUNNER_NEEDS_UPDATE_MESSAGE)
+        # if job had error before starting, do not let client wait forever for events to be processed
+        if self.event_ct == 0:
+            self.delay_update(event_processing_finished=True)
         return self.extra_update_fields
 
     def event_handler(self, event_data):
