@@ -85,9 +85,10 @@ class CallbackBrokerWorker(BaseWorker):
         the number of events that have been saved by this worker.
         """
         try:
-            if time.time() - self.last_report > settings.JOB_EVENT_BUFFER_SECONDS:
-                queue.put(self.work_report)
-                self.work_report = {'processed': {}, 'totals': {}}
+            if (time.time() - self.last_report) > 2:
+                if self.work_report['processed'] or self.work_report['totals']:
+                    queue.put(self.work_report)
+                    self.work_report = {'processed': {}, 'totals': {}}
                 self.last_report = time.time()
         except Exception:
             logger.exception('Error reporting stats to parent process')

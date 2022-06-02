@@ -208,7 +208,7 @@ class AWXConsumerRedis(AWXConsumerBase):
                 database_job_ids.add(id)
                 if status in ACTIVE_STATES:
                     continue  # job is moving along normally
-                if (not finished) or (finished + timedelta(seconds=self.abandon_check_interval) > now()):
+                if (not finished) or (finished + timedelta(seconds=self.abandon_check_interval) < now()):
                     logger.warning(
                         f'Event collection for job {id} is incomplete, collected {self.events_processed.get(id, "none")} '
                         f'out of {self.events_total.get(id, "unknown")}, sending notifications'
