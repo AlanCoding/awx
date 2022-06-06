@@ -1388,7 +1388,8 @@ class UnifiedJob(
                 cancel_fields = ['cancel_flag', 'start_args']
                 if self.status in ('pending', 'waiting', 'new'):
                     self.status = 'canceled'
-                    cancel_fields.append('status')
+                    self.event_processing_finished = True
+                    cancel_fields.extend(['status', 'event_processing_finished'])
                 if self.status == 'running' and not self.actually_running:
                     self.status = 'canceled'
                     cancel_fields.append('status')

@@ -520,6 +520,8 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
         )
 
     def create_unified_job(self, **kwargs):
+        kwargs.setdefault('_eager_fields', {})
+        kwargs['_eager_fields']['event_processing_finished'] = True
         workflow_job = super(WorkflowJobTemplate, self).create_unified_job(**kwargs)
         workflow_job.copy_nodes_from_original(original=self)
         return workflow_job
