@@ -184,7 +184,7 @@ class AWXConsumerRedis(AWXConsumerBase):
     def process_finished_jobs(self):
         """Trigger finalization task for finished jobs and clear memory"""
         for job_id, emitted_events in self.events_total.copy().items():
-            if self.events_processed.get(job_id, 0) == emitted_events:
+            if self.events_processed.get(job_id, 0) >= emitted_events:
                 # TODO: downgrade log level before merging
                 logger.warning(f'Detected events processed for {job_id} - total {emitted_events}')
                 emit_channel_notification('jobs-summary', dict(group_name='jobs', unified_job_id=job_id, final_counter=emitted_events))
