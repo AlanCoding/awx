@@ -520,8 +520,6 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
         )
 
     def create_unified_job(self, **kwargs):
-        kwargs.setdefault('_eager_fields', {})
-        kwargs['_eager_fields']['event_processing_finished'] = True
         workflow_job = super(WorkflowJobTemplate, self).create_unified_job(**kwargs)
         workflow_job.copy_nodes_from_original(original=self)
         return workflow_job
@@ -633,6 +631,12 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
     @classmethod
     def _get_unified_job_template_class(cls):
         return WorkflowJobTemplate
+
+    def save(self, *args, **kwargs):
+        """Set event_processing_finished to True for new objects, because workflows have no events"""
+        if not self.pk:
+            self.event_processing_finished = True
+        return super(WorkflowJob, self).save(*args, **kwargs)
 
     def socketio_emit_data(self):
         return {}

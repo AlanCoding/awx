@@ -830,6 +830,19 @@ class UnifiedJob(
             if 'failed' not in update_fields:
                 update_fields.append('failed')
 
+            # If the job is changing to an error state without going through
+            # the dispatcher, then there are no events, set this so clients do not wait
+            if (
+                failed
+                and (self.status != status_before)
+                and (('status' in update_fields) or (not update_fields))
+                and (status_before != 'running')
+                and (self.emitted_events == 0)
+                and (not self.event_processing_finished)
+            ):
+                self.event_processing_finished = True
+                update_fields.append('event_processing_finished')
+
         # Sanity check: Has the job just started? If so, mark down its start
         # time.
         if self.status == 'running' and not self.started:
@@ -1388,8 +1401,7 @@ class UnifiedJob(
                 cancel_fields = ['cancel_flag', 'start_args']
                 if self.status in ('pending', 'waiting', 'new'):
                     self.status = 'canceled'
-                    self.event_processing_finished = True
-                    cancel_fields.extend(['status', 'event_processing_finished'])
+                    cancel_fields.append('status')
                 if self.status == 'running' and not self.actually_running:
                     self.status = 'canceled'
                     cancel_fields.append('status')
