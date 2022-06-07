@@ -30,6 +30,7 @@ class RunnerCallback:
         self.dispatcher = CallbackQueueDispatcher()
         self.safe_env = {}
         self.event_ct = 0
+        self.eof_dispatched = False
         self.model = model
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
         self.extra_update_fields = {}
@@ -185,10 +186,7 @@ class RunnerCallback:
             return True
         return False
 
-    def finished_callback(self, runner_obj):
-        """
-        Ansible runner callback triggered on finished run
-        """
+    def assure_eof(self):
         event_data = {
             'event': 'EOF',
             'final_counter': self.event_ct,
@@ -196,6 +194,12 @@ class RunnerCallback:
         }
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.dispatcher.dispatch(event_data)
+
+    def finished_callback(self, runner_obj):
+        """
+        Ansible runner callback triggered on finished run
+        """
+        self.assure_eof()
 
     def status_handler(self, status_data, runner_config):
         """

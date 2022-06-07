@@ -567,6 +567,8 @@ class BaseTask(object):
         except Exception:
             logger.exception('{} Post run hook errored.'.format(self.instance.log_format))
 
+        self.runner_callback.assure_eof()
+
         self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
 
