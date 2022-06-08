@@ -1720,6 +1720,7 @@ class RunInventoryUpdate(BaseTask):
             counter=self.runner_callback.event_ct,
             initial_line=self.runner_callback.end_line,
         )
+        self.runner_callback.event_ct = handler.counter
         inv_logger = logging.getLogger('awx.main.commands.inventory_import')
         formatter = inv_logger.handlers[0].formatter
         formatter.job_start = inventory_update.started

@@ -187,6 +187,8 @@ class RunnerCallback:
         return False
 
     def assure_eof(self):
+        if self.eof_dispatched:
+            return
         event_data = {
             'event': 'EOF',
             'final_counter': self.event_ct,
@@ -194,6 +196,7 @@ class RunnerCallback:
         }
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.dispatcher.dispatch(event_data)
+        self.eof_dispatched = True
 
     def finished_callback(self, runner_obj):
         """
@@ -263,6 +266,10 @@ class RunnerCallbackForInventoryUpdate(RunnerCallback):
         self.end_line = event_data['end_line']
 
         return super(RunnerCallbackForInventoryUpdate, self).event_handler(event_data)
+
+    def finished_callback(self, runner_obj):
+        """Delay the EOF event to capture post_run_hook events"""
+        pass
 
 
 class RunnerCallbackForAdHocCommand(RunnerCallback):
