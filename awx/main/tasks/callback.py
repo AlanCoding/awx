@@ -34,6 +34,7 @@ class RunnerCallback:
         self.model = model
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
         self.extra_update_fields = {}
+        self.instance = None
 
     def update_model(self, pk, _attempt=0, **updates):
         return update_model(self.model, pk, _attempt=0, _max_attempts=self.update_attempts, **updates)
@@ -187,7 +188,7 @@ class RunnerCallback:
         return False
 
     def assure_eof(self):
-        if self.eof_dispatched:
+        if self.eof_dispatched or (self.instance is None) or (self.event_ct == 0):
             return
         event_data = {
             'event': 'EOF',
