@@ -15,7 +15,6 @@ import tempfile
 import traceback
 import time
 import urllib.parse as urlparse
-from uuid import uuid4
 
 # Django
 from django.conf import settings
@@ -212,9 +211,8 @@ class BaseTask(object):
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
         if settings.AWX_CLEANUP_PATHS:
             self.cleanup_paths.append(path)
-        # Ansible runner requires that project exists,
-        # and we will write files in the other folders without pre-creating the folder
-        for subfolder in ('project', 'inventory', 'env'):
+        # We will write files in these folders later
+        for subfolder in ('inventory', 'env'):
             runner_subfolder = os.path.join(path, subfolder)
             if not os.path.exists(runner_subfolder):
                 os.mkdir(runner_subfolder)
@@ -943,7 +941,7 @@ class RunJob(BaseTask):
             if job_revision:
                 job = self.update_model(job.pk, scm_revision=job_revision)
             # Project update does not copy the folder, so copy here
-            RunProjectUpdate.make_local_copy(job.project, private_data_dir, scm_revision=job_revision)
+            RunProjectUpdate().make_local_copy_with_lock(job.project, private_data_dir)
 
         if job.inventory.kind == 'smart':
             # cache smart inventory memberships so that the host_filter query is not
@@ -1259,10 +1257,6 @@ class RunProjectUpdate(BaseTask):
         start_time = time.time()
         while True:
             try:
-                instance.refresh_from_db(fields=['cancel_flag'])
-                if instance.cancel_flag:
-                    logger.debug("ProjectUpdate({0}) was canceled".format(instance.pk))
-                    return
                 fcntl.lockf(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except IOError as e:
@@ -1275,7 +1269,7 @@ class RunProjectUpdate(BaseTask):
         waiting_time = time.time() - start_time
 
         if waiting_time > 1.0:
-            logger.info('{} spent {} waiting to acquire lock for local source tree ' 'for path {}.'.format(instance.log_format, waiting_time, lock_path))
+            logger.info(f'{getattr(instance, "log_format", instance)} waited {waiting_time} to acquire lock for local source tree for path {lock_path}.')
 
     def pre_run_hook(self, instance, private_data_dir):
         super(RunProjectUpdate, self).pre_run_hook(instance, private_data_dir)
@@ -1284,6 +1278,10 @@ class RunProjectUpdate(BaseTask):
             os.mkdir(settings.PROJECTS_ROOT)
         project_path = instance.project.get_project_path(check_if_exists=False)
 
+        instance.refresh_from_db(fields=['cancel_flag'])
+        if instance.cancel_flag:
+            logger.debug("ProjectUpdate({0}) was canceled".format(instance.pk))
+            return
         self.acquire_lock(instance)
 
         self.original_branch = None
@@ -1324,62 +1322,23 @@ class RunProjectUpdate(BaseTask):
                     except OSError:
                         logger.warning(f"Could not remove cache directory {old_path}")
 
+    def make_local_copy_with_lock(self, project, job_private_data_dir):
+        self.acquire_lock(project)
+        try:
+            self.make_local_copy(project, job_private_data_dir)
+        finally:
+            self.release_lock(project)
+
     @staticmethod
-    def make_local_copy(p, job_private_data_dir, scm_revision=None):
+    def make_local_copy(project, job_private_data_dir):
         """Copy project content (roles and collections) to a job private_data_dir
 
-        :param object p: Either a project or a project update
+        :param object project: Either a project or a project update
         :param str job_private_data_dir: The root of the target ansible-runner folder
-        :param str scm_revision: For branch_override cases, the git revision to copy
         """
-        project_path = p.get_project_path(check_if_exists=False)
+        project_path = project.get_project_path(check_if_exists=False)
         destination_folder = os.path.join(job_private_data_dir, 'project')
-        if not scm_revision:
-            scm_revision = p.scm_revision
-
-        if p.scm_type == 'git':
-            git_repo = git.Repo(project_path)
-            if not os.path.exists(destination_folder):
-                os.mkdir(destination_folder, stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
-            tmp_branch_name = 'awx_internal/{}'.format(uuid4())
-            # always clone based on specific job revision
-            if not p.scm_revision:
-                raise RuntimeError('Unexpectedly could not determine a revision to run from project.')
-            source_branch = git_repo.create_head(tmp_branch_name, p.scm_revision)
-            # git clone must take file:// syntax for source repo or else options like depth will be ignored
-            source_as_uri = Path(project_path).as_uri()
-            git.Repo.clone_from(
-                source_as_uri,
-                destination_folder,
-                branch=source_branch,
-                depth=1,
-                single_branch=True,  # shallow, do not copy full history
-            )
-            # submodules copied in loop because shallow copies from local HEADs are ideal
-            # and no git clone submodule options are compatible with minimum requirements
-            for submodule in git_repo.submodules:
-                subrepo_path = os.path.abspath(os.path.join(project_path, submodule.path))
-                subrepo_destination_folder = os.path.abspath(os.path.join(destination_folder, submodule.path))
-                subrepo_uri = Path(subrepo_path).as_uri()
-                git.Repo.clone_from(subrepo_uri, subrepo_destination_folder, depth=1, single_branch=True)
-            # force option is necessary because remote refs are not counted, although no information is lost
-            git_repo.delete_head(tmp_branch_name, force=True)
-        else:
-            copy_tree(project_path, destination_folder, preserve_symlinks=1)
-
-        # copy over the roles and collection cache to job folder
-        cache_path = os.path.join(p.get_cache_path(), p.cache_id)
-        subfolders = []
-        if settings.AWX_COLLECTIONS_ENABLED:
-            subfolders.append('requirements_collections')
-        if settings.AWX_ROLES_ENABLED:
-            subfolders.append('requirements_roles')
-        for subfolder in subfolders:
-            cache_subpath = os.path.join(cache_path, subfolder)
-            if os.path.exists(cache_subpath):
-                dest_subpath = os.path.join(job_private_data_dir, subfolder)
-                copy_tree(cache_subpath, dest_subpath, preserve_symlinks=1)
-                logger.debug('{0} {1} prepared {2} from cache'.format(type(p).__name__, p.pk, dest_subpath))
+        shutil.copytree(project_path, destination_folder, ignore=shutil.ignore_patterns('.git'), symlinks=True)
 
     def post_run_hook(self, instance, status):
         super(RunProjectUpdate, self).post_run_hook(instance, status)
@@ -1409,7 +1368,6 @@ class RunProjectUpdate(BaseTask):
             if self.job_private_data_dir:
                 if status == 'successful':
                     # copy project folder before resetting to default branch
-                    # because some git-tree-specific resources (like submodules) might matter
                     self.make_local_copy(instance, self.job_private_data_dir)
                 if self.original_branch:
                     # for git project syncs, non-default branches can be problems
@@ -1421,11 +1379,9 @@ class RunProjectUpdate(BaseTask):
                         logger.exception('Failed to restore project repo to prior state after {}'.format(instance.log_format))
         finally:
             self.release_lock(instance)
+
         p = instance.project
-        if instance.job_type == 'check' and status not in (
-            'failed',
-            'canceled',
-        ):
+        if instance.job_type == 'check' and status not in ('failed', 'canceled'):
             if self.runner_callback.playbook_new_revision:
                 p.scm_revision = self.runner_callback.playbook_new_revision
             else:
@@ -1669,7 +1625,7 @@ class RunInventoryUpdate(BaseTask):
                 raise
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
-            RunProjectUpdate.make_local_copy(source_project, private_data_dir)
+            RunProjectUpdate.make_local_copy_with_lock(source_project, private_data_dir)
 
     def post_run_hook(self, inventory_update, status):
         super(RunInventoryUpdate, self).post_run_hook(inventory_update, status)
