@@ -276,3 +276,11 @@ class TestTaskImpact:
         assert [len(jobs[0].inventory.get_script_data(slice_number=i + 1, slice_count=3)['all']['hosts']) for i in range(3)] == [2, 1, 1]
         jobs[0].inventory.update_computed_fields()
         assert [job.task_impact for job in jobs] == [3, 2, 2]
+
+
+@pytest.mark.django_db
+def test_pre_start_fail_event_processing_finished():
+    job = Job.objects.create(status='pending')
+    job.status = 'failed'
+    job.save()
+    assert job.event_processing_finished is True

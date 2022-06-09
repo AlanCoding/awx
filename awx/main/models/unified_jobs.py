@@ -835,7 +835,7 @@ class UnifiedJob(
             if (
                 failed
                 and (self.status != status_before)
-                and (('status' in update_fields) or (not update_fields))
+                and (('status' in update_fields) or ('update_fields' not in kwargs))
                 and (status_before != 'running')
                 and (self.emitted_events == 0)
                 and (not self.event_processing_finished)
