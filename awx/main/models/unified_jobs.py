@@ -830,17 +830,18 @@ class UnifiedJob(
             if 'failed' not in update_fields:
                 update_fields.append('failed')
 
-            # If the job is changing to an error state without going through
-            # the dispatcher, then there are no events, set this so clients do not wait
-            if (
-                failed
-                and (self.status != status_before)
-                and (('status' in update_fields) or ('update_fields' not in kwargs))
-                and (status_before != 'running')
-                and (self.emitted_events == 0)
-                and (not self.event_processing_finished)
-            ):
-                self.event_processing_finished = True
+        # If the job is changing to an error state without going through
+        # the dispatcher, then there are no events, set this so clients do not wait
+        if (
+            failed
+            and (self.status != status_before)
+            and (('status' in update_fields) or ('update_fields' not in kwargs))
+            and (status_before != 'running')
+            and (self.emitted_events == 0)
+            and (not self.event_processing_finished)
+        ):
+            self.event_processing_finished = True
+            if 'event_processing_finished' not in update_fields:
                 update_fields.append('event_processing_finished')
 
         # Sanity check: Has the job just started? If so, mark down its start

@@ -697,14 +697,13 @@ def handle_work_error(task_id, *args, **kwargs):
 
             if instance.celery_task_id != task_id and not instance.cancel_flag and not instance.status in ('successful', 'failed'):
                 instance.status = 'failed'
-                instance.failed = True
                 if not instance.job_explanation:
                     instance.job_explanation = 'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (
                         first_instance_type,
                         first_instance.name,
                         first_instance.id,
                     )
-                instance.save()
+                instance.save(update_fields=['status', 'job_explanation'])
                 instance.websocket_emit_status("failed")
 
     # We only send 1 job complete message since all the job completion message
