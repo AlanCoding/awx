@@ -218,6 +218,15 @@ class BaseTask(object):
                 os.mkdir(runner_subfolder)
         return path
 
+    def build_project_dir(self, instance, private_data_dir):
+        """
+        Create the ansible-runner project subdirectory. In many cases this is the source checkout.
+        In cases that do not even need the source checkout, we create an empty dir to be the workdir.
+        """
+        project_dir = os.path.join(private_data_dir, 'project')
+        if not os.path.exists(project_dir):
+            os.mkdir(project_dir)
+
     def build_private_data_files(self, instance, private_data_dir):
         """
         Creates temporary files containing the private data.
@@ -422,6 +431,7 @@ class BaseTask(object):
             self.instance.send_notification_templates("running")
             private_data_dir = self.build_private_data_dir(self.instance)
             self.pre_run_hook(self.instance, private_data_dir)
+            self.build_project_dir(self.instance, private_data_dir)
             self.instance.log_lifecycle("preparing_playbook")
             if self.instance.cancel_flag:
                 self.instance = self.update_model(self.instance.pk, status='canceled')
@@ -856,6 +866,12 @@ class RunJob(BaseTask):
             job = self.update_model(job.pk, status='failed', job_explanation=msg)
             raise RuntimeError(msg)
 
+        if job.inventory.kind == 'smart':
+            # cache smart inventory memberships so that the host_filter query is not
+            # ran inside of the event saving code
+            update_smart_memberships_for_inventory(job.inventory)
+
+    def build_project_dir(self, job, private_data_dir):
         project_path = job.project.get_project_path(check_if_exists=False)
         job_revision = job.project.scm_revision
         sync_needs = []
@@ -942,11 +958,6 @@ class RunJob(BaseTask):
                 job = self.update_model(job.pk, scm_revision=job_revision)
             # Project update does not copy the folder, so copy here
             RunProjectUpdate().make_local_copy_with_lock(job.project, private_data_dir)
-
-        if job.inventory.kind == 'smart':
-            # cache smart inventory memberships so that the host_filter query is not
-            # ran inside of the event saving code
-            update_smart_memberships_for_inventory(job.inventory)
 
     def final_run_hook(self, job, status, private_data_dir, fact_modification_times):
         super(RunJob, self).final_run_hook(job, status, private_data_dir, fact_modification_times)
@@ -1302,6 +1313,7 @@ class RunProjectUpdate(BaseTask):
             shutil.rmtree(stage_path)
         os.makedirs(stage_path)  # presence of empty cache indicates lack of roles or collections
 
+    def build_project_dir(self, instance, private_data_dir):
         # the project update playbook is not in a git repo, but uses a vendoring directory
         # to be consistent with the ansible-runner model,
         # that is moved into the runner project folder here
@@ -1571,8 +1583,7 @@ class RunInventoryUpdate(BaseTask):
         # All credentials not used by inventory source injector
         return inventory_update.get_extra_credentials()
 
-    def pre_run_hook(self, inventory_update, private_data_dir):
-        super(RunInventoryUpdate, self).pre_run_hook(inventory_update, private_data_dir)
+    def build_project_dir(self, inventory_update, private_data_dir):
         source_project = None
         if inventory_update.inventory_source:
             source_project = inventory_update.inventory_source.source_project
@@ -1625,7 +1636,7 @@ class RunInventoryUpdate(BaseTask):
                 raise
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
-            RunProjectUpdate.make_local_copy_with_lock(source_project, private_data_dir)
+            RunProjectUpdate().make_local_copy_with_lock(source_project, private_data_dir)
 
     def post_run_hook(self, inventory_update, status):
         super(RunInventoryUpdate, self).post_run_hook(inventory_update, status)
