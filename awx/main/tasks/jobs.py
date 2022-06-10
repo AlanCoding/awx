@@ -1,6 +1,5 @@
 # Python
 from collections import OrderedDict
-from distutils.dir_util import copy_tree
 import errno
 import functools
 import fcntl
@@ -1318,7 +1317,7 @@ class RunProjectUpdate(BaseTask):
         # to be consistent with the ansible-runner model,
         # that is moved into the runner project folder here
         awx_playbooks = self.get_path_to('../../', 'playbooks')
-        copy_tree(awx_playbooks, os.path.join(private_data_dir, 'project'))
+        shutil.copytree(awx_playbooks, os.path.join(private_data_dir, 'project'))
 
     @staticmethod
     def clear_project_cache(cache_dir, keep_value):
@@ -1351,6 +1350,20 @@ class RunProjectUpdate(BaseTask):
         project_path = project.get_project_path(check_if_exists=False)
         destination_folder = os.path.join(job_private_data_dir, 'project')
         shutil.copytree(project_path, destination_folder, ignore=shutil.ignore_patterns('.git'), symlinks=True)
+
+        # copy over the roles and collection cache to job folder
+        cache_path = os.path.join(project.get_cache_path(), project.cache_id)
+        subfolders = []
+        if settings.AWX_COLLECTIONS_ENABLED:
+            subfolders.append('requirements_collections')
+        if settings.AWX_ROLES_ENABLED:
+            subfolders.append('requirements_roles')
+        for subfolder in subfolders:
+            cache_subpath = os.path.join(cache_path, subfolder)
+            if os.path.exists(cache_subpath):
+                dest_subpath = os.path.join(job_private_data_dir, subfolder)
+                shutil.copytree(cache_subpath, dest_subpath, symlinks=True)
+                logger.debug('{0} {1} prepared {2} from cache'.format(type(project).__name__, project.pk, dest_subpath))
 
     def post_run_hook(self, instance, status):
         super(RunProjectUpdate, self).post_run_hook(instance, status)
