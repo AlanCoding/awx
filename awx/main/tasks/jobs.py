@@ -1637,6 +1637,8 @@ class RunInventoryUpdate(BaseTask):
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
             RunProjectUpdate().make_local_copy_with_lock(source_project, private_data_dir)
+        else:
+            super(RunInventoryUpdate, self).build_project_dir(inventory_update, private_data_dir)
 
     def post_run_hook(self, inventory_update, status):
         super(RunInventoryUpdate, self).post_run_hook(inventory_update, status)
