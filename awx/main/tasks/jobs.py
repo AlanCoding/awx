@@ -956,7 +956,7 @@ class RunJob(BaseTask):
             if job_revision:
                 job = self.update_model(job.pk, scm_revision=job_revision)
             # Project update does not copy the folder, so copy here
-            RunProjectUpdate().make_local_copy_with_lock(job.project, private_data_dir)
+            RunProjectUpdate.make_local_copy(job.project, private_data_dir)
 
     def final_run_hook(self, job, status, private_data_dir, fact_modification_times):
         super(RunJob, self).final_run_hook(job, status, private_data_dir, fact_modification_times)
@@ -1333,13 +1333,6 @@ class RunProjectUpdate(BaseTask):
                     except OSError:
                         logger.warning(f"Could not remove cache directory {old_path}")
 
-    def make_local_copy_with_lock(self, project, job_private_data_dir):
-        self.acquire_lock(project)
-        try:
-            self.make_local_copy(project, job_private_data_dir)
-        finally:
-            self.release_lock(project)
-
     @staticmethod
     def make_local_copy(project, job_private_data_dir):
         """Copy project content (roles and collections) to a job private_data_dir
@@ -1649,7 +1642,7 @@ class RunInventoryUpdate(BaseTask):
                 raise
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
-            RunProjectUpdate().make_local_copy_with_lock(source_project, private_data_dir)
+            RunProjectUpdate.make_local_copy(source_project, private_data_dir)
         else:
             super(RunInventoryUpdate, self).build_project_dir(inventory_update, private_data_dir)
 
