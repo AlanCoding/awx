@@ -928,10 +928,9 @@ class RunJob(BaseTask):
             # cancel() call on the job can cancel the project update
             job = self.update_model(job.pk, project_update=local_project_sync)
 
-            project_update_task = local_project_sync._get_task_class()
             try:
                 # the job private_data_dir is passed so sync can download roles and collections there
-                sync_task = project_update_task(job_private_data_dir=private_data_dir)
+                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
                 sync_task.run(local_project_sync.id)
                 local_project_sync.refresh_from_db()
                 job = self.update_model(job.pk, scm_revision=local_project_sync.scm_revision)
@@ -1623,9 +1622,8 @@ class RunInventoryUpdate(BaseTask):
             # cancel() call on the inventory update can cancel the project update
             local_project_sync.scm_inventory_updates.add(inventory_update)
 
-            project_update_task = local_project_sync._get_task_class()
             try:
-                sync_task = project_update_task(job_private_data_dir=private_data_dir)
+                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
                 sync_task.run(local_project_sync.id)
                 local_project_sync.refresh_from_db()
                 inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
