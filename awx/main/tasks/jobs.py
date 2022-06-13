@@ -126,6 +126,9 @@ class ProjectCloneManager(object):
         We want the project path in name only, we don't care if it exists or
         not. This method will just append .lock onto the full directory path.
         """
+        if not os.path.exists(settings.PROJECTS_ROOT):
+            os.mkdir(settings.PROJECTS_ROOT)
+
         return self.get_project_path() + '.lock'
 
     def acquire_lock(self):
@@ -231,31 +234,43 @@ class ProjectCloneManager(object):
                 shutil.copytree(cache_subpath, dest_subpath, symlinks=True)
                 logger.debug('{0} {1} prepared {2} from cache'.format(type(self.project).__name__, self.project.pk, dest_subpath))
 
-    def copy_project_dir(self, *args, **kwargs):
+    def copy_project_dir(self, unified_job, private_data_dir, creation_hook, scm_branch=None):
         '''
         Properly copy the project directory (holding local lock) to the project dir
         for the given unified_job, being prepared at private_data_dir
         '''
         self.acquire_lock()
+
         try:
-            return self._copy_project_dir(*args, **kwargs)
+            branch_override = bool(scm_branch and scm_branch != self.project.scm_branch)
+            original_branch = None
+            project_path = self.get_project_path()
+            if self.project.scm_type == 'git' and branch_override:
+                if os.path.exists(project_path):
+                    git_repo = git.Repo(project_path)
+                    if git_repo.head.is_detached:
+                        original_branch = git_repo.head.commit
+                    else:
+                        original_branch = git_repo.active_branch
+
+            return self._copy_project_dir(unified_job, private_data_dir, creation_hook, scm_branch=None)
         finally:
+            # We have made the copy so we can set the tree back to its normal state
+            if original_branch:
+                # for git project syncs, non-default branches can be problems
+                # restore to branch the repo was on before this run
+                try:
+                    original_branch.checkout()
+                except Exception:
+                    # this could have failed due to dirty tree, but difficult to predict all cases
+                    logger.exception(f'Failed to restore project repo to prior state{self.extra_log_info}')
+
             self.release_lock()
 
     def _copy_project_dir(self, unified_job, private_data_dir, creation_hook, scm_branch=None):
         project_sync = None
 
         branch_override = bool(scm_branch and scm_branch != self.project.scm_branch)
-        original_branch = None
-        project_path = self.get_project_path()
-        if self.project.scm_type == 'git' and branch_override:
-            if os.path.exists(project_path):
-                git_repo = git.Repo(project_path)
-                if git_repo.head.is_detached:
-                    original_branch = git_repo.head.commit
-                else:
-                    original_branch = git_repo.active_branch
-
         sync_needs = self.get_sync_needs(branch_override=branch_override)
         if sync_needs:
             current_hostname = Instance.objects.me().hostname
@@ -284,26 +299,18 @@ class ProjectCloneManager(object):
 
             try:
                 # the job private_data_dir is passed so sync can download roles and collections there
-                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
+                sync_task = RunProjectUpdate()
                 sync_task.run(project_sync.id)
                 if sync_task.instance:
                     project_sync = sync_task.instance
+                if not project_sync:
+                    return
             except Exception:
                 # this is likely due to a failed sync, the parent job will do error handling
-                pass
+                return
 
         # Project update does not copy the folder, so copy here
         self.make_local_copy(private_data_dir)
-
-        # We have made the copy so we can set the tree back to its normal state
-        if original_branch:
-            # for git project syncs, non-default branches can be problems
-            # restore to branch the repo was on before this run
-            try:
-                original_branch.checkout()
-            except Exception:
-                # this could have failed due to dirty tree, but difficult to predict all cases
-                logger.exception(f'Failed to restore project repo to prior state{self.extra_log_info}')
 
         return project_sync
 
@@ -1099,7 +1106,7 @@ class RunJob(BaseTask):
                         'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % ('project_update', project_sync.name, project_sync.id)
                     ),
                 )
-                raise
+                raise RuntimeError('Dependent project update failed')
         else:
             job_revision = job.project.scm_revision
 
@@ -1133,10 +1140,6 @@ class RunProjectUpdate(BaseTask):
     model = ProjectUpdate
     event_model = ProjectUpdateEvent
     callback_class = RunnerCallbackForProjectUpdate
-
-    def __init__(self, *args, cloner=None, **kwargs):
-        super(RunProjectUpdate, self).__init__(*args, **kwargs)
-        self.cloner = cloner
 
     def build_private_data(self, project_update, private_data_dir):
         """
@@ -1391,9 +1394,9 @@ class RunProjectUpdate(BaseTask):
         if instance.cancel_flag:
             logger.debug("ProjectUpdate({0}) was canceled".format(instance.pk))
             return
-        if not self.cloner:
+        if instance.launch_type != 'sync':
             self.cloner = ProjectCloneManager(instance.project, extra_log_info=f'for project update {instance.pk}')
-        self.cloner.acquire_lock(instance)
+            self.cloner.acquire_lock(instance)
 
         if not os.path.exists(project_path):
             os.makedirs(project_path)  # used as container mount
@@ -1451,8 +1454,8 @@ class RunProjectUpdate(BaseTask):
                 shutil.rmtree(stage_path)  # cannot trust content update produced
 
         finally:
-            if self.cloner:
-                self.cloner.release_lock(instance)
+            if hasattr(self, 'cloner'):
+                self.cloner.release_lock()
 
         p = instance.project
         if instance.job_type == 'check' and status not in ('failed', 'canceled'):
