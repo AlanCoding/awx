@@ -5,6 +5,11 @@
 import datetime
 import os
 import urllib.parse as urlparse
+import logging
+
+# GitPython
+import git
+from gitdb.exc import BadName as BadGitName
 
 # Django
 from django.conf import settings
@@ -40,6 +45,8 @@ from awx.main.models.rbac import (
 )
 
 __all__ = ['Project', 'ProjectUpdate']
+
+logger = logging.getLogger('awx.main.models.project')
 
 
 class ProjectOptions(models.Model):
@@ -454,6 +461,39 @@ class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEn
                 success_notification_templates + list(base_notification_templates.filter(organization_notification_templates_for_success=self.organization))
             )
         return dict(error=list(error_notification_templates), started=list(started_notification_templates), success=list(success_notification_templates))
+
+    def get_sync_needs(self, branch_override=False, extra_log_info=''):
+        project_path = self.get_project_path(check_if_exists=False)
+        sync_needs = []
+
+        # Evaluate if source tree sync is necessary
+        source_update_tag = 'update_{}'.format(self.project.scm_type)
+        if not self.project.scm_type:
+            pass  # manual projects are not synced, user has responsibility for that
+        elif not os.path.exists(project_path):
+            logger.debug(f'Performing fresh clone of project {self.id} on this instance{extra_log_info}.')
+            sync_needs.append(source_update_tag)
+        elif self.project.scm_type == 'git' and self.project.scm_revision and (not branch_override):
+            try:
+                git_repo = git.Repo(project_path)
+
+                if self.project.scm_revision == git_repo.head.commit.hexsha:
+                    logger.debug(f'Skipping project sync because commit is locally available{extra_log_info}')
+                else:
+                    sync_needs.append(source_update_tag)
+            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
+                logger.debug(f'Needed commit not in local source tree, will sync with remote{extra_log_info}')
+                sync_needs.append(source_update_tag)
+        else:
+            logger.debug(f'Project not available locally, will sync with remote{extra_log_info}')
+            sync_needs.append(source_update_tag)
+
+        # Evaluate if Ansible requirements install is necessary
+        has_cache = os.path.exists(os.path.join(self.project.get_cache_path(), self.project.cache_id))
+        # Galaxy requirements are not supported for manual projects
+        if self.project.scm_type and ((not has_cache) or branch_override):
+            sync_needs.extend(['install_roles', 'install_collections'])
+        return sync_needs
 
     def get_absolute_url(self, request=None):
         return reverse('api:project_detail', kwargs={'pk': self.pk}, request=request)

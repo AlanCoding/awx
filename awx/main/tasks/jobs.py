@@ -19,14 +19,11 @@ import urllib.parse as urlparse
 from django.conf import settings
 from django.db import transaction
 
-
 # Runner
 import ansible_runner
 
 # GitPython
 import git
-from gitdb.exc import BadName as BadGitName
-
 
 # AWX
 from awx.main.dispatch.publish import task
@@ -871,35 +868,9 @@ class RunJob(BaseTask):
             update_smart_memberships_for_inventory(job.inventory)
 
     def build_project_dir(self, job, private_data_dir):
-        project_path = job.project.get_project_path(check_if_exists=False)
         job_revision = job.project.scm_revision
-        sync_needs = []
-        source_update_tag = 'update_{}'.format(job.project.scm_type)
         branch_override = bool(job.scm_branch and job.scm_branch != job.project.scm_branch)
-        if not job.project.scm_type:
-            pass  # manual projects are not synced, user has responsibility for that
-        elif not os.path.exists(project_path):
-            logger.debug('Performing fresh clone of {} on this instance.'.format(job.project))
-            sync_needs.append(source_update_tag)
-        elif job.project.scm_type == 'git' and job.project.scm_revision and (not branch_override):
-            try:
-                git_repo = git.Repo(project_path)
-
-                if job_revision == git_repo.head.commit.hexsha:
-                    logger.debug('Skipping project sync for {} because commit is locally available'.format(job.log_format))
-                else:
-                    sync_needs.append(source_update_tag)
-            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
-                logger.debug('Needed commit for {} not in local source tree, will sync with remote'.format(job.log_format))
-                sync_needs.append(source_update_tag)
-        else:
-            logger.debug('Project not available locally, {} will sync with remote'.format(job.log_format))
-            sync_needs.append(source_update_tag)
-
-        has_cache = os.path.exists(os.path.join(job.project.get_cache_path(), job.project.cache_id))
-        # Galaxy requirements are not supported for manual projects
-        if job.project.scm_type and ((not has_cache) or branch_override):
-            sync_needs.extend(['install_roles', 'install_collections'])
+        sync_needs = job.project.get_sync_needs(branch_override=branch_override, extra_log_info=f' for job {job.id}')
 
         if sync_needs:
             pu_ig = job.instance_group
@@ -1596,12 +1567,7 @@ class RunInventoryUpdate(BaseTask):
             inventory_update.source == 'scm' and inventory_update.launch_type != 'scm' and source_project and source_project.scm_type
         ):  # never ever update manual projects
 
-            # Check if the content cache exists, so that we do not unnecessarily re-download roles
-            sync_needs = ['update_{}'.format(source_project.scm_type)]
-            has_cache = os.path.exists(os.path.join(source_project.get_cache_path(), source_project.cache_id))
-            # Galaxy requirements are not supported for manual projects
-            if not has_cache:
-                sync_needs.extend(['install_roles', 'install_collections'])
+            sync_needs = source_project.get_sync_needs(extra_log_info=f' for inventory update {inventory_update.id}')
 
             local_project_sync = source_project.create_project_update(
                 _eager_fields=dict(
