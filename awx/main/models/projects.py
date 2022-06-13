@@ -236,16 +236,6 @@ class ProjectOptions(models.Model):
                     break
         return sorted(results, key=lambda x: smart_str(x).lower())
 
-    def get_lock_file(self):
-        """
-        We want the project path in name only, we don't care if it exists or
-        not. This method will just append .lock onto the full directory path.
-        """
-        proj_path = self.get_project_path(check_if_exists=False)
-        if not proj_path:
-            return None
-        return proj_path + '.lock'
-
 
 class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin):
     """

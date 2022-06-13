@@ -102,6 +102,213 @@ def with_path_cleanup(f):
     return _wrapped
 
 
+class ProjectCloneManager(object):
+    def __init__(self, project, extra_log_info=''):
+        self.project = project
+        if self.extra_log_info:
+            self.extra_log_info = f' {extra_log_info}'  # add extra space
+        else:
+            self.extra_log_info = extra_log_info
+        self.lock_active = False
+
+    def get_project_path(self):
+        proj_path = self.project.get_project_path(check_if_exists=False)
+        if not proj_path:
+            # If from migration or someone blanked local_path for any other reason, recoverable by save
+            self.project.save()
+            proj_path = self.project.get_project_path(check_if_exists=False)
+            if not proj_path:
+                raise RuntimeError(f'Invalid lock file path for project {self.project.id}{self.extra_log_info}')
+        return proj_path
+
+    def get_lock_file(self):
+        """
+        We want the project path in name only, we don't care if it exists or
+        not. This method will just append .lock onto the full directory path.
+        """
+        return self.get_project_path() + '.lock'
+
+    def acquire_lock(self, instance, blocking=True):
+        '''
+        Obtain a file lock for the project path.
+        Note: We don't support blocking=False
+        '''
+        if self.lock_active:
+            return
+
+        lock_path = self.get_lock_file()
+
+        try:
+            self.lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
+        except OSError as e:
+            logger.error(f"I/O error({e.errno}) while trying to open lock file [{lock_path}]: {e.strerror}")
+            raise
+
+        start_time = time.time()
+        while True:
+            try:
+                fcntl.lockf(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except IOError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES):
+                    os.close(self.lock_fd)
+                    logger.error(f"I/O error({e.errno}) while trying to aquire lock on file [{lock_path}]: {e.strerror}")
+                    raise
+                else:
+                    time.sleep(1.0)
+
+        waiting_time = time.time() - start_time
+        self.lock_active = True
+
+        if waiting_time > 1.0:
+            logger.info(f'{getattr(self.project, "log_format", self.project)} waited {waiting_time} to acquire lock {lock_path}{self.extra_log_info}.')
+
+    def release_lock(self, instance):
+        try:
+            fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
+        except IOError as e:
+            logger.error(f"I/O error({e.errno}) while trying to release lock file [{self.get_lock_file()}]: {e.strerror}")
+            os.close(self.lock_fd)
+            raise
+
+        os.close(self.lock_fd)
+        self.lock_active = False
+        self.lock_fd = None
+
+    def get_sync_needs(self, branch_override=False):
+        project_path = self.get_project_path()
+        sync_needs = []
+
+        # Evaluate if source tree sync is necessary
+        source_update_tag = 'update_{}'.format(self.project.scm_type)
+        if not self.project.scm_type:
+            pass  # manual projects are not synced, user has responsibility for that
+        elif not os.path.exists(project_path):
+            logger.debug(f'Performing fresh clone of project {self.project.id} on this instance{self.extra_log_info}.')
+            sync_needs.append(source_update_tag)
+        elif self.project.scm_type == 'git' and self.project.scm_revision and (not branch_override):
+            try:
+                git_repo = git.Repo(project_path)
+
+                if self.project.scm_revision == git_repo.head.commit.hexsha:
+                    logger.debug(f'Skipping project sync because commit is locally available{self.extra_log_info}')
+                else:
+                    sync_needs.append(source_update_tag)
+            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
+                logger.debug(f'Needed commit not in local source tree, will sync with remote{self.extra_log_info}')
+                sync_needs.append(source_update_tag)
+        else:
+            logger.debug(f'Project not available locally, will sync with remote{self.extra_log_info}')
+            sync_needs.append(source_update_tag)
+
+        # Evaluate if Ansible requirements install is necessary
+        has_cache = os.path.exists(os.path.join(self.project.get_cache_path(), self.project.cache_id))
+        # Galaxy requirements are not supported for manual projects
+        if self.project.scm_type and ((not has_cache) or branch_override):
+            sync_needs.extend(['install_roles', 'install_collections'])
+        return sync_needs
+
+    def make_local_copy(self, private_data_dir):
+        """Copy project content (roles and collections) to a job private_data_dir
+
+        :param object project: Either a project or a project update
+        :param str job_private_data_dir: The root of the target ansible-runner folder
+        """
+        project_path = self.project.get_project_path(check_if_exists=False)
+        destination_folder = os.path.join(private_data_dir, 'project')
+        shutil.copytree(project_path, destination_folder, ignore=shutil.ignore_patterns('.git'), symlinks=True)
+
+        # copy over the roles and collection cache to job folder
+        cache_path = os.path.join(self.project.get_cache_path(), self.project.cache_id)
+        subfolders = []
+        if settings.AWX_COLLECTIONS_ENABLED:
+            subfolders.append('requirements_collections')
+        if settings.AWX_ROLES_ENABLED:
+            subfolders.append('requirements_roles')
+        for subfolder in subfolders:
+            cache_subpath = os.path.join(cache_path, subfolder)
+            if os.path.exists(cache_subpath):
+                dest_subpath = os.path.join(private_data_dir, subfolder)
+                shutil.copytree(cache_subpath, dest_subpath, symlinks=True)
+                logger.debug('{0} {1} prepared {2} from cache'.format(type(self.project).__name__, self.project.pk, dest_subpath))
+
+    def copy_project_dir(self, *args, **kwargs):
+        '''
+        Properly copy the project directory (holding local lock) to the project dir
+        for the given unified_job, being prepared at private_data_dir
+        '''
+        self.acquire_lock()
+        try:
+            return self._copy_project_dir(*args, **kwargs)
+        finally:
+            self.release_lock()
+
+    def _copy_project_dir(self, unified_job, private_data_dir, creation_hook, scm_branch=None):
+        local_project_sync = None
+
+        branch_override = bool(scm_branch and scm_branch != self.project.scm_branch)
+        original_branch = None
+        project_path = self.get_project_path()
+        if self.project.scm_type == 'git' and branch_override:
+            if os.path.exists(project_path):
+                git_repo = git.Repo(project_path)
+                if git_repo.head.is_detached:
+                    original_branch = git_repo.head.commit
+                else:
+                    original_branch = git_repo.active_branch
+
+        sync_needs = self.get_sync_needs(branch_override=branch_override)
+        if sync_needs:
+            current_hostname = Instance.objects.me().hostname
+
+            sync_metafields = dict(
+                launch_type="sync",
+                job_type='run',
+                job_tags=','.join(sync_needs),
+                status='running',
+                instance_group=unified_job.instance_group,  # NOTE: expected value is unclear
+                execution_node=current_hostname,
+                controller_node=current_hostname,
+                celery_task_id=unified_job.celery_task_id,
+            )
+            if branch_override:
+                sync_metafields['scm_branch'] = scm_branch
+                sync_metafields['scm_clean'] = True  # to accomidate force pushes
+            if 'update_' not in sync_metafields['job_tags']:
+                sync_metafields['scm_revision'] = self.project.scm_revision
+            local_project_sync = self.project.create_project_update(_eager_fields=sync_metafields)
+            local_project_sync.log_lifecycle("controller_node_chosen")
+            local_project_sync.log_lifecycle("execution_node_chosen")
+            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
+
+            creation_hook(local_project_sync)  # have caller to associate with project update before running
+
+            try:
+                # the job private_data_dir is passed so sync can download roles and collections there
+                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
+                sync_task.run(local_project_sync.id)
+                if sync_task.instance:
+                    local_project_sync = sync_task.instance
+            except Exception:
+                # this is likely due to a failed sync, the parent job will do error handling
+                pass
+
+        # Project update does not copy the folder, so copy here
+        RunProjectUpdate.make_local_copy(private_data_dir)
+
+        # We have made the copy so we can set the tree back to its normal state
+        if original_branch:
+            # for git project syncs, non-default branches can be problems
+            # restore to branch the repo was on before this run
+            try:
+                original_branch.checkout()
+            except Exception:
+                # this could have failed due to dirty tree, but difficult to predict all cases
+                logger.exception(f'Failed to restore project repo to prior state{self.extra_log_info}')
+
+        return local_project_sync
+
+
 class BaseTask(object):
     model = None
     event_model = None
@@ -870,92 +1077,35 @@ class RunJob(BaseTask):
             # ran inside of the event saving code
             update_smart_memberships_for_inventory(job.inventory)
 
+    def on_sync_creation(self, project_sync):
+        # save the associated job before calling run() so that a
+        # cancel() call on the job can cancel the project update
+        self.update_model(self.instance.pk, project_update=project_sync)
+
     def build_project_dir(self, job, private_data_dir):
-        project_path = job.project.get_project_path(check_if_exists=False)
-        job_revision = job.project.scm_revision
-        sync_needs = []
-        source_update_tag = 'update_{}'.format(job.project.scm_type)
-        branch_override = bool(job.scm_branch and job.scm_branch != job.project.scm_branch)
-        if not job.project.scm_type:
-            pass  # manual projects are not synced, user has responsibility for that
-        elif not os.path.exists(project_path):
-            logger.debug('Performing fresh clone of {} on this instance.'.format(job.project))
-            sync_needs.append(source_update_tag)
-        elif job.project.scm_type == 'git' and job.project.scm_revision and (not branch_override):
-            try:
-                git_repo = git.Repo(project_path)
+        cloner = ProjectCloneManager(job.project, extra_log_info=f'for job {job.id} prep')
+        project_update = cloner.copy_project_dir(job, private_data_dir, creation_hook=self.on_sync_creation, scm_branch=job.scm_branch)
 
-                if job_revision == git_repo.head.commit.hexsha:
-                    logger.debug('Skipping project sync for {} because commit is locally available'.format(job.log_format))
-                else:
-                    sync_needs.append(source_update_tag)
-            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
-                logger.debug('Needed commit for {} not in local source tree, will sync with remote'.format(job.log_format))
-                sync_needs.append(source_update_tag)
-        else:
-            logger.debug('Project not available locally, {} will sync with remote'.format(job.log_format))
-            sync_needs.append(source_update_tag)
-
-        has_cache = os.path.exists(os.path.join(job.project.get_cache_path(), job.project.cache_id))
-        # Galaxy requirements are not supported for manual projects
-        if job.project.scm_type and ((not has_cache) or branch_override):
-            sync_needs.extend(['install_roles', 'install_collections'])
-
-        if sync_needs:
-            pu_ig = job.instance_group
-            pu_en = Instance.objects.me().hostname
-
-            sync_metafields = dict(
-                launch_type="sync",
-                job_type='run',
-                job_tags=','.join(sync_needs),
-                status='running',
-                instance_group=pu_ig,
-                execution_node=pu_en,
-                controller_node=pu_en,
-                celery_task_id=job.celery_task_id,
-            )
-            if branch_override:
-                sync_metafields['scm_branch'] = job.scm_branch
-                sync_metafields['scm_clean'] = True  # to accomidate force pushes
-            if 'update_' not in sync_metafields['job_tags']:
-                sync_metafields['scm_revision'] = job_revision
-            local_project_sync = job.project.create_project_update(_eager_fields=sync_metafields)
-            local_project_sync.log_lifecycle("controller_node_chosen")
-            local_project_sync.log_lifecycle("execution_node_chosen")
-            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
-            # save the associated job before calling run() so that a
-            # cancel() call on the job can cancel the project update
-            job = self.update_model(job.pk, project_update=local_project_sync)
-
-            try:
-                # the job private_data_dir is passed so sync can download roles and collections there
-                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                sync_task.run(local_project_sync.id)
-                local_project_sync.refresh_from_db()
-                job = self.update_model(job.pk, scm_revision=local_project_sync.scm_revision)
-            except Exception:
-                local_project_sync.refresh_from_db()
-                if local_project_sync.status != 'canceled':
-                    job = self.update_model(
-                        job.pk,
-                        status='failed',
-                        job_explanation=(
-                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                            % ('project_update', local_project_sync.name, local_project_sync.id)
-                        ),
-                    )
-                    raise
-                job.refresh_from_db()
+        if project_update:
+            job_revision = project_update.scm_revision
+            if project_update.status == 'canceled':
+                job = self.update_model(job.pk)
                 if job.cancel_flag:
-                    return
+                    return  # will be handled by main run method
+            elif project_update.status != 'successful':
+                job = self.update_model(
+                    job.pk,
+                    status='failed',
+                    job_explanation=(
+                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                        % ('project_update', project_update.name, project_update.id)
+                    ),
+                )
+                raise
         else:
-            # Case where a local sync is not needed, meaning that local tree is
-            # up-to-date with project, job is running project current version
-            if job_revision:
-                job = self.update_model(job.pk, scm_revision=job_revision)
-            # Project update does not copy the folder, so copy here
-            RunProjectUpdate.make_local_copy(job.project, private_data_dir)
+            job_revision = job.project.scm_revision
+
+        job = self.update_model(job.pk, scm_revision=job_revision)
 
     def final_run_hook(self, job, status, private_data_dir, fact_modification_times):
         super(RunJob, self).final_run_hook(job, status, private_data_dir, fact_modification_times)
@@ -986,10 +1136,9 @@ class RunProjectUpdate(BaseTask):
     event_model = ProjectUpdateEvent
     callback_class = RunnerCallbackForProjectUpdate
 
-    def __init__(self, *args, job_private_data_dir=None, **kwargs):
+    def __init__(self, *args, cloner=None, **kwargs):
         super(RunProjectUpdate, self).__init__(*args, **kwargs)
-        self.original_branch = None
-        self.job_private_data_dir = job_private_data_dir
+        self.cloner = cloner
 
     def build_private_data(self, project_update, private_data_dir):
         """
@@ -1233,53 +1382,6 @@ class RunProjectUpdate(BaseTask):
                 inv_src.scm_last_revision = scm_revision
                 inv_src.save(update_fields=['scm_last_revision'])
 
-    def release_lock(self, instance):
-        try:
-            fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
-        except IOError as e:
-            logger.error("I/O error({0}) while trying to release lock file [{1}]: {2}".format(e.errno, instance.get_lock_file(), e.strerror))
-            os.close(self.lock_fd)
-            raise
-
-        os.close(self.lock_fd)
-        self.lock_fd = None
-
-    '''
-    Note: We don't support blocking=False
-    '''
-
-    def acquire_lock(self, instance, blocking=True):
-        lock_path = instance.get_lock_file()
-        if lock_path is None:
-            # If from migration or someone blanked local_path for any other reason, recoverable by save
-            instance.save()
-            lock_path = instance.get_lock_file()
-            if lock_path is None:
-                raise RuntimeError(u'Invalid lock file path')
-
-        try:
-            self.lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
-        except OSError as e:
-            logger.error("I/O error({0}) while trying to open lock file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
-            raise
-
-        start_time = time.time()
-        while True:
-            try:
-                fcntl.lockf(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except IOError as e:
-                if e.errno not in (errno.EAGAIN, errno.EACCES):
-                    os.close(self.lock_fd)
-                    logger.error("I/O error({0}) while trying to aquire lock on file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
-                    raise
-                else:
-                    time.sleep(1.0)
-        waiting_time = time.time() - start_time
-
-        if waiting_time > 1.0:
-            logger.info(f'{getattr(instance, "log_format", instance)} waited {waiting_time} to acquire lock for local source tree for path {lock_path}.')
-
     def pre_run_hook(self, instance, private_data_dir):
         super(RunProjectUpdate, self).pre_run_hook(instance, private_data_dir)
         # re-create root project folder if a natural disaster has destroyed it
@@ -1291,16 +1393,9 @@ class RunProjectUpdate(BaseTask):
         if instance.cancel_flag:
             logger.debug("ProjectUpdate({0}) was canceled".format(instance.pk))
             return
-        self.acquire_lock(instance)
-
-        self.original_branch = None
-        if instance.scm_type == 'git' and instance.branch_override:
-            if os.path.exists(project_path):
-                git_repo = git.Repo(project_path)
-                if git_repo.head.is_detached:
-                    self.original_branch = git_repo.head.commit
-                else:
-                    self.original_branch = git_repo.active_branch
+        if not self.cloner:
+            self.cloner = ProjectCloneManager(instance.project, extra_log_info=f'for project update {instance.pk}')
+        self.cloner.acquire_lock(instance)
 
         if not os.path.exists(project_path):
             os.makedirs(project_path)  # used as container mount
@@ -1332,31 +1427,6 @@ class RunProjectUpdate(BaseTask):
                     except OSError:
                         logger.warning(f"Could not remove cache directory {old_path}")
 
-    @staticmethod
-    def make_local_copy(project, job_private_data_dir):
-        """Copy project content (roles and collections) to a job private_data_dir
-
-        :param object project: Either a project or a project update
-        :param str job_private_data_dir: The root of the target ansible-runner folder
-        """
-        project_path = project.get_project_path(check_if_exists=False)
-        destination_folder = os.path.join(job_private_data_dir, 'project')
-        shutil.copytree(project_path, destination_folder, ignore=shutil.ignore_patterns('.git'), symlinks=True)
-
-        # copy over the roles and collection cache to job folder
-        cache_path = os.path.join(project.get_cache_path(), project.cache_id)
-        subfolders = []
-        if settings.AWX_COLLECTIONS_ENABLED:
-            subfolders.append('requirements_collections')
-        if settings.AWX_ROLES_ENABLED:
-            subfolders.append('requirements_roles')
-        for subfolder in subfolders:
-            cache_subpath = os.path.join(cache_path, subfolder)
-            if os.path.exists(cache_subpath):
-                dest_subpath = os.path.join(job_private_data_dir, subfolder)
-                shutil.copytree(cache_subpath, dest_subpath, symlinks=True)
-                logger.debug('{0} {1} prepared {2} from cache'.format(type(project).__name__, project.pk, dest_subpath))
-
     def post_run_hook(self, instance, status):
         super(RunProjectUpdate, self).post_run_hook(instance, status)
         # To avoid hangs, very important to release lock even if errors happen here
@@ -1382,20 +1452,9 @@ class RunProjectUpdate(BaseTask):
             elif os.path.exists(stage_path):
                 shutil.rmtree(stage_path)  # cannot trust content update produced
 
-            if self.job_private_data_dir:
-                if status == 'successful':
-                    # copy project folder before resetting to default branch
-                    self.make_local_copy(instance, self.job_private_data_dir)
-                if self.original_branch:
-                    # for git project syncs, non-default branches can be problems
-                    # restore to branch the repo was on before this run
-                    try:
-                        self.original_branch.checkout()
-                    except Exception:
-                        # this could have failed due to dirty tree, but difficult to predict all cases
-                        logger.exception('Failed to restore project repo to prior state after {}'.format(instance.log_format))
         finally:
-            self.release_lock(instance)
+            if self.cloner:
+                self.cloner.release_lock(instance)
 
         p = instance.project
         if instance.job_type == 'check' and status not in ('failed', 'canceled'):
