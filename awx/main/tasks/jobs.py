@@ -244,7 +244,7 @@ class ProjectCloneManager(object):
             self.release_lock()
 
     def _copy_project_dir(self, unified_job, private_data_dir, creation_hook, scm_branch=None):
-        local_project_sync = None
+        project_sync = None
 
         branch_override = bool(scm_branch and scm_branch != self.project.scm_branch)
         original_branch = None
@@ -276,19 +276,19 @@ class ProjectCloneManager(object):
                 sync_metafields['scm_clean'] = True  # to accomidate force pushes
             if 'update_' not in sync_metafields['job_tags']:
                 sync_metafields['scm_revision'] = self.project.scm_revision
-            local_project_sync = self.project.create_project_update(_eager_fields=sync_metafields)
-            local_project_sync.log_lifecycle("controller_node_chosen")
-            local_project_sync.log_lifecycle("execution_node_chosen")
-            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
+            project_sync = self.project.create_project_update(_eager_fields=sync_metafields)
+            project_sync.log_lifecycle("controller_node_chosen")
+            project_sync.log_lifecycle("execution_node_chosen")
+            create_partition(project_sync.event_class._meta.db_table, start=project_sync.created)
 
-            creation_hook(local_project_sync)  # have caller to associate with project update before running
+            creation_hook(project_sync)  # have caller to associate with project update before running
 
             try:
                 # the job private_data_dir is passed so sync can download roles and collections there
                 sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                sync_task.run(local_project_sync.id)
+                sync_task.run(project_sync.id)
                 if sync_task.instance:
-                    local_project_sync = sync_task.instance
+                    project_sync = sync_task.instance
             except Exception:
                 # this is likely due to a failed sync, the parent job will do error handling
                 pass
@@ -306,7 +306,7 @@ class ProjectCloneManager(object):
                 # this could have failed due to dirty tree, but difficult to predict all cases
                 logger.exception(f'Failed to restore project repo to prior state{self.extra_log_info}')
 
-        return local_project_sync
+        return project_sync
 
 
 class BaseTask(object):
@@ -1084,21 +1084,20 @@ class RunJob(BaseTask):
 
     def build_project_dir(self, job, private_data_dir):
         cloner = ProjectCloneManager(job.project, extra_log_info=f'for job {job.id} prep')
-        project_update = cloner.copy_project_dir(job, private_data_dir, creation_hook=self.on_sync_creation, scm_branch=job.scm_branch)
+        project_sync = cloner.copy_project_dir(job, private_data_dir, creation_hook=self.on_sync_creation, scm_branch=job.scm_branch)
 
-        if project_update:
-            job_revision = project_update.scm_revision
-            if project_update.status == 'canceled':
+        if project_sync:
+            job_revision = project_sync.scm_revision
+            if project_sync.status == 'canceled':
                 job = self.update_model(job.pk)
                 if job.cancel_flag:
                     return  # will be handled by main run method
-            elif project_update.status != 'successful':
+            elif project_sync.status != 'successful':
                 job = self.update_model(
                     job.pk,
                     status='failed',
                     job_explanation=(
-                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                        % ('project_update', project_update.name, project_update.id)
+                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % ('project_update', project_sync.name, project_sync.id)
                     ),
                 )
                 raise
@@ -1647,59 +1646,46 @@ class RunInventoryUpdate(BaseTask):
         # All credentials not used by inventory source injector
         return inventory_update.get_extra_credentials()
 
+    def on_sync_creation(self, project_sync):
+        # associate the inventory update before calling run() so that a
+        # cancel() call on the inventory update can cancel the project update
+        project_sync.scm_inventory_updates.add(self.instance)
+
     def build_project_dir(self, inventory_update, private_data_dir):
         source_project = None
         if inventory_update.inventory_source:
             source_project = inventory_update.inventory_source.source_project
-        if (
-            inventory_update.source == 'scm' and inventory_update.launch_type != 'scm' and source_project and source_project.scm_type
-        ):  # never ever update manual projects
+        if inventory_update.source == 'scm' and inventory_update.launch_type != 'scm' and source_project:
 
-            # Check if the content cache exists, so that we do not unnecessarily re-download roles
-            sync_needs = ['update_{}'.format(source_project.scm_type)]
-            has_cache = os.path.exists(os.path.join(source_project.get_cache_path(), source_project.cache_id))
-            # Galaxy requirements are not supported for manual projects
-            if not has_cache:
-                sync_needs.extend(['install_roles', 'install_collections'])
+            cloner = ProjectCloneManager(source_project, extra_log_info=f'for inventory update {inventory_update.id} prep')
+            project_sync = cloner.copy_project_dir(inventory_update, private_data_dir, creation_hook=self.on_sync_creation)
 
-            local_project_sync = source_project.create_project_update(
-                _eager_fields=dict(
-                    launch_type="sync",
-                    job_type='run',
-                    job_tags=','.join(sync_needs),
-                    status='running',
-                    execution_node=Instance.objects.me().hostname,
-                    controller_node=Instance.objects.me().hostname,
-                    instance_group=inventory_update.instance_group,
-                    celery_task_id=inventory_update.celery_task_id,
-                )
-            )
-            local_project_sync.log_lifecycle("controller_node_chosen")
-            local_project_sync.log_lifecycle("execution_node_chosen")
-            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
-            # associate the inventory update before calling run() so that a
-            # cancel() call on the inventory update can cancel the project update
-            local_project_sync.scm_inventory_updates.add(inventory_update)
+            if project_sync:
+                inv_revision = project_sync.scm_revision
+                if project_sync.status == 'canceled':
+                    inventory_update = self.update_model(inventory_update.pk)
+                    if inventory_update.cancel_flag:
+                        return  # will be handled by main run method
+                elif project_sync.status != 'successful':
+                    inventory_update = self.update_model(
+                        inventory_update.pk,
+                        status='failed',
+                        job_explanation=(
+                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                            % ('project_update', inventory_update.name, inventory_update.id)
+                        ),
+                    )
+                    raise
+            else:
+                inv_revision = source_project.scm_revision
 
-            try:
-                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                sync_task.run(local_project_sync.id)
-                local_project_sync.refresh_from_db()
-                inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
-                inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
-            except Exception:
-                inventory_update = self.update_model(
-                    inventory_update.pk,
-                    status='failed',
-                    job_explanation=(
-                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                        % ('project_update', local_project_sync.name, local_project_sync.id)
-                    ),
-                )
-                raise
+            inventory_update = self.update_model(inventory_update.pk, scm_last_revision=inv_revision)
+            self.instance = inventory_update
+
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
-            RunProjectUpdate.make_local_copy(source_project, private_data_dir)
+            cloner = ProjectCloneManager(source_project, extra_log_info=f'for scm-based inventory update {inventory_update.id} prep')
+            cloner.make_local_copy(private_data_dir)
         else:
             super(RunInventoryUpdate, self).build_project_dir(inventory_update, private_data_dir)
 
