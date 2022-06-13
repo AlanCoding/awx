@@ -105,7 +105,7 @@ def with_path_cleanup(f):
 class ProjectCloneManager(object):
     def __init__(self, project, extra_log_info=''):
         self.project = project
-        if self.extra_log_info:
+        if extra_log_info:
             self.extra_log_info = f' {extra_log_info}'  # add extra space
         else:
             self.extra_log_info = extra_log_info
@@ -128,10 +128,9 @@ class ProjectCloneManager(object):
         """
         return self.get_project_path() + '.lock'
 
-    def acquire_lock(self, instance, blocking=True):
+    def acquire_lock(self):
         '''
         Obtain a file lock for the project path.
-        Note: We don't support blocking=False
         '''
         if self.lock_active:
             return
@@ -163,7 +162,7 @@ class ProjectCloneManager(object):
         if waiting_time > 1.0:
             logger.info(f'{getattr(self.project, "log_format", self.project)} waited {waiting_time} to acquire lock {lock_path}{self.extra_log_info}.')
 
-    def release_lock(self, instance):
+    def release_lock(self):
         try:
             fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
         except IOError as e:
@@ -294,7 +293,7 @@ class ProjectCloneManager(object):
                 pass
 
         # Project update does not copy the folder, so copy here
-        RunProjectUpdate.make_local_copy(private_data_dir)
+        self.make_local_copy(private_data_dir)
 
         # We have made the copy so we can set the tree back to its normal state
         if original_branch:
