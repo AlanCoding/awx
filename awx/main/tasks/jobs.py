@@ -1677,7 +1677,7 @@ class RunInventoryUpdate(BaseTask):
                             % ('project_update', inventory_update.name, inventory_update.id)
                         ),
                     )
-                    raise
+                    raise RuntimeError('Dependent project update failed')
             else:
                 inv_revision = source_project.scm_revision
 
