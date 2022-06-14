@@ -1633,6 +1633,10 @@ class RunInventoryUpdate(SourceControlMixin, BaseTask):
                         ),
                     )
                     raise
+            else:
+                inventory_update.inventory_source.scm_last_revision = source_project.scm_revision
+                inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
+                RunProjectUpdate.make_local_copy(source_project, private_data_dir)
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
             RunProjectUpdate.make_local_copy(source_project, private_data_dir)
