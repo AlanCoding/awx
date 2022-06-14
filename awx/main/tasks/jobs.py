@@ -373,6 +373,9 @@ class BaseTask(object):
         self.lock_fd = None
 
     def acquire_lock(self, project, unified_job_id=None):
+        if not os.path.exists(settings.PROJECTS_ROOT):
+            os.mkdir(settings.PROJECTS_ROOT)
+
         lock_path = project.get_lock_file()
         if lock_path is None:
             # If from migration or someone blanked local_path for any other reason, recoverable by save
@@ -1329,8 +1332,6 @@ class RunProjectUpdate(BaseTask):
     def pre_run_hook(self, instance, private_data_dir):
         super(RunProjectUpdate, self).pre_run_hook(instance, private_data_dir)
         # re-create root project folder if a natural disaster has destroyed it
-        if not os.path.exists(settings.PROJECTS_ROOT):
-            os.mkdir(settings.PROJECTS_ROOT)
         project_path = instance.project.get_project_path(check_if_exists=False)
 
         instance.refresh_from_db(fields=['cancel_flag'])
@@ -1426,7 +1427,7 @@ class RunProjectUpdate(BaseTask):
                     self.make_local_copy(instance, self.job_private_data_dir)
         finally:
             if instance.launch_type != 'sync':
-                self.release_lock(instance.project, instance.id)
+                self.release_lock(instance.project)
 
         p = instance.project
         if instance.job_type == 'check' and status not in ('failed', 'canceled'):
