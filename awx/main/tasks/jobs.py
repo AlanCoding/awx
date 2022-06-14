@@ -361,6 +361,49 @@ class BaseTask(object):
             expect_passwords[k] = passwords.get(v, '') or ''
         return expect_passwords
 
+    def release_lock(self, project):
+        try:
+            fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
+        except IOError as e:
+            logger.error("I/O error({0}) while trying to release lock file [{1}]: {2}".format(e.errno, project.get_lock_file(), e.strerror))
+            os.close(self.lock_fd)
+            raise
+
+        os.close(self.lock_fd)
+        self.lock_fd = None
+
+    def acquire_lock(self, project, unified_job_id=None):
+        lock_path = project.get_lock_file()
+        if lock_path is None:
+            # If from migration or someone blanked local_path for any other reason, recoverable by save
+            project.save()
+            lock_path = project.get_lock_file()
+            if lock_path is None:
+                raise RuntimeError(u'Invalid lock file path')
+
+        try:
+            self.lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
+        except OSError as e:
+            logger.error("I/O error({0}) while trying to open lock file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
+            raise
+
+        start_time = time.time()
+        while True:
+            try:
+                fcntl.lockf(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except IOError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES):
+                    os.close(self.lock_fd)
+                    logger.error("I/O error({0}) while trying to aquire lock on file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
+                    raise
+                else:
+                    time.sleep(1.0)
+        waiting_time = time.time() - start_time
+
+        if waiting_time > 1.0:
+            logger.info(f'Job {unified_job_id} waited {waiting_time} to acquire lock for local source tree for path {lock_path}.')
+
     def pre_run_hook(self, instance, private_data_dir):
         """
         Hook for any steps to run before the job/task starts
@@ -656,7 +699,7 @@ class SourceControlMixin(BaseTask):
         create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
         return local_project_sync
 
-    def sync_and_copy(self, unified_job, project, private_data_dir, scm_branch=None):
+    def sync_and_copy_without_lock(self, unified_job, project, private_data_dir, scm_branch=None):
         sync_needs = self.get_sync_needs(unified_job, project, scm_branch=scm_branch)
 
         if sync_needs:
@@ -695,6 +738,34 @@ class SourceControlMixin(BaseTask):
             unified_job = self.save_revision(unified_job, project.scm_revision)
             # Project update does not copy the folder, so copy here
             RunProjectUpdate.make_local_copy(project, private_data_dir)
+
+    def sync_and_copy(self, unified_job, project, private_data_dir, scm_branch=None):
+        self.acquire_lock(project, unified_job.id)
+
+        try:
+            original_branch = None
+            project_path = project.get_project_path(check_if_exists=False)
+            if project.scm_type == 'git' and (scm_branch and scm_branch != project.scm_branch):
+                if os.path.exists(project_path):
+                    git_repo = git.Repo(project_path)
+                    if git_repo.head.is_detached:
+                        original_branch = git_repo.head.commit
+                    else:
+                        original_branch = git_repo.active_branch
+
+            return self.sync_and_copy_without_lock(unified_job, project, private_data_dir, scm_branch=scm_branch)
+        finally:
+            # We have made the copy so we can set the tree back to its normal state
+            if original_branch:
+                # for git project syncs, non-default branches can be problems
+                # restore to branch the repo was on before this run
+                try:
+                    original_branch.checkout()
+                except Exception:
+                    # this could have failed due to dirty tree, but difficult to predict all cases
+                    logger.exception(f'Failed to restore project repo to prior state after {unified_job.id}')
+
+            self.release_lock(project)
 
 
 @task(queue=get_local_queuename)
@@ -1011,7 +1082,6 @@ class RunProjectUpdate(BaseTask):
 
     def __init__(self, *args, job_private_data_dir=None, **kwargs):
         super(RunProjectUpdate, self).__init__(*args, **kwargs)
-        self.original_branch = None
         self.job_private_data_dir = job_private_data_dir
 
     def build_private_data(self, project_update, private_data_dir):
@@ -1256,53 +1326,6 @@ class RunProjectUpdate(BaseTask):
                 inv_src.scm_last_revision = scm_revision
                 inv_src.save(update_fields=['scm_last_revision'])
 
-    def release_lock(self, instance):
-        try:
-            fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
-        except IOError as e:
-            logger.error("I/O error({0}) while trying to release lock file [{1}]: {2}".format(e.errno, instance.get_lock_file(), e.strerror))
-            os.close(self.lock_fd)
-            raise
-
-        os.close(self.lock_fd)
-        self.lock_fd = None
-
-    '''
-    Note: We don't support blocking=False
-    '''
-
-    def acquire_lock(self, instance, blocking=True):
-        lock_path = instance.get_lock_file()
-        if lock_path is None:
-            # If from migration or someone blanked local_path for any other reason, recoverable by save
-            instance.save()
-            lock_path = instance.get_lock_file()
-            if lock_path is None:
-                raise RuntimeError(u'Invalid lock file path')
-
-        try:
-            self.lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT)
-        except OSError as e:
-            logger.error("I/O error({0}) while trying to open lock file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
-            raise
-
-        start_time = time.time()
-        while True:
-            try:
-                fcntl.lockf(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except IOError as e:
-                if e.errno not in (errno.EAGAIN, errno.EACCES):
-                    os.close(self.lock_fd)
-                    logger.error("I/O error({0}) while trying to aquire lock on file [{1}]: {2}".format(e.errno, lock_path, e.strerror))
-                    raise
-                else:
-                    time.sleep(1.0)
-        waiting_time = time.time() - start_time
-
-        if waiting_time > 1.0:
-            logger.info(f'{getattr(instance, "log_format", instance)} waited {waiting_time} to acquire lock for local source tree for path {lock_path}.')
-
     def pre_run_hook(self, instance, private_data_dir):
         super(RunProjectUpdate, self).pre_run_hook(instance, private_data_dir)
         # re-create root project folder if a natural disaster has destroyed it
@@ -1314,16 +1337,8 @@ class RunProjectUpdate(BaseTask):
         if instance.cancel_flag:
             logger.debug("ProjectUpdate({0}) was canceled".format(instance.pk))
             return
-        self.acquire_lock(instance)
-
-        self.original_branch = None
-        if instance.scm_type == 'git' and instance.branch_override:
-            if os.path.exists(project_path):
-                git_repo = git.Repo(project_path)
-                if git_repo.head.is_detached:
-                    self.original_branch = git_repo.head.commit
-                else:
-                    self.original_branch = git_repo.active_branch
+        if instance.launch_type != 'sync':
+            self.acquire_lock(instance.project, instance.id)
 
         if not os.path.exists(project_path):
             os.makedirs(project_path)  # used as container mount
@@ -1409,16 +1424,9 @@ class RunProjectUpdate(BaseTask):
                 if status == 'successful':
                     # copy project folder before resetting to default branch
                     self.make_local_copy(instance, self.job_private_data_dir)
-                if self.original_branch:
-                    # for git project syncs, non-default branches can be problems
-                    # restore to branch the repo was on before this run
-                    try:
-                        self.original_branch.checkout()
-                    except Exception:
-                        # this could have failed due to dirty tree, but difficult to predict all cases
-                        logger.exception('Failed to restore project repo to prior state after {}'.format(instance.log_format))
         finally:
-            self.release_lock(instance)
+            if instance.launch_type != 'sync':
+                self.release_lock(instance.project, instance.id)
 
         p = instance.project
         if instance.job_type == 'check' and status not in ('failed', 'canceled'):
