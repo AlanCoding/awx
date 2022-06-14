@@ -656,6 +656,46 @@ class SourceControlMixin(BaseTask):
         create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
         return local_project_sync
 
+    def sync_and_copy(self, unified_job, project, private_data_dir, scm_branch=None):
+        sync_needs = self.get_sync_needs(unified_job, project, scm_branch=scm_branch)
+
+        if sync_needs:
+            local_project_sync = self.spawn_project_sync(unified_job, project, sync_needs, scm_branch=scm_branch)
+            # save the associated job before calling run() so that a
+            # cancel() call on the job can cancel the project update
+            if isinstance(unified_job, Job):
+                unified_job = self.update_model(unified_job.pk, project_update=local_project_sync)
+            else:
+                unified_job = self.update_model(unified_job.pk, source_project_update=local_project_sync)
+
+            try:
+                # the job private_data_dir is passed so sync can download roles and collections there
+                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
+                sync_task.run(local_project_sync.id)
+                local_project_sync.refresh_from_db()
+                unified_job = self.save_revision(unified_job, local_project_sync.scm_revision)
+            except Exception:
+                local_project_sync.refresh_from_db()
+                if local_project_sync.status != 'canceled':
+                    unified_job = self.update_model(
+                        unified_job.pk,
+                        status='failed',
+                        job_explanation=(
+                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                            % ('project_update', local_project_sync.name, local_project_sync.id)
+                        ),
+                    )
+                    raise
+                unified_job.refresh_from_db()
+                if unified_job.cancel_flag:
+                    return
+        else:
+            # Case where a local sync is not needed, meaning that local tree is
+            # up-to-date with project, job is running project current version
+            unified_job = self.save_revision(unified_job, project.scm_revision)
+            # Project update does not copy the folder, so copy here
+            RunProjectUpdate.make_local_copy(project, private_data_dir)
+
 
 @task(queue=get_local_queuename)
 class RunJob(SourceControlMixin, BaseTask):
@@ -932,43 +972,13 @@ class RunJob(SourceControlMixin, BaseTask):
             # ran inside of the event saving code
             update_smart_memberships_for_inventory(job.inventory)
 
+    def save_revision(self, job, scm_revision):
+        if not scm_revision:
+            return job
+        return self.update_model(job.pk, scm_revision=scm_revision)
+
     def build_project_dir(self, job, private_data_dir):
-        sync_needs = self.get_sync_needs(job.id, job.project, scm_branch=None)
-
-        if sync_needs:
-            local_project_sync = self.spawn_project_sync(job.id, job.project, sync_needs, scm_branch=None)
-            # save the associated job before calling run() so that a
-            # cancel() call on the job can cancel the project update
-            job = self.update_model(job.pk, project_update=local_project_sync)
-
-            try:
-                # the job private_data_dir is passed so sync can download roles and collections there
-                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                sync_task.run(local_project_sync.id)
-                local_project_sync.refresh_from_db()
-                job = self.update_model(job.pk, scm_revision=local_project_sync.scm_revision)
-            except Exception:
-                local_project_sync.refresh_from_db()
-                if local_project_sync.status != 'canceled':
-                    job = self.update_model(
-                        job.pk,
-                        status='failed',
-                        job_explanation=(
-                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                            % ('project_update', local_project_sync.name, local_project_sync.id)
-                        ),
-                    )
-                    raise
-                job.refresh_from_db()
-                if job.cancel_flag:
-                    return
-        else:
-            # Case where a local sync is not needed, meaning that local tree is
-            # up-to-date with project, job is running project current version
-            if job.project.scm_revision:
-                job = self.update_model(job.pk, scm_revision=job.project.scm_revision)
-            # Project update does not copy the folder, so copy here
-            RunProjectUpdate.make_local_copy(job.project, private_data_dir)
+        self.sync_and_copy(job, job.project, private_data_dir, scm_branch=job.scm_branch)
 
     def final_run_hook(self, job, status, private_data_dir, fact_modification_times):
         super(RunJob, self).final_run_hook(job, status, private_data_dir, fact_modification_times)
@@ -1601,6 +1611,13 @@ class RunInventoryUpdate(SourceControlMixin, BaseTask):
         # All credentials not used by inventory source injector
         return inventory_update.get_extra_credentials()
 
+    def save_revision(self, inventory_update, scm_revision):
+        if not scm_revision:
+            return inventory_update
+        inventory_update.inventory_source.scm_last_revision = scm_revision
+        inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
+        return inventory_update
+
     def build_project_dir(self, inventory_update, private_data_dir):
         source_project = None
         if inventory_update.inventory_source:
@@ -1608,35 +1625,7 @@ class RunInventoryUpdate(SourceControlMixin, BaseTask):
         if (
             inventory_update.source == 'scm' and inventory_update.launch_type != 'scm' and source_project and source_project.scm_type
         ):  # never ever update manual projects
-
-            sync_needs = self.get_sync_needs(inventory_update.id, source_project, scm_branch=None)
-
-            if sync_needs:
-                local_project_sync = self.spawn_project_sync(inventory_update.id, source_project, sync_needs, scm_branch=None)
-                # associate the inventory update before calling run() so that a
-                # cancel() call on the inventory update can cancel the project update
-                inventory_update = self.update_model(inventory_update.pk, source_project_update=local_project_sync)
-
-                try:
-                    sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                    sync_task.run(local_project_sync.id)
-                    local_project_sync.refresh_from_db()
-                    inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
-                    inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
-                except Exception:
-                    inventory_update = self.update_model(
-                        inventory_update.pk,
-                        status='failed',
-                        job_explanation=(
-                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                            % ('project_update', local_project_sync.name, local_project_sync.id)
-                        ),
-                    )
-                    raise
-            else:
-                inventory_update.inventory_source.scm_last_revision = source_project.scm_revision
-                inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
-                RunProjectUpdate.make_local_copy(source_project, private_data_dir)
+            self.sync_and_copy(inventory_update, source_project, private_data_dir)
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
             RunProjectUpdate.make_local_copy(source_project, private_data_dir)
