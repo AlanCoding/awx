@@ -595,8 +595,70 @@ class BaseTask(object):
                 raise AwxTaskError.TaskError(self.instance, rc)
 
 
+class SourceControlMixin(BaseTask):
+    """Utility methods for tasks that run use content from source control"""
+
+    def get_sync_needs(self, unified_job, project, scm_branch=None):
+        project_path = project.get_project_path(check_if_exists=False)
+        job_revision = project.scm_revision
+        sync_needs = []
+        source_update_tag = 'update_{}'.format(project.scm_type)
+        branch_override = bool(scm_branch and scm_branch != project.scm_branch)
+        if not project.scm_type:
+            pass  # manual projects are not synced, user has responsibility for that
+        elif not os.path.exists(project_path):
+            logger.debug(f'Performing fresh clone of {project.id} for unified job {unified_job.id} on this instance.')
+            sync_needs.append(source_update_tag)
+        elif project.scm_type == 'git' and project.scm_revision and (not branch_override):
+            try:
+                git_repo = git.Repo(project_path)
+
+                if job_revision == git_repo.head.commit.hexsha:
+                    logger.debug(f'Skipping project sync for {unified_job.id} because commit is locally available')
+                else:
+                    sync_needs.append(source_update_tag)
+            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
+                logger.debug(f'Needed commit for {unified_job.id} not in local source tree, will sync with remote')
+                sync_needs.append(source_update_tag)
+        else:
+            logger.debug(f'Project not available locally, {unified_job.id} will sync with remote')
+            sync_needs.append(source_update_tag)
+
+        has_cache = os.path.exists(os.path.join(project.get_cache_path(), project.cache_id))
+        # Galaxy requirements are not supported for manual projects
+        if project.scm_type and ((not has_cache) or branch_override):
+            sync_needs.extend(['install_roles', 'install_collections'])
+
+        return sync_needs
+
+    def spawn_project_sync(self, unified_job, project, sync_needs, scm_branch=None):
+        pu_ig = unified_job.instance_group
+        pu_en = Instance.objects.me().hostname
+
+        sync_metafields = dict(
+            launch_type="sync",
+            job_type='run',
+            job_tags=','.join(sync_needs),
+            status='running',
+            instance_group=pu_ig,
+            execution_node=pu_en,
+            controller_node=pu_en,
+            celery_task_id=unified_job.celery_task_id,
+        )
+        if scm_branch and scm_branch != project.scm_branch:
+            sync_metafields['scm_branch'] = scm_branch
+            sync_metafields['scm_clean'] = True  # to accomidate force pushes
+        if 'update_' not in sync_metafields['job_tags']:
+            sync_metafields['scm_revision'] = project.scm_revision
+        local_project_sync = project.create_project_update(_eager_fields=sync_metafields)
+        local_project_sync.log_lifecycle("controller_node_chosen")
+        local_project_sync.log_lifecycle("execution_node_chosen")
+        create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
+        return local_project_sync
+
+
 @task(queue=get_local_queuename)
-class RunJob(BaseTask):
+class RunJob(SourceControlMixin, BaseTask):
     """
     Run a job using ansible-playbook.
     """
@@ -871,59 +933,10 @@ class RunJob(BaseTask):
             update_smart_memberships_for_inventory(job.inventory)
 
     def build_project_dir(self, job, private_data_dir):
-        project_path = job.project.get_project_path(check_if_exists=False)
-        job_revision = job.project.scm_revision
-        sync_needs = []
-        source_update_tag = 'update_{}'.format(job.project.scm_type)
-        branch_override = bool(job.scm_branch and job.scm_branch != job.project.scm_branch)
-        if not job.project.scm_type:
-            pass  # manual projects are not synced, user has responsibility for that
-        elif not os.path.exists(project_path):
-            logger.debug('Performing fresh clone of {} on this instance.'.format(job.project))
-            sync_needs.append(source_update_tag)
-        elif job.project.scm_type == 'git' and job.project.scm_revision and (not branch_override):
-            try:
-                git_repo = git.Repo(project_path)
-
-                if job_revision == git_repo.head.commit.hexsha:
-                    logger.debug('Skipping project sync for {} because commit is locally available'.format(job.log_format))
-                else:
-                    sync_needs.append(source_update_tag)
-            except (ValueError, BadGitName, git.exc.InvalidGitRepositoryError):
-                logger.debug('Needed commit for {} not in local source tree, will sync with remote'.format(job.log_format))
-                sync_needs.append(source_update_tag)
-        else:
-            logger.debug('Project not available locally, {} will sync with remote'.format(job.log_format))
-            sync_needs.append(source_update_tag)
-
-        has_cache = os.path.exists(os.path.join(job.project.get_cache_path(), job.project.cache_id))
-        # Galaxy requirements are not supported for manual projects
-        if job.project.scm_type and ((not has_cache) or branch_override):
-            sync_needs.extend(['install_roles', 'install_collections'])
+        sync_needs = self.get_sync_needs(job.id, job.project, scm_branch=None)
 
         if sync_needs:
-            pu_ig = job.instance_group
-            pu_en = Instance.objects.me().hostname
-
-            sync_metafields = dict(
-                launch_type="sync",
-                job_type='run',
-                job_tags=','.join(sync_needs),
-                status='running',
-                instance_group=pu_ig,
-                execution_node=pu_en,
-                controller_node=pu_en,
-                celery_task_id=job.celery_task_id,
-            )
-            if branch_override:
-                sync_metafields['scm_branch'] = job.scm_branch
-                sync_metafields['scm_clean'] = True  # to accomidate force pushes
-            if 'update_' not in sync_metafields['job_tags']:
-                sync_metafields['scm_revision'] = job_revision
-            local_project_sync = job.project.create_project_update(_eager_fields=sync_metafields)
-            local_project_sync.log_lifecycle("controller_node_chosen")
-            local_project_sync.log_lifecycle("execution_node_chosen")
-            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
+            local_project_sync = self.spawn_project_sync(job.id, job.project, sync_needs, scm_branch=None)
             # save the associated job before calling run() so that a
             # cancel() call on the job can cancel the project update
             job = self.update_model(job.pk, project_update=local_project_sync)
@@ -952,8 +965,8 @@ class RunJob(BaseTask):
         else:
             # Case where a local sync is not needed, meaning that local tree is
             # up-to-date with project, job is running project current version
-            if job_revision:
-                job = self.update_model(job.pk, scm_revision=job_revision)
+            if job.project.scm_revision:
+                job = self.update_model(job.pk, scm_revision=job.project.scm_revision)
             # Project update does not copy the folder, so copy here
             RunProjectUpdate.make_local_copy(job.project, private_data_dir)
 
@@ -1432,7 +1445,7 @@ class RunProjectUpdate(BaseTask):
 
 
 @task(queue=get_local_queuename)
-class RunInventoryUpdate(BaseTask):
+class RunInventoryUpdate(SourceControlMixin, BaseTask):
 
     model = InventoryUpdate
     event_model = InventoryUpdateEvent
@@ -1596,48 +1609,30 @@ class RunInventoryUpdate(BaseTask):
             inventory_update.source == 'scm' and inventory_update.launch_type != 'scm' and source_project and source_project.scm_type
         ):  # never ever update manual projects
 
-            # Check if the content cache exists, so that we do not unnecessarily re-download roles
-            sync_needs = ['update_{}'.format(source_project.scm_type)]
-            has_cache = os.path.exists(os.path.join(source_project.get_cache_path(), source_project.cache_id))
-            # Galaxy requirements are not supported for manual projects
-            if not has_cache:
-                sync_needs.extend(['install_roles', 'install_collections'])
+            sync_needs = self.get_sync_needs(inventory_update.id, source_project, scm_branch=None)
 
-            local_project_sync = source_project.create_project_update(
-                _eager_fields=dict(
-                    launch_type="sync",
-                    job_type='run',
-                    job_tags=','.join(sync_needs),
-                    status='running',
-                    execution_node=Instance.objects.me().hostname,
-                    controller_node=Instance.objects.me().hostname,
-                    instance_group=inventory_update.instance_group,
-                    celery_task_id=inventory_update.celery_task_id,
-                )
-            )
-            local_project_sync.log_lifecycle("controller_node_chosen")
-            local_project_sync.log_lifecycle("execution_node_chosen")
-            create_partition(local_project_sync.event_class._meta.db_table, start=local_project_sync.created)
-            # associate the inventory update before calling run() so that a
-            # cancel() call on the inventory update can cancel the project update
-            local_project_sync.scm_inventory_updates.add(inventory_update)
+            if sync_needs:
+                local_project_sync = self.spawn_project_sync(inventory_update.id, source_project, sync_needs, scm_branch=None)
+                # associate the inventory update before calling run() so that a
+                # cancel() call on the inventory update can cancel the project update
+                inventory_update = self.update_model(inventory_update.pk, source_project_update=local_project_sync)
 
-            try:
-                sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
-                sync_task.run(local_project_sync.id)
-                local_project_sync.refresh_from_db()
-                inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
-                inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
-            except Exception:
-                inventory_update = self.update_model(
-                    inventory_update.pk,
-                    status='failed',
-                    job_explanation=(
-                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
-                        % ('project_update', local_project_sync.name, local_project_sync.id)
-                    ),
-                )
-                raise
+                try:
+                    sync_task = RunProjectUpdate(job_private_data_dir=private_data_dir)
+                    sync_task.run(local_project_sync.id)
+                    local_project_sync.refresh_from_db()
+                    inventory_update.inventory_source.scm_last_revision = local_project_sync.scm_revision
+                    inventory_update.inventory_source.save(update_fields=['scm_last_revision'])
+                except Exception:
+                    inventory_update = self.update_model(
+                        inventory_update.pk,
+                        status='failed',
+                        job_explanation=(
+                            'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                            % ('project_update', local_project_sync.name, local_project_sync.id)
+                        ),
+                    )
+                    raise
         elif inventory_update.source == 'scm' and inventory_update.launch_type == 'scm' and source_project:
             # This follows update, not sync, so make copy here
             RunProjectUpdate.make_local_copy(source_project, private_data_dir)
