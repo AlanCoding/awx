@@ -705,7 +705,9 @@ class SourceControlMixin(BaseTask):
     def sync_and_copy_without_lock(self, unified_job, project, private_data_dir, scm_branch=None):
         sync_needs = self.get_sync_needs(unified_job, project, scm_branch=scm_branch)
 
-        if sync_needs:
+        # TODO: skip syncs for inventory updates, but this needs a link added so clients can follow
+        # source_project is only a field on inventory sources, not updates, and we could add this
+        if sync_needs or isinstance(unified_job, InventoryUpdate):
             local_project_sync = self.spawn_project_sync(unified_job, project, sync_needs, scm_branch=scm_branch)
             # save the associated job before calling run() so that a
             # cancel() call on the job can cancel the project update
