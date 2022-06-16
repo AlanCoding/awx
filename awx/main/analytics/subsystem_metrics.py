@@ -184,6 +184,8 @@ class Metrics:
             m.clear_value(self.conn)
         self.metrics_have_changed = True
         self.conn.delete(root_key + "_lock")
+        for m in self.conn.scan_iter(root_key + '_instance_*'):
+            self.conn.delete(m)
 
     def inc(self, field, value):
         if value != 0:
