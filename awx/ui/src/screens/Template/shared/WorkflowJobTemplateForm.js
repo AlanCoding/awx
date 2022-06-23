@@ -212,7 +212,7 @@ function WorkflowJobTemplateForm({
           name="extra_vars"
           label={t`Variables`}
           promptId="template-ask-variables-on-launch"
-          tooltip={t`Pass extra command line variables to the playbook. This is the -e or --extra-vars command line parameter for ansible-playbook. Provide key/value pairs using either YAML or JSON. Refer to the Ansible Tower documentation for example syntax.`}
+          tooltip={t`Pass extra command line variables to the playbook. This is the -e or --extra-vars command line parameter for ansible-playbook. Provide key/value pairs using either YAML or JSON. Refer to the Ansible Controller documentation for example syntax.`}
         />
       </FormFullWidthLayout>
       <FormGroup fieldId="options" label={t`Options`}>
