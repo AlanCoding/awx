@@ -470,7 +470,7 @@ function WebhookFields() {
           label={t`HTTP Headers`}
           mode="javascript"
           tooltip={t`Specify HTTP Headers in JSON format. Refer to
-        the Ansible Tower documentation for example syntax.`}
+        the Ansible Controller documentation for example syntax.`}
           rows={5}
         />
       </FormFullWidthLayout>
