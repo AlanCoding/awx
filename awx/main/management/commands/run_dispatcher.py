@@ -53,7 +53,6 @@ class Command(BaseCommand):
         # (like the node heartbeat)
         periodic.run_continuously()
 
-        reaper.startup_reaping()
         consumer = None
 
         try:

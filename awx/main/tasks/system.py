@@ -103,7 +103,8 @@ def dispatch_startup():
     #
     apply_cluster_membership_policies()
     cluster_node_heartbeat()
-    reaper.reap()
+    reaper.startup_reaping()
+    reaper.reap_waiting(grace_period=0)
     Metrics().clear_values()
 
     # Update Tower's rsyslog.conf file based on loggins settings in the db
@@ -115,9 +116,9 @@ def inform_cluster_of_shutdown():
         this_inst = Instance.objects.get(hostname=settings.CLUSTER_HOST_ID)
         this_inst.mark_offline(update_last_seen=True, errors=_('Instance received normal shutdown signal'))
         try:
-            reaper.reap(this_inst)
+            reaper.reap_waiting(this_inst, grace_period=0)
         except Exception:
-            logger.exception('failed to reap jobs for {}'.format(this_inst.hostname))
+            logger.exception('failed to reap waiting jobs for {}'.format(this_inst.hostname))
         logger.warning('Normal shutdown signal for instance {}, ' 'removed self from capacity pool.'.format(this_inst.hostname))
     except Exception:
         logger.exception('Encountered problem with normal shutdown signal.')
@@ -535,6 +536,7 @@ def cluster_node_heartbeat():
     for other_inst in lost_instances:
         try:
             reaper.reap(other_inst)
+            reaper.reap_waiting(other_inst, grace_period=0)
         except Exception:
             logger.exception('failed to reap jobs for {}'.format(other_inst.hostname))
         try:
