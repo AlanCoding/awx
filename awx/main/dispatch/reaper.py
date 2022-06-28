@@ -50,9 +50,9 @@ def reap_job(j, status):
     logger.error('{} is no longer running; reaping'.format(j.log_format))
 
 
-def reap(instance=None, status='failed', excluded_uuids=[]):
+def reap_waiting(instance=None, status='failed', grace_period=60):
     """
-    Reap all jobs in waiting|running for this instance.
+    Reap all jobs in waiting for this instance.
     """
     me = instance
     if me is None:
@@ -62,11 +62,25 @@ def reap(instance=None, status='failed', excluded_uuids=[]):
             logger.warning(f'Local instance is not registered, not running reaper: {e}')
             return
     now = tz_now()
+    jobs = UnifiedJob.objects.filter(status='waiting', modified__lte=now - timedelta(seconds=grace_period), controller_node=me.hostname)
+    for j in jobs:
+        reap_job(j, status)
+
+
+def reap(instance=None, status='failed', excluded_uuids=[]):
+    """
+    Reap all jobs in running for this instance.
+    """
+    me = instance
+    if me is None:
+        try:
+            me = Instance.objects.me()
+        except RuntimeError as e:
+            logger.warning(f'Local instance is not registered, not running reaper: {e}')
+            return
     workflow_ctype_id = ContentType.objects.get_for_model(WorkflowJob).id
     jobs = UnifiedJob.objects.filter(
-        (Q(status='running') | Q(status='waiting', modified__lte=now - timedelta(seconds=60)))
-        & (Q(execution_node=me.hostname) | Q(controller_node=me.hostname))
-        & ~Q(polymorphic_ctype_id=workflow_ctype_id)
+        Q(status='running') & (Q(execution_node=me.hostname) | Q(controller_node=me.hostname)) & ~Q(polymorphic_ctype_id=workflow_ctype_id)
     ).exclude(celery_task_id__in=excluded_uuids)
     for j in jobs:
         reap_job(j, status)

@@ -54,6 +54,7 @@ class Command(BaseCommand):
         periodic.run_continuously()
 
         reaper.startup_reaping()
+        reaper.reap_waiting(grace_period=0)
         consumer = None
 
         try:
