@@ -34,7 +34,9 @@ class BaseM:
     def to_prometheus(self, instance_data):
         output_text = f"# HELP {self.field} {self.help_text}\n# TYPE {self.field} gauge\n"
         for instance in instance_data:
-            output_text += f'{self.field}{{node="{instance}"}} {instance_data[instance][self.field]}\n'
+            if self.field in instance_data[instance]:
+                # on upgrade, if there are stale instances, we can end up with issues where new metrics are not present
+                output_text += f'{self.field}{{node="{instance}"}} {instance_data[instance][self.field]}\n'
         return output_text
 
 
@@ -184,6 +186,8 @@ class Metrics:
             m.clear_value(self.conn)
         self.metrics_have_changed = True
         self.conn.delete(root_key + "_lock")
+        for m in self.conn.scan_iter(root_key + '_instance_*'):
+            self.conn.delete(m)
 
     def inc(self, field, value):
         if value != 0:
