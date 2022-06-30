@@ -65,6 +65,7 @@ from awx.main.tasks.callback import (
     RunnerCallbackForProjectUpdate,
     RunnerCallbackForSystemJob,
 )
+from awx.main.tasks.signals import with_signal_handling, signal_callback
 from awx.main.tasks.receptor import AWXReceptorJob
 from awx.main.exceptions import AwxTaskError, PostRunError, ReceptorNodeNotFound
 from awx.main.utils.ansible import read_ansible_config
@@ -395,6 +396,7 @@ class BaseTask(object):
                 instance.save(update_fields=['ansible_version'])
 
     @with_path_cleanup
+    @with_signal_handling
     def run(self, pk, **kwargs):
         """
         Run the job/task and capture its output.
@@ -427,7 +429,7 @@ class BaseTask(object):
             private_data_dir = self.build_private_data_dir(self.instance)
             self.pre_run_hook(self.instance, private_data_dir)
             self.instance.log_lifecycle("preparing_playbook")
-            if self.instance.cancel_flag:
+            if self.instance.cancel_flag or signal_callback():
                 self.instance = self.update_model(self.instance.pk, status='canceled')
             if self.instance.status != 'running':
                 # Stop the task chain and prevent starting the job if it has
@@ -555,6 +557,11 @@ class BaseTask(object):
                 # ensure failure notification sends even if playbook_on_stats event is not triggered
                 handle_success_and_failure_notifications.apply_async([self.instance.id])
 
+            elif status == 'canceled':
+                self.instance = self.update_model(pk)
+                if (getattr(self.instance, 'cancel_flag', False) is False) and signal_callback():
+                    self.runner_callback.delay_update(job_explanation="Task was canceled due to receiving a shutdown signal.")
+                    status = 'failed'
         except ReceptorNodeNotFound as exc:
             extra_update_fields['job_explanation'] = str(exc)
         except Exception:
