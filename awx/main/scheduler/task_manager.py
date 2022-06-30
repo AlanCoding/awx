@@ -498,6 +498,9 @@ class TaskManager:
                     running_workflow_templates.add(task.unified_job_template_id)
                 self.start_task(task, None, task.get_jobs_fail_chain(), None)
                 continue
+            elif isinstance(task, WorkflowApproval):
+                self.timeout_approval_node(task)
+                continue
 
             # Determine if there is control capacity for the task
             if task.capacity_type == 'control':
@@ -586,24 +589,19 @@ class TaskManager:
                 tasks_to_update_job_explanation.append(task)
         logger.debug("{} couldn't be scheduled on graph, waiting for next cycle".format(task.log_format))
 
-    def timeout_approval_node(self):
-        workflow_approvals = WorkflowApproval.objects.filter(status='pending')
-        now = tz_now()
-        for task in workflow_approvals:
-            approval_timeout_seconds = timedelta(seconds=task.timeout)
-            if task.timeout == 0:
-                continue
-            if (now - task.created) >= approval_timeout_seconds:
-                timeout_message = _("The approval node {name} ({pk}) has expired after {timeout} seconds.").format(
-                    name=task.name, pk=task.pk, timeout=task.timeout
-                )
-                logger.warning(timeout_message)
-                task.timed_out = True
-                task.status = 'failed'
-                task.send_approval_notification('timed_out')
-                task.websocket_emit_status(task.status)
-                task.job_explanation = timeout_message
-                task.save(update_fields=['status', 'job_explanation', 'timed_out'])
+    def timeout_approval_node(self, task):
+        approval_timeout_seconds = timedelta(seconds=task.timeout)
+        if task.timeout == 0:
+            return
+        if (tz_now() - task.created) >= approval_timeout_seconds:
+            timeout_message = _("The approval node {name} ({pk}) has expired after {timeout} seconds.").format(name=task.name, pk=task.pk, timeout=task.timeout)
+            logger.warning(timeout_message)
+            task.timed_out = True
+            task.status = 'failed'
+            task.send_approval_notification('timed_out')
+            task.websocket_emit_status(task.status)
+            task.job_explanation = timeout_message
+            task.save(update_fields=['status', 'job_explanation', 'timed_out'])
 
     def reap_jobs_from_orphaned_instances(self):
         # discover jobs that are in running state but aren't on an execution node
@@ -664,7 +662,6 @@ class TaskManager:
 
             self.spawn_workflow_graph_jobs(running_workflow_tasks)
 
-            self.timeout_approval_node()
             self.reap_jobs_from_orphaned_instances()
 
             self.process_tasks(all_sorted_tasks)
