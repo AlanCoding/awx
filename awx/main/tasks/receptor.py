@@ -276,7 +276,6 @@ class AWXReceptorJob:
                     receptor_ctl.simple_command(f"work release {self.unit_id}")
                 except Exception:
                     logger.exception(f"Error releasing work unit {self.unit_id}.")
-            receptor_ctl.close()
 
     @property
     def sign_work(self):
@@ -350,6 +349,8 @@ class AWXReceptorJob:
             res = list(first_future.done)[0].result()
             if res.status == 'canceled':
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
+                resultsock.shutdown(socket.SHUT_RDWR)
+                resultfile.close()
             elif res.status == 'error':
                 # If ansible-runner ran, but an error occured at runtime, the traceback information
                 # is saved via the status_handler passed in to the processor.
