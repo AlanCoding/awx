@@ -530,7 +530,7 @@ class BaseTask(object):
                     event_handler=self.runner_callback.event_handler,
                     finished_callback=self.runner_callback.finished_callback,
                     status_handler=self.runner_callback.status_handler,
-                    cancel_callback=signal_callback(),
+                    cancel_callback=signal_callback,
                     **params,
                 )
             else:
@@ -1612,7 +1612,7 @@ class RunInventoryUpdate(BaseTask):
             return  # nothing to save, step out of the way to allow error reporting
 
         inventory_update.refresh_from_db()
-        private_data_dir = inventory_update.job_env['AWX_PRIVATE_DATA_DIR']
+        private_data_dir = self.runner_callback.extra_update_fields['job_env']['AWX_PRIVATE_DATA_DIR']
         expected_output = os.path.join(private_data_dir, 'artifacts', str(inventory_update.id), 'output.json')
         with open(expected_output) as f:
             data = json.load(f)
@@ -1647,7 +1647,7 @@ class RunInventoryUpdate(BaseTask):
 
         handler = SpecialInventoryHandler(
             self.runner_callback.event_handler,
-            signal_callback(),
+            signal_callback,
             verbosity=inventory_update.verbosity,
             job_timeout=self.get_instance_timeout(self.instance),
             start_time=inventory_update.started,
