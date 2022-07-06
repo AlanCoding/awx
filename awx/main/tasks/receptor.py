@@ -347,6 +347,7 @@ class AWXReceptorJob:
                 signal_state.raise_exception = True
                 res = processor_future.result()
             except SignalExit:
+                signal_state.raise_exception = False
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()

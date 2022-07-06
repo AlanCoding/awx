@@ -28,6 +28,7 @@ class SignalState:
         """Method to pass into the python signal.signal method to receive signals"""
         self.sigterm_flag = True
         if self.raise_exception:
+            self.raise_exception = False  # so it is not raised a second time in error handling
             raise SignalExit()
 
     def connect_signals(self):
