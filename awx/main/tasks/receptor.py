@@ -13,7 +13,6 @@ import yaml
 # Django
 from django.conf import settings
 from django.db import connections
-from django.utils.translation import ugettext_lazy as _
 
 # Runner
 import ansible_runner
@@ -452,7 +451,8 @@ class AWXReceptorJob:
                 return processor_future.result()
 
             if signal_callback():
-                return namedtuple('result', ['status', 'rc'])('canceled', 1)
+                result = namedtuple('result', ['status', 'rc'])
+                return result('canceled', 1)
 
             time.sleep(0.5)
 
