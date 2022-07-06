@@ -9,12 +9,10 @@ import stat
 from django.conf import settings
 from django_guid import get_guid
 from django.utils.functional import cached_property
-from django.db import connections
 
 # AWX
 from awx.main.redact import UriCleaner
 from awx.main.constants import MINIMAL_EVENTS, ANSIBLE_RUNNER_NEEDS_UPDATE_MESSAGE
-from awx.main.utils.update_model import update_model
 from awx.main.queue import CallbackQueueDispatcher
 
 logger = logging.getLogger('awx.main.tasks.callback')
@@ -34,9 +32,6 @@ class RunnerCallback:
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
         self.wrapup_event_dispatched = False
         self.extra_update_fields = {}
-
-    def update_model(self, pk, _attempt=0, **updates):
-        return update_model(self.model, pk, _attempt=0, _max_attempts=self.update_attempts, **updates)
 
     @cached_property
     def wrapup_event_type(self):
@@ -200,12 +195,9 @@ class RunnerCallback:
             for k, v in self.safe_env.items():
                 if k in job_env:
                     job_env[k] = v
-            from awx.main.signals import disable_activity_stream  # Circular import
 
-            with disable_activity_stream():
-                self.instance = self.update_model(self.instance.pk, job_args=json.dumps(runner_config.command), job_cwd=runner_config.cwd, job_env=job_env)
-            # We opened a connection just for that save, close it here now
-            connections.close_all()
+            self.delay_update(job_args=json.dumps(runner_config.command), job_cwd=runner_config.cwd, job_env=job_env)
+
         elif status_data['status'] == 'failed':
             # For encrypted ssh_key_data, ansible-runner worker will open and write the
             # ssh_key_data to a named pipe. Then, once the podman container starts, ssh-agent will
