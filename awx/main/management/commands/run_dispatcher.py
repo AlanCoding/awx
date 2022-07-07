@@ -38,7 +38,8 @@ class Command(BaseCommand):
             dest='cancel',
             help=(
                 'Cancel a particular task id. Takes either a single id string, or a JSON list of multiple ids. '
-                'Can take in output from the --running argument as input to cancel all tasks.'
+                'Can take in output from the --running argument as input to cancel all tasks. '
+                'Only running tasks can be canceled, queued tasks must be started before they can be canceled.'
             ),
         )
 
