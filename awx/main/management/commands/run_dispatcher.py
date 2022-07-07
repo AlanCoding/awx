@@ -1,6 +1,7 @@
 # Copyright (c) 2015 Ansible, Inc.
 # All Rights Reserved.
 import logging
+import yaml
 
 from django.conf import settings
 from django.core.cache import cache as django_cache
@@ -35,8 +36,10 @@ class Command(BaseCommand):
         parser.add_argument(
             '--cancel',
             dest='cancel',
-            nargs=1,
-            help=('cancel a particular task id'),
+            help=(
+                'Cancel a particular task id. Takes either a single id string, or a JSON list of multiple ids. '
+                'Can take in output from the --running argument as input to cancel all tasks.'
+            ),
         )
 
     def handle(self, *arg, **options):
@@ -49,7 +52,13 @@ class Command(BaseCommand):
         if options.get('reload'):
             return Control('dispatcher').control({'control': 'reload'})
         if options.get('cancel'):
-            return Control('dispatcher').control({'control': 'cancel', 'celery_task_id': options.get('cancel')})
+            cancel_str = options.get('cancel')
+            try:
+                cancel_data = yaml.safe_load(cancel_str)
+            except Exception:
+                cancel_data = [cancel_str]
+            print(Control('dispatcher').cancel(cancel_data))
+            return
 
         # It's important to close these because we're _about_ to fork, and we
         # don't want the forked processes to inherit the open sockets

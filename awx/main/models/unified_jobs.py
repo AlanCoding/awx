@@ -1382,39 +1382,58 @@ class UnifiedJob(
             return 'Previous Task Canceled: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (self.model_to_str(), self.name, self.id)
         return None
 
+    def cancel_dispatcher_process(self):
+        if not self.celery_task_id:
+            return
+        canceled = []
+        try:
+            # Use control and reply mechanism to cancel and obtain confirmation
+            timeout = 5
+            canceled = ControlDispatcher('dispatcher', self.controller_node).cancel([self.celery_task_id])
+        except (socket.timeout, RuntimeError):
+            logger.error(f'could not reach dispatcher on {self.controller_node} within {timeout}s')
+        return bool(self.celery_task_id in canceled)  # True or False, whether confirmation was obtained
+
     def cancel(self, job_explanation=None, is_chain=False):
         if self.can_cancel:
             if not is_chain:
                 for x in self.get_jobs_fail_chain():
                     x.cancel(job_explanation=self._build_job_explanation(), is_chain=True)
 
+            cancel_fields = []
             if not self.cancel_flag:
                 self.cancel_flag = True
                 self.start_args = ''  # blank field to remove encrypted passwords
-                cancel_fields = ['cancel_flag', 'start_args']
-                if self.status in ('pending', 'waiting', 'new'):
-                    self.status = 'canceled'
-                    cancel_fields.append('status')
+                cancel_fields.extend(['cancel_flag', 'start_args'])
+
                 if job_explanation is not None:
                     self.job_explanation = job_explanation
                     cancel_fields.append('job_explanation')
-                self.save(update_fields=cancel_fields)
-                self.websocket_emit_status("canceled")
 
-            def actually_cancel():
-                if self.celery_task_id:
-                    from awx.main.tasks.system import cancel_control_process
+            controller_notified = False
+            if self.celery_task_id:
+                controller_notified = self.cancel_dispatcher_process()
 
-                    # This task runs logic in the main dispatcher process
-                    # so the sigterm will be issued without waiting in the multiprocessing queue
-                    # this is important so users can cancel jobs in an overloaded system
-                    cancel_control_process.apply_async([self.celery_task_id], queue=self.get_queue_name())
-                else:
-                    from awx.main.tasks.system import cancel_unified_job
+            else:
+                # Avoid race condition where we have stale model from pending state but job has already started,
+                # its checking signal but not cancel_flag, so re-send signal after this database commit
+                def try_to_cancel_one_last_time():
+                    if not self.celery_task_id:
+                        self.refresh_from_db(fields=['celery_task_id'])
+                    self.cancel_dispatcher_process()
 
-                    cancel_unified_job.apply_async([self.id], queue=self.get_queue_name())
+                connection.on_commit(try_to_cancel_one_last_time)
 
-            connection.on_commit(actually_cancel)
+            # If a SIGTERM signal was sent to the control process, and acked by the dispatcher
+            # then we want to let its own cleanup change status, otherwise change status now
+            if not controller_notified:
+                if self.status != 'canceled':
+                    self.status = 'canceled'
+                    cancel_fields.append('status')
+
+            self.save(update_fields=cancel_fields)
+            self.websocket_emit_status("canceled")
+
         return self.cancel_flag
 
     @property

@@ -37,8 +37,8 @@ class Control(object):
     def running(self, *args, **kwargs):
         return self.control_with_reply('running', *args, **kwargs)
 
-    def cancel(self, celery_task_id, *args, **kwargs):
-        return self.control_with_reply('cancel', *args, extra_data={'celery_task_id': celery_task_id}, **kwargs)
+    def cancel(self, task_ids, *args, **kwargs):
+        return self.control_with_reply('cancel', *args, extra_data={'task_ids': task_ids}, **kwargs)
 
     @classmethod
     def generate_reply_queue_name(cls):

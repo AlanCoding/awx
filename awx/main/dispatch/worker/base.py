@@ -62,7 +62,7 @@ class AWXConsumerBase(object):
     def control(self, body):
         logger.warning(f'Received control signal:\n{body}')
         control = body.get('control')
-        if control in ('status', 'running'):
+        if control in ('status', 'running', 'cancel'):
             reply_queue = body['reply_to']
             if control == 'status':
                 msg = '\n'.join([self.listening_on, self.pool.debug()])
@@ -72,15 +72,14 @@ class AWXConsumerBase(object):
                     worker.calculate_managed_tasks()
                     msg.extend(worker.managed_tasks.keys())
             elif control == 'cancel':
-                celery_task_id = body['celery_task_id']
+                msg = []
+                task_ids = set(body['task_ids'])
                 for worker in self.pool.workers:
                     task = worker.current_task
-                    if task and task['uuid'] == celery_task_id:
-                        logger.warn(f'Canceling task with id={celery_task_id}, task={task.get("task")}, args={task.get("args")}')
+                    if task and task['uuid'] in task_ids:
+                        logger.warn(f'Canceling task with id={task["uuid"]}, task={task.get("task")}, args={task.get("args")}')
                         os.kill(worker.pid, signal.SIGTERM)
-                        msg = [celery_task_id]
-                else:
-                    msg = []
+                        msg.append(task['uuid'])
 
             with pg_bus_conn() as conn:
                 conn.notify(reply_queue, json.dumps(msg))
