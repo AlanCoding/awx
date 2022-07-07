@@ -30,7 +30,13 @@ class Command(BaseCommand):
             '--reload',
             dest='reload',
             action='store_true',
-            help=('cause the dispatcher to recycle all of its worker processes;' 'running jobs will run to completion first'),
+            help=('cause the dispatcher to recycle all of its worker processes; running jobs will run to completion first'),
+        )
+        parser.add_argument(
+            '--cancel',
+            dest='cancel',
+            nargs=1,
+            help=('cancel a particular task id'),
         )
 
     def handle(self, *arg, **options):
@@ -42,6 +48,8 @@ class Command(BaseCommand):
             return
         if options.get('reload'):
             return Control('dispatcher').control({'control': 'reload'})
+        if options.get('cancel'):
+            return Control('dispatcher').control({'control': 'cancel', 'celery_task_id': options.get('cancel')})
 
         # It's important to close these because we're _about_ to fork, and we
         # don't want the forked processes to inherit the open sockets

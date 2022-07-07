@@ -71,6 +71,16 @@ class AWXConsumerBase(object):
                 for worker in self.pool.workers:
                     worker.calculate_managed_tasks()
                     msg.extend(worker.managed_tasks.keys())
+            elif control == 'cancel':
+                celery_task_id = body['celery_task_id']
+                for worker in self.pool.workers:
+                    task = worker.current_task
+                    if task and task['uuid'] == celery_task_id:
+                        logger.warn(f'Canceling task with id={celery_task_id}, task={task.get("task")}, args={task.get("args")}')
+                        os.kill(worker.pid, signal.SIGTERM)
+                        msg = [celery_task_id]
+                else:
+                    msg = []
 
             with pg_bus_conn() as conn:
                 conn.notify(reply_queue, json.dumps(msg))

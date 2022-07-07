@@ -1374,22 +1374,6 @@ class UnifiedJob(
         return True
 
     @property
-    def actually_running(self):
-        # returns True if the job is running in the appropriate dispatcher process
-        running = False
-        if all([self.status == 'running', self.celery_task_id, self.execution_node]):
-            # If the job is marked as running, but the dispatcher
-            # doesn't know about it (or the dispatcher doesn't reply),
-            # then cancel the job
-            timeout = 5
-            try:
-                running = self.celery_task_id in ControlDispatcher('dispatcher', self.controller_node or self.execution_node).running(timeout=timeout)
-            except (socket.timeout, RuntimeError):
-                logger.error('could not reach dispatcher on {} within {}s'.format(self.execution_node, timeout))
-                running = False
-        return running
-
-    @property
     def can_cancel(self):
         return bool(self.status in CAN_CANCEL)
 
@@ -1409,9 +1393,6 @@ class UnifiedJob(
                 self.start_args = ''  # blank field to remove encrypted passwords
                 cancel_fields = ['cancel_flag', 'start_args']
                 if self.status in ('pending', 'waiting', 'new'):
-                    self.status = 'canceled'
-                    cancel_fields.append('status')
-                if self.status == 'running' and not self.actually_running:
                     self.status = 'canceled'
                     cancel_fields.append('status')
                 if job_explanation is not None:

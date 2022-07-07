@@ -262,18 +262,27 @@ def cancel_unified_job(unified_job_id):
     except UnifiedJob.DoesNotExist:
         logger.info(f'Job id {unified_job_id} has been deleted, aborting cancel')
         return
-    while unified_job.status in ACTIVE_STATES:
-        if unified_job.celery_task_id:
-            cancel_control_process.apply_async([unified_job.celery_task_id], queue=unified_job.get_queue_name())
-            logger.warning(f'sigterm issued to {unified_job.log_format} after it obtained a task id')
-            return
-        try:
-            unified_job.refresh_from_db(fields=['status', 'controller_node', 'execution_node'])
-        except unified_job.DoesNotExist:
-            logger.info(f'Job id {unified_job_id} has been deleted, cancel aborted')
-            return
-        time.sleep(1)
-    logger.info(f'{unified_job.log_format} stopped before obtaining a task id, sigterm not needed')
+
+    if (unified_job.status not in ACTIVE_STATES) or (not unified_job.celery_task_id):
+        logger.info(f'Canceling already handled for {unified_job_id} (status={unified_job.status}, task_id={unified_job.celery_task_id})')
+        return
+
+    running = False
+    try:
+        # If the job is marked as running, but the dispatcher
+        # doesn't know about it (or the dispatcher doesn't reply), then mark the job as canceled
+        timeout = 5
+        running = bool(unified_job.celery_task_id in ControlDispatcher('dispatcher', unified_job.controller_node).running(timeout=timeout))
+    except (socket.timeout, RuntimeError):
+        logger.error('could not reach dispatcher on {} within {}s'.format(unified_job.execution_node, timeout))
+
+    if running:
+        cancel_control_process.apply_async([unified_job.celery_task_id], queue=unified_job.get_queue_name())
+        logger.warning(f'sigterm issued to {unified_job.log_format} after it obtained a task id')
+    else:
+        unified_job.status = 'canceled'
+        unified_job.save(update_fields=['status'])
+        logger.warning(f'Job {unified_job.log_format} marked as canceled since process was not found')
 
 
 @task(queue='tower_broadcast_all')
