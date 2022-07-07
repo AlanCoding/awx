@@ -26,7 +26,7 @@ from awx.main.utils.common import (
     cleanup_new_process,
 )
 from awx.main.constants import MAX_ISOLATED_PATH_COLON_DELIMITER
-from awx.main.tasks.signals import signal_state, SignalExit
+from awx.main.tasks.signals import signal_state, signal_callback, SignalExit
 
 # Receptorctl
 from receptorctl.socket_interface import ReceptorControl
@@ -335,19 +335,19 @@ class AWXReceptorJob:
         connections.close_all()
 
         # "processor" and the main thread will be separate threads.
-        # If a cancel happens, only the main thread will raise an exception, in which case
-        # we yank the socket out from underneath the processor, which will cause it
-        # to exit.
-        # The context manager ensures we do not
-        # leave any threads laying around.
+        # If a cancel happens, the main thread will encounter an exception, in which case
+        # we yank the socket out from underneath the processor, which will cause it to exit.
+        # The ThreadPoolExecutor context manager ensures we do not leave any threads laying around.
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             processor_future = executor.submit(self.processor, resultfile)
 
             try:
                 signal_state.raise_exception = True
+                # address race condition where SIGTERM was issued after this dispatcher task started
+                if signal_callback():
+                    raise SignalExit()
                 res = processor_future.result()
             except SignalExit:
-                signal_state.raise_exception = False
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
                 resultfile.close()
