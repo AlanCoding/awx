@@ -155,7 +155,11 @@ class Metrics:
         if instance_name:
             self.instance_name = instance_name
         else:
-            self.instance_name = Instance.objects.me().hostname
+            try:
+                self.instance_name = Instance.objects.me().hostname
+            except Exception as e:
+                self.instance_name = settings.CLUSTER_HOST_ID
+                logger.info(f'Instance {self.instance_name} seems to be unregistered, error: {e}')
 
         # metric name, help_text
         METRICSLIST = [
