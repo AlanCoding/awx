@@ -1383,6 +1383,7 @@ class UnifiedJob(
         return None
 
     def cancel_dispatcher_process(self):
+        """Returns True if dispatcher running this job acknowledged request and sent SIGTERM"""
         if not self.celery_task_id:
             return
         canceled = []
@@ -1405,6 +1406,7 @@ class UnifiedJob(
                 self.cancel_flag = True
                 self.start_args = ''  # blank field to remove encrypted passwords
                 cancel_fields.extend(['cancel_flag', 'start_args'])
+                connection.on_commit(lambda: self.websocket_emit_status("canceled"))
 
                 if job_explanation is not None:
                     self.job_explanation = job_explanation
@@ -1432,7 +1434,6 @@ class UnifiedJob(
                     cancel_fields.append('status')
 
             self.save(update_fields=cancel_fields)
-            self.websocket_emit_status("canceled")
 
         return self.cancel_flag
 

@@ -720,11 +720,10 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
     def preferred_instance_groups(self):
         return []
 
-    @property
-    def actually_running(self):
+    def cancel_dispatcher_process(self):
         # WorkflowJobs don't _actually_ run anything in the dispatcher, so
         # there's no point in asking the dispatcher if it knows about this task
-        return self.status == 'running'
+        return False
 
 
 class WorkflowApprovalTemplate(UnifiedJobTemplate, RelatedJobsMixin):
