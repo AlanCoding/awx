@@ -77,9 +77,11 @@ class AWXConsumerBase(object):
                 for worker in self.pool.workers:
                     task = worker.current_task
                     if task and task['uuid'] in task_ids:
-                        logger.warn(f'Canceling task with id={task["uuid"]}, task={task.get("task")}, args={task.get("args")}')
+                        logger.warn(f'Sending SIGTERM to task id={task["uuid"]}, task={task.get("task")}, args={task.get("args")}')
                         os.kill(worker.pid, signal.SIGTERM)
                         msg.append(task['uuid'])
+                if task_ids and not msg:
+                    logger.info(f'Could not locate running tasks to cancel with ids={task_ids}')
 
             with pg_bus_conn() as conn:
                 conn.notify(reply_queue, json.dumps(msg))

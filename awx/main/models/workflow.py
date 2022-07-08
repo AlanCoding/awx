@@ -723,7 +723,7 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
     def cancel_dispatcher_process(self):
         # WorkflowJobs don't _actually_ run anything in the dispatcher, so
         # there's no point in asking the dispatcher if it knows about this task
-        return False
+        return True
 
 
 class WorkflowApprovalTemplate(UnifiedJobTemplate, RelatedJobsMixin):

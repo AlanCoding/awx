@@ -58,6 +58,8 @@ class Command(BaseCommand):
                 cancel_data = yaml.safe_load(cancel_str)
             except Exception:
                 cancel_data = [cancel_str]
+            if not isinstance(cancel_data, list):
+                cancel_data = [cancel_str]
             print(Control('dispatcher').cancel(cancel_data))
             return
 
