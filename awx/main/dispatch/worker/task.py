@@ -3,6 +3,7 @@ import logging
 import importlib
 import sys
 import traceback
+import time
 
 from kubernetes.config import kube_config
 
@@ -50,6 +51,10 @@ class TaskWorker(BaseWorker):
         Given some AMQP message, import the correct Python code and run it.
         """
         task = body['task']
+        if 'time_ack' in body:
+            time_waiting = time.time() - body['time_ack']
+            if time_waiting > 0.2:
+                logger.info(f'Task {task} spent {time_waiting:.4f} in worker IPC queue, look for Workers maxed log')
         uuid = body.get('uuid', '<unknown>')
         args = body.get('args', [])
         kwargs = body.get('kwargs', {})
