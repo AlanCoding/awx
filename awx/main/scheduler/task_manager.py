@@ -132,6 +132,11 @@ class TaskBase:
                     self._schedule()
                     self.record_aggregate_metrics()
                     logger.debug(f"Finishing {self.prefix} Scheduler")
+                    start_time = time.time()
+                # TODO: work this timing into the subsystem metrics for task manager
+                time_delta = time.time() - start_time
+                if time_delta > 10.0:
+                    logger.info(f'{self.prefix} on_commit methods took {time.time() - start_time:.4f} seconds')
 
 
 class WorkflowManager(TaskBase):
