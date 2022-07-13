@@ -502,6 +502,7 @@ class TaskManager:
             for rampart_group in preferred_instance_groups:
                 if rampart_group.is_container_group:
                     control_instance.jobs_running += 1
+                    control_instance.remaining_capacity = max(0, control_instance.remaining_capacity - settings.AWX_CONTROL_NODE_TASK_IMPACT)
                     self.dependency_graph.add_job(task)
                     self.start_task(task, rampart_group, task.get_jobs_fail_chain(), None)
                     found_acceptable_queue = True
