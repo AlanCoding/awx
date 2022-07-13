@@ -452,6 +452,10 @@ class AutoscalePool(WorkerPool):
                     w.put(body)
                     break
             else:
+                task_name = 'unknown'
+                if isinstance(body, dict):
+                    task_name = body.get('task')
+                logger.warn(f'Workers maxed, queuing {task_name}, load: {sum(len(w.managed_tasks) for w in self.workers)} / {len(self.workers)}')
                 return super(AutoscalePool, self).write(preferred_queue, body)
         except Exception:
             for conn in connections.all():

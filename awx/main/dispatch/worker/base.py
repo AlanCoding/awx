@@ -81,6 +81,8 @@ class AWXConsumerBase(object):
             logger.error('unrecognized control message: {}'.format(control))
 
     def process_task(self, body):
+        if isinstance(body, dict):
+            body['time_ack'] = time.time()
         if 'control' in body:
             try:
                 return self.control(body)
@@ -100,6 +102,12 @@ class AWXConsumerBase(object):
         self.pool.write(queue, body)
         self.total_messages += 1
         self.record_statistics()
+        if isinstance(body, dict) and 'time_pub' in body:
+            tq = time.time()
+            if tq - body['time_pub'] > 0.01:
+                logger.warning(
+                    f'Dispatching task took {body.get("task")} too long: notify {body["time_ack"] - body["time_pub"]:.4f} queued {tq - body["time_ack"]:.4f}'
+                )
 
     def record_statistics(self):
         if time.time() - self.last_stats > 1:  # buffer stat recording to once per second
