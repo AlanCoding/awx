@@ -331,6 +331,8 @@ class AutoscalePool(WorkerPool):
         # max workers can't be less than min_workers
         self.max_workers = max(self.min_workers, self.max_workers)
 
+        self.task_manager_timeout = settings.TASK_MANAGER_TIMEOUT
+
     @property
     def should_grow(self):
         if len(self.workers) < self.min_workers:
@@ -364,7 +366,6 @@ class AutoscalePool(WorkerPool):
         if there's an outage, this method _can_ throw various
         django.db.utils.Error exceptions.  Act accordingly.
         """
-        start_time = time.time()
         orphaned = []
         for w in self.workers[::]:
             if not w.alive:
@@ -404,7 +405,7 @@ class AutoscalePool(WorkerPool):
                             w.managed_tasks[current_task['uuid']]['started'] = time.time()
                         age = time.time() - current_task['started']
                         w.managed_tasks[current_task['uuid']]['age'] = age
-                        if age > (60 * 5):
+                        if age > self.task_manager_timeout:
                             logger.error(f'run_task_manager has held the advisory lock for >5m, sending SIGTERM to {w.pid}')  # noqa
                             os.kill(w.pid, signal.SIGTERM)
 
@@ -421,10 +422,11 @@ class AutoscalePool(WorkerPool):
         for worker in self.workers:
             worker.calculate_managed_tasks()
             running_uuids.extend(list(worker.managed_tasks.keys()))
-        delta = time.time() - start_time
-        if delta > 1.0:
-            logger.warning(f'Took {delta} for internal part of cleanup')
-        start_time = time.time()
+
+        # if we are not in the dangerous situation of queue backup then clear old waiting jobs
+        if self.workers and max(len(w.managed_tasks) for w in self.workers) <= 1:
+            reaper.reap_waiting(excluded_uuids=running_uuids)
+
         reaper.reap(excluded_uuids=running_uuids)
 
     def up(self):

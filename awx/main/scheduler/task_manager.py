@@ -7,6 +7,7 @@ import logging
 import uuid
 import json
 from types import SimpleNamespace
+import time
 
 # Django
 from django.db import transaction, connection
@@ -653,3 +654,8 @@ class TaskManager:
                 with task_manager_bulk_reschedule():
                     self._schedule()
                 logger.debug("Finishing Scheduler")
+                start_time = time.time()
+            # TODO: work this timing into the subsystem metrics for task manager
+            time_delta = time.time() - start_time
+            if time_delta > 10.0:
+                logger.info(f'Task manager on_commit methods took {time.time() - start_time:.4f} seconds')
