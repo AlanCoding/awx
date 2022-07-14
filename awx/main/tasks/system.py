@@ -499,23 +499,23 @@ def cluster_node_heartbeat():
 
     if this_inst:
         startup_event = this_inst.is_lost(ref_time=nowtime)
+        last_last_seen = this_inst.last_seen
+        this_inst.local_health_check()
         if startup_event and this_inst.capacity != 0:
-            logger.warning(f'Rejoining the cluster as instance {this_inst.hostname}. Prior last_seen {this_inst.last_seen}')
+            logger.warning(f'Rejoining the cluster as instance {this_inst.hostname}. Prior last_seen {last_last_seen}')
             return
-        elif not this_inst.last_seen:
+        elif not last_last_seen:
             logger.warning(f'Instance does not have recorded last_seen, updating to {nowtime}')
-        elif (nowtime - this_inst.last_seen) > timedelta(seconds=settings.CLUSTER_NODE_HEARTBEAT_PERIOD + 2):
-            logger.warning(f'Heartbeat skew - interval={nowtime - this_inst.last_seen:.4f}, expected={settings.CLUSTER_NODE_HEARTBEAT_PERIOD}')
+        elif (nowtime - last_last_seen) > timedelta(seconds=settings.CLUSTER_NODE_HEARTBEAT_PERIOD + 2):
+            logger.warning(f'Heartbeat skew - interval={(nowtime - last_last_seen).total_seconds():.4f}, expected={settings.CLUSTER_NODE_HEARTBEAT_PERIOD}')
     else:
         if settings.AWX_AUTO_DEPROVISION_INSTANCES:
             (changed, this_inst) = Instance.objects.register(ip_address=os.environ.get('MY_POD_IP'), node_type='control', uuid=settings.SYSTEM_UUID)
             if changed:
                 logger.warning(f'Recreated instance record {this_inst.hostname} after unexpected removal')
+            this_inst.local_health_check()
         else:
             raise RuntimeError("Cluster Host Not Found: {}".format(settings.CLUSTER_HOST_ID))
-
-    this_inst.local_health_check()
-
     # IFF any node has a greater version than we do, then we'll shutdown services
     for other_inst in instance_list:
         if other_inst.node_type in ('execution', 'hop'):
