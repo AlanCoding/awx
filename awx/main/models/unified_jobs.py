@@ -1382,6 +1382,11 @@ class UnifiedJob(
             return 'Previous Task Canceled: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (self.model_to_str(), self.name, self.id)
         return None
 
+    def fallback_cancel(self):
+        if not self.celery_task_id:
+            self.refresh_from_db(fields=['celery_task_id'])
+        self.cancel_dispatcher_process()
+
     def cancel_dispatcher_process(self):
         """Returns True if dispatcher running this job acknowledged request and sent SIGTERM"""
         if not self.celery_task_id:
@@ -1419,12 +1424,7 @@ class UnifiedJob(
             else:
                 # Avoid race condition where we have stale model from pending state but job has already started,
                 # its checking signal but not cancel_flag, so re-send signal after this database commit
-                def try_to_cancel_one_last_time():
-                    if not self.celery_task_id:
-                        self.refresh_from_db(fields=['celery_task_id'])
-                    self.cancel_dispatcher_process()
-
-                connection.on_commit(try_to_cancel_one_last_time)
+                connection.on_commit(self.fallback_cancel)
 
             # If a SIGTERM signal was sent to the control process, and acked by the dispatcher
             # then we want to let its own cleanup change status, otherwise change status now

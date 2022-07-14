@@ -22,6 +22,10 @@ def test_unified_job_workflow_attributes():
         assert job.workflow_job_id == 1
 
 
+def mock_on_commit(f):
+    f()
+
+
 @pytest.fixture
 def unified_job(mocker):
     mocker.patch.object(UnifiedJob, 'can_cancel', return_value=True)
@@ -30,12 +34,13 @@ def unified_job(mocker):
     j.cancel_flag = None
     j.save = mocker.MagicMock()
     j.websocket_emit_status = mocker.MagicMock()
+    j.fallback_cancel = mocker.MagicMock()
     return j
 
 
 def test_cancel(unified_job):
 
-    with mock.patch('awx.main.models.unified_jobs.connection.on_commit'):
+    with mock.patch('awx.main.models.unified_jobs.connection.on_commit', wraps=mock_on_commit):
         unified_job.cancel()
 
     assert unified_job.cancel_flag is True
@@ -55,7 +60,7 @@ def test_cancel_job_explanation(unified_job):
         unified_job.cancel(job_explanation=job_explanation)
 
     assert unified_job.job_explanation == job_explanation
-    unified_job.save.assert_called_with(update_fields=['cancel_flag', 'start_args', 'status', 'job_explanation'])
+    unified_job.save.assert_called_with(update_fields=['cancel_flag', 'start_args', 'job_explanation', 'status'])
 
 
 def test_organization_copy_to_jobs():
