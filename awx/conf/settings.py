@@ -82,7 +82,7 @@ def _ctit_db_wrapper(trans_safe=False):
     except DBError as exc:
         if trans_safe:
             if 'migrate' not in sys.argv and 'check_migrations' not in sys.argv:
-                level = logger.exception
+                level = logger.warning
                 if isinstance(exc, ProgrammingError):
                     if 'relation' in str(exc) and 'does not exist' in str(exc):
                         # this generally means we can't fetch Tower configuration
@@ -91,7 +91,7 @@ def _ctit_db_wrapper(trans_safe=False):
                         # has come up *before* the database has finished migrating, and
                         # especially that the conf.settings table doesn't exist yet
                         level = logger.debug
-                level('Database settings are not available, using defaults.')
+                level(f'Database settings are not available, using defaults. error: {str(exc)}')
         else:
             logger.exception('Error modifying something related to database settings.')
     finally:

@@ -16,12 +16,7 @@ def reap_job(j, status):
         return
     j.status = status
     j.start_args = ''  # blank field to remove encrypted passwords
-    j.job_explanation += ' '.join(
-        (
-            'Task was marked as running but was not present in',
-            'the job queue, so it has been marked as failed.',
-        )
-    )
+    j.job_explanation += 'Task was marked as running but was not present in the job queue, so it has been marked as failed.'
     j.save(update_fields=['status', 'start_args', 'job_explanation'])
     if hasattr(j, 'send_notification_templates'):
         j.send_notification_templates('failed')
