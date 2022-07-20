@@ -46,27 +46,31 @@ function JobCancelButton({
   return (
     <>
       <Tooltip content={renderTooltip()}>
-        {showIconButton ? (
-          <Button
-            isDisabled={isDisabled || sAlreadyCancelled}
-            aria-label={title}
-            ouiaId="cancel-job-button"
-            onClick={() => setIsOpen(true)}
-            variant="plain"
-          >
-            <MinusCircleIcon />
-          </Button>
-        ) : (
-          <Button
-            isDisabled={isAlreadyCancelled}
-            aria-label={title}
-            variant="secondary"
-            ouiaId="cancel-job-button"
-            onClick={() => setIsOpen(true)}
-          >
-            {buttonText || t`Cancel Job`}
-          </Button>
-        )}
+        <div>
+          {showIconButton ? (
+            <Button
+              isDisabled={isDisabled || isAlreadyCancelled}
+              aria-label={title}
+              ouiaId="cancel-job-button"
+              onClick={() => setIsOpen(true)}
+              variant="plain"
+              style={style}
+            >
+              <MinusCircleIcon />
+            </Button>
+          ) : (
+            <Button
+              isDisabled={isDisabled || isAlreadyCancelled}
+              aria-label={title}
+              variant="secondary"
+              ouiaId="cancel-job-button"
+              onClick={() => setIsOpen(true)}
+              style={style}
+            >
+              {buttonText || t`Cancel Job`}
+            </Button>
+          )}
+        </div>
       </Tooltip>
       {isOpen && (
         <AlertModal

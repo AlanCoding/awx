@@ -50,126 +50,198 @@ describe('<WorkflowApprovalDetail />', () => {
     );
     assertDetail('Last Modified', formatDateString(workflowApproval.modified));
     assertDetail('Elapsed', '00:00:22');
-    expect(wrapper.find('WorkflowApprovalControls').length).toBe(1);
+    assertDetail('Limit', 'localhost');
+    assertDetail('Source Control Branch', 'main');
+    const linkInventory = wrapper
+      .find('Detail[label="Inventory"]')
+      .find('Link');
+    expect(linkInventory.prop('to')).toEqual(
+      '/inventories/inventory/1/details'
+    );
+    assertDetail('Labels', 'Test2');
+    expect(wrapper.find('VariablesDetail').prop('value')).toEqual(
+      '{"foo": "bar", "baz": "qux", "first_one": 10}'
+    );
   });
 
-  test('should show expiration date/time', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          approval_expiration: '2020-10-10T17:13:12.067947Z',
-        }}
-      />
-    );
+  test('should show expiration date/time', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            approval_expiration: '2020-10-10T17:13:12.067947Z',
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find(`Detail[label="Expires"] dd`).text()).toBe(
       `${formatDateString('2020-10-10T17:13:12.067947Z')}`
     );
   });
 
-  test('should show finished date/time', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          finished: '2020-10-10T17:13:12.067947Z',
-        }}
-      />
-    );
+  test('should show finished date/time', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            finished: '2020-10-10T17:13:12.067947Z',
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find(`Detail[label="Finished"] dd`).text()).toBe(
       `${formatDateString('2020-10-10T17:13:12.067947Z')}`
     );
   });
 
-  test('should show canceled date/time', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          canceled_on: '2020-10-10T17:13:12.067947Z',
-        }}
-      />
-    );
+  test('should show canceled date/time', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            canceled_on: '2020-10-10T17:13:12.067947Z',
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
+
     expect(wrapper.find(`Detail[label="Canceled"] dd`).text()).toBe(
       `${formatDateString('2020-10-10T17:13:12.067947Z')}`
     );
   });
 
-  test('should show explanation', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          job_explanation: 'Some explanation text',
-        }}
-      />
-    );
+  test('should show explanation', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            job_explanation: 'Some explanation text',
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find(`Detail[label="Explanation"] dd`).text()).toBe(
       'Some explanation text'
     );
   });
 
-  test('should show status when not pending', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          status: 'successful',
-          summary_fields: {
-            ...workflowApproval.summary_fields,
-            approved_or_denied_by: {
-              id: 1,
-              username: 'Foobar',
+  test('should show status when not pending', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            status: 'successful',
+            summary_fields: {
+              ...workflowApproval.summary_fields,
+              approved_or_denied_by: {
+                id: 1,
+                username: 'Foobar',
+              },
             },
-          },
-        }}
-      />
-    );
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find('StatusLabel').text()).toBe('Approved');
   });
 
-  test('should show actor when available', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          summary_fields: {
-            ...workflowApproval.summary_fields,
-            approved_or_denied_by: {
-              id: 1,
-              username: 'Foobar',
+  test('should show actor when available', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            summary_fields: {
+              ...workflowApproval.summary_fields,
+              approved_or_denied_by: {
+                id: 1,
+                username: 'Foobar',
+              },
             },
-          },
-        }}
-      />
-    );
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find(`Detail[label="Actor"] dd`).text()).toBe('Foobar');
   });
 
-  test('action buttons should be hidden when user cannot approve or deny', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          can_approve_or_deny: false,
-        }}
-      />
-    );
+  test('action buttons should be hidden when user cannot approve or deny', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            can_approve_or_deny: false,
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find('WorkflowApprovalActionButtons').length).toBe(0);
   });
-  test('only the delete button should render when approval is not pending', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          can_approve_or_deny: true,
-          status: 'successful',
-        }}
-      />
-    );
+
+  test('only the delete button should render when approval is not pending', async () => {
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={{
+            ...workflowApproval,
+            can_approve_or_deny: true,
+            status: 'successful',
+          }}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     expect(wrapper.find('WorkflowApprovalControls').length).toBe(0);
     expect(wrapper.find('Button[aria-label="Approve"]').length).toBe(0);
     expect(wrapper.find('DeleteButton').length).toBe(1);
+  });
+
+  test('should not load Labels', async () => {
+    WorkflowJobTemplatesAPI.readDetail.mockResolvedValue({
+      data: workflowJobTemplate,
+    });
+    WorkflowJobsAPI.readDetail.mockResolvedValue({
+      data: {
+        ...workflowApproval,
+        summary_fields: {
+          ...workflowApproval.summary_fields,
+          labels: {
+            results: [],
+          },
+        },
+      },
+    });
+
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail workflowApproval={workflowApproval} />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
+    const labels_detail = wrapper.find(`Detail[label="Labels"]`).at(0);
+    expect(labels_detail.prop('isEmpty')).toEqual(true);
   });
 
   test('Error dialog shown for failed approval', async () => {
@@ -187,7 +259,10 @@ describe('<WorkflowApprovalDetail />', () => {
     });
     waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     await act(async () => {
-      wrapper.find('DropdownToggleAction').invoke('onClick')();
+      wrapper
+        .find('Button[ouiaId="workflow-approve-button"]')
+        .at(0)
+        .invoke('onClick')();
     });
     expect(WorkflowApprovalsAPI.approve).toHaveBeenCalledTimes(1);
     await waitForElement(
@@ -220,9 +295,7 @@ describe('<WorkflowApprovalDetail />', () => {
     });
     waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     await act(async () => {
-      wrapper
-        .find('DropdownItem[ouiaId="workflow-deny-button"]')
-        .invoke('onClick')();
+      wrapper.find('Button[ouiaId="workflow-deny-button"]').invoke('onClick')();
     });
     expect(WorkflowApprovalsAPI.deny).toHaveBeenCalledTimes(1);
     await waitForElement(
@@ -238,81 +311,6 @@ describe('<WorkflowApprovalDetail />', () => {
       'Modal[title="Error!"]',
       (el) => el.length === 0
     );
-  });
-
-  test('delete button should be hidden when user cannot delete', () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          status: 'successful',
-          summary_fields: {
-            ...workflowApproval.summary_fields,
-            user_capabilities: {
-              delete: false,
-              start: false,
-            },
-            approved_or_denied_by: {
-              id: 1,
-              username: 'Foobar',
-            },
-          },
-        }}
-      />
-    );
-    expect(wrapper.find('DeleteButton').length).toBe(0);
-  });
-
-  test('delete button should be hidden when job is pending and approve, action buttons should render', async () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={{
-          ...workflowApproval,
-          summary_fields: {
-            ...workflowApproval.summary_fields,
-            user_capabilities: {
-              delete: true,
-              start: false,
-            },
-          },
-          can_approve_or_deny: true,
-        }}
-      />
-    );
-
-    expect(wrapper.find('DeleteButton').length).toBe(0);
-    expect(wrapper.find('WorkflowApprovalControls').length).toBe(1);
-    await act(async () => wrapper.find('Toggle').prop('onToggle')(true));
-    wrapper.update();
-
-    const denyItem = wrapper.find(
-      'DropdownItem[ouiaId="workflow-deny-button"]'
-    );
-    const cancelItem = wrapper.find(
-      'DropdownItem[ouiaId="workflow-cancel-button"]'
-    );
-    expect(denyItem).toHaveLength(1);
-    expect(denyItem.prop('description')).toBe(
-      'This will continue the workflow along failure and always paths.'
-    );
-    expect(cancelItem).toHaveLength(1);
-    expect(cancelItem.prop('description')).toBe(
-      'This will cancel the workflow and no subsequent nodes will execute.'
-    );
-    expect(
-      wrapper.find('DropdownItem[ouiaId="workflow-delete-button"]')
-    ).toHaveLength(0);
-  });
-
-  test('Delete button is visible and approve action is not', async () => {
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail
-        workflowApproval={mockWorkflowApprovals.results[1]}
-      />
-    );
-    expect(wrapper.find('DeleteButton').length).toBe(1);
-    expect(wrapper.find('DeleteButton').prop('isDisabled')).toBe(false);
-    expect(wrapper.find('WorkflowApprovalControls').length).toBe(0);
   });
 
   test('Error dialog shown for failed deletion', async () => {
