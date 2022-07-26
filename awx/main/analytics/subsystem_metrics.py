@@ -188,6 +188,7 @@ class Metrics:
             SetFloatM('task_manager_start_task_seconds', 'Time spent starting task'),
             SetFloatM('task_manager_process_running_tasks_seconds', 'Time spent processing running tasks'),
             SetFloatM('task_manager_process_pending_tasks_seconds', 'Time spent processing pending tasks'),
+            SetFloatM('task_manager_on_commit_seconds', 'Time spent runing on_commit methods like websockets'),
             SetFloatM('task_manager__schedule_seconds', 'Time spent in running the entire _schedule'),
             IntM('task_manager_schedule_calls', 'Number of calls to task manager schedule'),
             SetFloatM('task_manager_recorded_timestamp', 'Unix timestamp when metrics were last recorded'),
@@ -197,6 +198,7 @@ class Metrics:
             SetIntM('task_manager_tasks_blocked', 'Number of tasks blocked from running'),
             SetFloatM('dependency_manager_get_tasks_seconds', 'Time spent in loading tasks from db'),
             SetFloatM('dependency_manager_generate_dependencies_seconds', 'Time spent generating dependencies for pending tasks'),
+            SetFloatM('dependency_manager_on_commit_seconds', 'Time spent runing on_commit methods like websockets'),
             SetFloatM('dependency_manager__schedule_seconds', 'Time spent in running the entire _schedule'),
             IntM('dependency_manager_schedule_calls', 'Number of calls to task manager schedule'),
             SetFloatM('dependency_manager_recorded_timestamp', 'Unix timestamp when metrics were last recorded'),
@@ -206,6 +208,7 @@ class Metrics:
             SetFloatM('workflow_manager_recorded_timestamp', 'Unix timestamp when metrics were last recorded'),
             SetFloatM('workflow_manager_spawn_workflow_graph_jobs_seconds', 'Time spent spawning workflow jobs'),
             SetFloatM('workflow_manager_get_tasks_seconds', 'Time spent in loading tasks from db'),
+            SetFloatM('workflow_manager_on_commit_seconds', 'Time spent runing on_commit methods like websockets'),
         ]
         # turn metric list into dictionary with the metric name as a key
         self.METRICS = {}

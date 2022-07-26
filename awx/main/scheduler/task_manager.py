@@ -133,6 +133,10 @@ class TaskBase:
                     self._schedule()
                     self.record_aggregate_metrics()
                     logger.debug(f"Finishing {self.prefix} Scheduler")
+                    # record the time it takes to run on_commit logic
+                    start_on_commit = time.time()
+            on_commit_dur = time.time() - start_on_commit
+            self.subsystem_metrics.inc(f"{self.prefix}_on_commit_seconds", on_commit_dur)
 
 
 class WorkflowManager(TaskBase):
