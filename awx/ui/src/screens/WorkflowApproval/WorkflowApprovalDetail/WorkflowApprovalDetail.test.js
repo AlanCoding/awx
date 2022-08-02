@@ -176,9 +176,16 @@ describe('<WorkflowApprovalDetail />', () => {
     WorkflowApprovalsAPI.approve.mockImplementationOnce(() =>
       Promise.reject(new Error())
     );
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail workflowApproval={workflowApproval} />
-    );
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={workflowApproval}
+          fetchWorkflowApproval={jest.fn()}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     await act(async () => {
       wrapper.find('DropdownToggleAction').invoke('onClick')();
     });
@@ -202,15 +209,16 @@ describe('<WorkflowApprovalDetail />', () => {
     WorkflowApprovalsAPI.deny.mockImplementationOnce(() =>
       Promise.reject(new Error())
     );
-    const wrapper = mountWithContexts(
-      <WorkflowApprovalDetail workflowApproval={workflowApproval} />
-    );
-    await act(async () => wrapper.find('Toggle').prop('onToggle')(true));
-    wrapper.update();
-    await waitForElement(
-      wrapper,
-      'WorkflowApprovalDetail DropdownItem[ouiaId="workflow-deny-button"]'
-    );
+    let wrapper;
+    await act(async () => {
+      wrapper = mountWithContexts(
+        <WorkflowApprovalDetail
+          workflowApproval={workflowApproval}
+          fetchWorkflowApproval={jest.fn()}
+        />
+      );
+    });
+    waitForElement(wrapper, 'WorkflowApprovalDetail', (el) => el.length > 0);
     await act(async () => {
       wrapper
         .find('DropdownItem[ouiaId="workflow-deny-button"]')

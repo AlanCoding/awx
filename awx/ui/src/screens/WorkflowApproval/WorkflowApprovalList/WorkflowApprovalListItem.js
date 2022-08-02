@@ -61,6 +61,47 @@ function WorkflowApprovalListItem({
           />
         )}
       </Td>
+      <ActionsTd dataLabel={t`Actions`}>
+        <ActionItem
+          visible
+          tooltip={
+            hasBeenActedOn
+              ? t`This workflow has already been ${status}`
+              : t`Approve`
+          }
+        >
+          <WorkflowApprovalButton workflowApproval={workflowApproval} />
+        </ActionItem>
+        <ActionItem
+          visible
+          tooltip={
+            hasBeenActedOn
+              ? t`This workflow has already been ${status}`
+              : t`Deny`
+          }
+        >
+          <WorkflowDenyButton workflowApproval={workflowApproval} />
+        </ActionItem>
+        <ActionItem visible>
+          <JobCancelButton
+            title={t`Cancel Workflow`}
+            showIconButton
+            job={{
+              ...workflowApproval.summary_fields.source_workflow_job,
+              type: 'workflow_job',
+            }}
+            buttonText={t`Cancel Workflow`}
+            isDisabled={hasBeenActedOn}
+            tooltip={
+              hasBeenActedOn
+                ? t`This workflow has already been ${status}`
+                : t`Cancel`
+            }
+            cancelationMessage={t`This will cancel all subsequent nodes in this workflow
+            `}
+          />
+        </ActionItem>
+      </ActionsTd>
     </Tr>
   );
 }
