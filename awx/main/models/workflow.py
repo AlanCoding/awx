@@ -366,6 +366,32 @@ class WorkflowJobOptions(LaunchTimeConfigBase):
     class Meta:
         abstract = True
 
+    ask_inventory_on_launch = AskForField(
+        blank=True,
+        default=False,
+    )
+    ask_limit_on_launch = AskForField(
+        blank=True,
+        default=False,
+    )
+    ask_scm_branch_on_launch = AskForField(
+        blank=True,
+        default=False,
+    )
+    ask_labels_on_launch = AskForField(
+        blank=True,
+        default=False,
+    )
+    ask_tags_on_launch = AskForField(
+        blank=True,
+        default=False,
+        allows_field='job_tags',
+    )
+    ask_skip_tags_on_launch = AskForField(
+        blank=True,
+        default=False,
+    )
+
     extra_vars = accepts_json(
         prevent_search(
             models.TextField(
@@ -385,7 +411,7 @@ class WorkflowJobOptions(LaunchTimeConfigBase):
     @classmethod
     def _get_unified_job_field_names(cls):
         r = set(f.name for f in WorkflowJobOptions._meta.fields) | set(
-            ['name', 'description', 'organization', 'survey_passwords', 'labels', 'limit', 'scm_branch']
+            ['name', 'description', 'organization', 'survey_passwords', 'labels', 'limit', 'scm_branch', 'job_tags', 'skip_tags']
         )
         r.remove('char_prompts')  # needed due to copying launch config to launch config
         return r
@@ -425,26 +451,28 @@ class WorkflowJobOptions(LaunchTimeConfigBase):
 class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTemplateMixin, ResourceMixin, RelatedJobsMixin, WebhookTemplateMixin):
 
     SOFT_UNIQUE_TOGETHER = [('polymorphic_ctype', 'name', 'organization')]
-    FIELDS_TO_PRESERVE_AT_COPY = ['labels', 'organization', 'instance_groups', 'workflow_job_template_nodes', 'credentials', 'survey_spec']
+    FIELDS_TO_PRESERVE_AT_COPY = [
+        'labels',
+        'organization',
+        'instance_groups',
+        'workflow_job_template_nodes',
+        'credentials',
+        'survey_spec',
+        'skip_tags',
+        'job_tags',
+    ]
 
     class Meta:
         app_label = 'main'
 
-    ask_inventory_on_launch = AskForField(
+    notification_templates_approvals = models.ManyToManyField(
+        "NotificationTemplate",
         blank=True,
-        default=False,
+        related_name='%(class)s_notification_templates_for_approvals',
     )
-    ask_limit_on_launch = AskForField(
-        blank=True,
-        default=False,
+    admin_role = ImplicitRoleField(
+        parent_role=['singleton:' + ROLE_SINGLETON_SYSTEM_ADMINISTRATOR, 'organization.workflow_admin_role'],
     )
-    ask_scm_branch_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-    notification_templates_approvals = models.ManyToManyField("NotificationTemplate", blank=True, related_name='%(class)s_notification_templates_for_approvals')
-
-    admin_role = ImplicitRoleField(parent_role=['singleton:' + ROLE_SINGLETON_SYSTEM_ADMINISTRATOR, 'organization.workflow_admin_role'])
     execute_role = ImplicitRoleField(
         parent_role=[
             'admin_role',
@@ -587,6 +615,12 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
             if prompts_errors:
                 node_list.append(node.pk)
         return node_list
+
+    def save(self, *args, **kwargs):
+
+        self.validate_unique()
+
+        super(WorkflowJobTemplate, self).save(*args, **kwargs)
 
     '''
     RelatedJobsMixin
