@@ -15,7 +15,6 @@ function JobCancelButton({
   errorMessage,
   buttonText,
   style = {},
-  job = {},
   isDisabled,
   tooltip,
   cancelationMessage,
