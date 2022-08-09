@@ -155,7 +155,11 @@ class Metrics:
         if instance_name:
             self.instance_name = instance_name
         else:
-            self.instance_name = Instance.objects.me().hostname
+            try:
+                self.instance_name = Instance.objects.me().hostname
+            except Exception as e:
+                self.instance_name = settings.CLUSTER_HOST_ID
+                logger.info(f'Instance {self.instance_name} seems to be unregistered, error: {e}')
 
         # metric name, help_text
         METRICSLIST = [
@@ -270,7 +274,12 @@ class Metrics:
                 self.previous_send_metrics.set(current_time)
                 self.previous_send_metrics.store_value(self.conn)
         finally:
-            lock.release()
+            try:
+                lock.release()
+            except Exception as exc:
+                # After system failures, we might throw redis.exceptions.LockNotOwnedError
+                # this is to avoid print a Traceback, and importantly, avoid raising an exception into parent context
+                logger.warning(f'Error releasing subsystem metrics redis lock, error: {str(exc)}')
 
     def load_other_metrics(self, request):
         # data received from other nodes are stored in their own keys

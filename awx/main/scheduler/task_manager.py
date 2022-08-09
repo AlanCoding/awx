@@ -7,6 +7,7 @@ import logging
 import uuid
 import json
 from types import SimpleNamespace
+import time
 
 # Django
 from django.db import transaction, connection
@@ -502,7 +503,9 @@ class TaskManager:
             for rampart_group in preferred_instance_groups:
                 if rampart_group.is_container_group:
                     control_instance.jobs_running += 1
+                    control_instance.remaining_capacity = max(0, control_instance.remaining_capacity - settings.AWX_CONTROL_NODE_TASK_IMPACT)
                     self.dependency_graph.add_job(task)
+                    task.log_lifecycle("controller_node_chosen")
                     self.start_task(task, rampart_group, task.get_jobs_fail_chain(), None)
                     found_acceptable_queue = True
                     break
@@ -651,3 +654,8 @@ class TaskManager:
                 with task_manager_bulk_reschedule():
                     self._schedule()
                 logger.debug("Finishing Scheduler")
+                start_time = time.time()
+            # TODO: work this timing into the subsystem metrics for task manager
+            time_delta = time.time() - start_time
+            if time_delta > 10.0:
+                logger.info(f'Task manager on_commit methods took {time.time() - start_time:.4f} seconds')

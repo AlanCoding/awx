@@ -460,7 +460,7 @@ class TestGenericRun:
         task.model.objects.get = mock.Mock(return_value=job)
         task.build_private_data_files = mock.Mock(side_effect=OSError())
 
-        with mock.patch('awx.main.tasks.jobs.copy_tree'):
+        with mock.patch('awx.main.tasks.jobs.shutil.copytree'):
             with pytest.raises(Exception):
                 task.run(1)
 
@@ -482,11 +482,11 @@ class TestGenericRun:
         task.model.objects.get = mock.Mock(return_value=job)
         task.build_private_data_files = mock.Mock()
 
-        with mock.patch('awx.main.tasks.jobs.copy_tree'):
+        with mock.patch('awx.main.tasks.jobs.shutil.copytree'):
             with pytest.raises(Exception):
                 task.run(1)
 
-        for c in [mock.call(1, status='running', start_args=''), mock.call(1, status='canceled')]:
+        for c in [mock.call(1, start_args='', status='canceled')]:
             assert c in task.update_model.call_args_list
 
     def test_event_count(self, mock_me):
@@ -1949,7 +1949,7 @@ def test_job_run_no_ee(mock_me):
     task.update_model = mock.Mock(return_value=job)
     task.model.objects.get = mock.Mock(return_value=job)
 
-    with mock.patch('awx.main.tasks.jobs.copy_tree'):
+    with mock.patch('awx.main.tasks.jobs.shutil.copytree'):
         with pytest.raises(RuntimeError) as e:
             task.pre_run_hook(job, private_data_dir)
 

@@ -17,6 +17,7 @@ from django.conf import settings
 
 from awx.main.dispatch.pool import WorkerPool
 from awx.main.dispatch import pg_bus_conn
+from awx.main.utils.common import log_excess_runtime
 
 if 'run_callback_receiver' in sys.argv:
     logger = logging.getLogger('awx.main.commands.run_callback_receiver')
@@ -81,6 +82,9 @@ class AWXConsumerBase(object):
             logger.error('unrecognized control message: {}'.format(control))
 
     def process_task(self, body):
+        if isinstance(body, dict):
+            body['time_ack'] = time.time()
+
         if 'control' in body:
             try:
                 return self.control(body)
@@ -101,6 +105,7 @@ class AWXConsumerBase(object):
         self.total_messages += 1
         self.record_statistics()
 
+    @log_excess_runtime(logger)
     def record_statistics(self):
         if time.time() - self.last_stats > 1:  # buffer stat recording to once per second
             try:
@@ -169,8 +174,9 @@ class AWXConsumerPG(AWXConsumerBase):
                     logger.exception(f"Error consuming new events from postgres, will retry for {self.pg_max_wait} s")
                     self.pg_down_time = time.time()
                     self.pg_is_down = True
-                if time.time() - self.pg_down_time > self.pg_max_wait:
-                    logger.warning(f"Postgres event consumer has not recovered in {self.pg_max_wait} s, exiting")
+                current_downtime = time.time() - self.pg_down_time
+                if current_downtime > self.pg_max_wait:
+                    logger.exception(f"Postgres event consumer has not recovered in {current_downtime} s, exiting")
                     raise
                 # Wait for a second before next attempt, but still listen for any shutdown signals
                 for i in range(10):
@@ -179,6 +185,10 @@ class AWXConsumerPG(AWXConsumerBase):
                     time.sleep(0.1)
                 for conn in db.connections.all():
                     conn.close_if_unusable_or_obsolete()
+            except Exception:
+                # Log unanticipated exception in addition to writing to stderr to get timestamps and other metadata
+                logger.exception('Encountered unhandled error in dispatcher main loop')
+                raise
 
 
 class BaseWorker(object):
