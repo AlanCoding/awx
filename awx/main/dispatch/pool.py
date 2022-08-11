@@ -335,7 +335,9 @@ class AutoscalePool(WorkerPool):
         # max workers can't be less than min_workers
         self.max_workers = max(self.min_workers, self.max_workers)
 
-        self.task_manager_timeout = settings.TASK_MANAGER_TIMEOUT
+        # the task manager enforces settings.TASK_MANAGER_TIMEOUT on its own
+        # but if the task takes longer than the time defined here, we will force it to stop here
+        self.dispatcher_task_manager_timeout = settings.TASK_MANAGER_TIMEOUT + settings.TASK_MANAGER_TIMEOUT_GRACE_PERIOD
 
     @property
     def should_grow(self):
@@ -411,7 +413,7 @@ class AutoscalePool(WorkerPool):
                             w.managed_tasks[current_task['uuid']]['started'] = time.time()
                         age = time.time() - current_task['started']
                         w.managed_tasks[current_task['uuid']]['age'] = age
-                        if age > (settings.TASK_MANAGER_TIMEOUT + settings.TASK_MANAGER_TIMEOUT_GRACE_PERIOD):
+                        if age > self.dispatcher_task_manager_timeout:
                             logger.error(f'{current_task_name} has held the advisory lock for {age}, sending SIGTERM to {w.pid}')  # noqa
                             os.kill(w.pid, signal.SIGTERM)
 
