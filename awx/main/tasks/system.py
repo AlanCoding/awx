@@ -599,12 +599,24 @@ def awx_receptor_workunit_reaper():
     receptor_ctl = get_receptor_ctl()
     receptor_work_list = receptor_ctl.simple_command("work list")
 
-    unit_ids = [id for id in receptor_work_list]
-    jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids).exclude(status__in=ACTIVE_STATES)
-    for job in jobs_with_unreleased_receptor_units:
+    receptor_ids = receptor_work_list.keys()
+    inactive_jobs = UnifiedJob.objects.filter(work_unit_id__in=receptor_ids).exclude(status__in=ACTIVE_STATES)
+    for job in inactive_jobs:
         logger.debug(f"{job.log_format} is not active, reaping receptor work unit {job.work_unit_id}")
-        receptor_ctl.simple_command(f"work cancel {job.work_unit_id}")
         receptor_ctl.simple_command(f"work release {job.work_unit_id}")
+
+    # look for active jobs with failed receptor units
+    failed_to_restart_units = []
+    for id, unit_data in receptor_work_list.items():
+        state = unit_data.get('StateName', '')
+        if state == 'Failed':
+            if unit_data.get('Detail', '') == 'Failed to restart: remote work had not previously started':
+                failed_to_restart_units.append(id)
+    cutoff = now() - timedelta(seconds=300)
+    active_jobs = UnifiedJob.objects.filter(work_unit_id__in=failed_to_restart_units, status__in=ACTIVE_STATES, started__lt=cutoff)
+    for job in active_jobs:
+        logger.debug(f"receptor work unit {job.work_unit_id} failed to restart, canceling job {job.log_format}")
+        job.cancel(job_explanation=f"receptor work unit {job.work_unit_id} failed, canceling job")
 
     administrative_workunit_reaper(receptor_work_list)
 

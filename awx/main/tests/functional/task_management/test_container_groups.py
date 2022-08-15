@@ -35,6 +35,7 @@ def test_containerized_job(containerized_job):
 
 
 @pytest.mark.django_db
+@mock.patch('awx.main.tasks.receptor.get_receptor_ctl', mock.MagicMock(return_value=None))
 def test_kubectl_ssl_verification(containerized_job, default_job_execution_environment):
     containerized_job.execution_environment = default_job_execution_environment
     cred = containerized_job.instance_group.credential
