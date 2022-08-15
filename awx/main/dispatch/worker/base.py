@@ -149,7 +149,7 @@ class AWXConsumerPG(AWXConsumerBase):
 
         while True:
             try:
-                with pg_bus_conn() as conn:
+                with pg_bus_conn(new_connection=True) as conn:
                     for queue in self.queues:
                         conn.listen(queue)
                     if init is False:
