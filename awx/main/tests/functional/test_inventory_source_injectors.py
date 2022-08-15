@@ -184,6 +184,7 @@ def create_reference_data(source_dir, env, content):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize('this_kind', CLOUD_PROVIDERS)
+@mock.patch('awx.main.tasks.receptor.get_receptor_ctl', mock.MagicMock(return_value=None))
 def test_inventory_update_injected_content(this_kind, inventory, fake_credential_factory, mock_me):
     ExecutionEnvironment.objects.create(name='Control Plane EE', managed=True)
     ExecutionEnvironment.objects.create(name='Default Job EE', managed=False)
