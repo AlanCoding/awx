@@ -605,6 +605,9 @@ def awx_receptor_workunit_reaper(worker_tasks=None):
                     unified_job = UnifiedJob.objects.get(work_unit_id=unit_id)
                     for pid, active_tasks in worker_tasks.items():
                         if unified_job.celery_task_id in active_tasks:
+                            if now() - unified_job.started < timedelta(minutes=2):
+                                logger.info(f'The job {unified_job.id} had a container start error and may be killed soon')
+                                break
                             unified_job.job_explanation += 'Job container failed to start'
                             unified_job.save(update_fields=['job_explanation'])
                             os.kill(pid, signal.SIGTERM)
