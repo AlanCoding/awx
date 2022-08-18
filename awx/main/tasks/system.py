@@ -7,6 +7,7 @@ import logging
 import os
 from io import StringIO
 from contextlib import redirect_stdout
+import signal
 import shutil
 import time
 from distutils.version import LooseVersion as Version
@@ -571,8 +572,8 @@ def cluster_node_heartbeat(dispatch_time=None, worker_tasks=None):
             reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
 
 
-@task(queue=get_local_queuename)
-def awx_receptor_workunit_reaper():
+@task(queue=get_local_queuename, bind_kwargs=['worker_tasks'])
+def awx_receptor_workunit_reaper(worker_tasks=None):
     """
     When an AWX job is launched via receptor, files such as status, stdin, and stdout are created
     in a specific receptor directory. This directory on disk is a random 8 character string, e.g. qLL2JFNT
@@ -596,6 +597,24 @@ def awx_receptor_workunit_reaper():
     logger.debug("Checking for unreleased receptor work units")
     receptor_ctl = get_receptor_ctl()
     receptor_work_list = receptor_ctl.simple_command("work list")
+
+    if worker_tasks:
+        for unit_id, unit_data in receptor_work_list.items():
+            if unit_data.get('Detail', '') == 'Failed to restart: remote work had not previously started':
+                try:
+                    unified_job = UnifiedJob.objects.get(work_unit_id=unit_id)
+                    for pid, active_tasks in worker_tasks.items():
+                        if unified_job.celery_task_id in active_tasks:
+                            unified_job.job_explanation += 'Job container failed to start'
+                            unified_job.save(update_fields=['job_explanation'])
+                            os.kill(pid, signal.SIGTERM)
+                            logger.warning(f'Sent SIGTERM to job {unified_job.id} unit_id={unit_id} detail:\n{unit_data}')
+                            break
+                    else:
+                        logger.info(f'Internal error getting control pid: job_id={unified_job.id} task_id={unified_job.celery_task_id}')
+                        continue
+                except UnifiedJob.DoesNotExist:
+                    pass
 
     unit_ids = [id for id in receptor_work_list]
     jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids).exclude(status__in=ACTIVE_STATES)
