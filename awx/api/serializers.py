@@ -3196,7 +3196,7 @@ class JobRelaunchSerializer(BaseSerializer):
         return attrs
 
 
-class JobCreateScheduleSerializer(BaseSerializer):
+class JobCreateScheduleSerializer(LabelsListMixin, BaseSerializer):
 
     can_schedule = serializers.SerializerMethodField()
     prompts = serializers.SerializerMethodField()
@@ -3227,6 +3227,8 @@ class JobCreateScheduleSerializer(BaseSerializer):
             if 'credentials' in ret:
                 all_creds = [self._summarize('credential', cred) for cred in ret['credentials']]
                 ret['credentials'] = all_creds
+            if 'labels' in ret:
+                ret['labels'] = self._summary_field_labels(obj)
             return ret
         except JobLaunchConfig.DoesNotExist:
             return {'all': _('Unknown, job may have been ran before launch configurations were saved.')}
