@@ -366,32 +366,6 @@ class WorkflowJobOptions(LaunchTimeConfigBase):
     class Meta:
         abstract = True
 
-    ask_inventory_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-    ask_limit_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-    ask_scm_branch_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-    ask_labels_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-    ask_tags_on_launch = AskForField(
-        blank=True,
-        default=False,
-        allows_field='job_tags',
-    )
-    ask_skip_tags_on_launch = AskForField(
-        blank=True,
-        default=False,
-    )
-
     extra_vars = accepts_json(
         prevent_search(
             models.TextField(
