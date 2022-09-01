@@ -269,17 +269,13 @@ class TestWorkflowJobTemplate:
         assert node.id in resp.data['always_nodes']
 
     def test_wfjt_unique_together_with_org(self, organization):
-        '''
-        uniqueness on a workflow object is determined by the (name, organization) tuple.
-        the uniqueness check happens in awx/main/models/unified_jobs.py::UnifiedJobTemplate::validate_unique method
-        and leverages the SOFT_UNIQUE_TOGETHER variable defined on the given model; as a check to uniqueness
-        '''
-        wfjt1 = WorkflowJobTemplate.objects.create(name='foo', organization=organization)
+        wfjt1 = WorkflowJobTemplate(name='foo', organization=organization)
         wfjt1.save()
+        wfjt2 = WorkflowJobTemplate(name='foo', organization=organization)
         with pytest.raises(ValidationError):
-            WorkflowJobTemplate.objects.create(name='foo', organization=organization)
-        wfjt2 = WorkflowJobTemplate.objects.create(name='foo', organization=None)
-        wfjt2.save()
+            wfjt2.validate_unique()
+        wfjt2 = WorkflowJobTemplate(name='foo', organization=None)
+        wfjt2.validate_unique()
 
 
 @pytest.mark.django_db

@@ -590,12 +590,6 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
                 node_list.append(node.pk)
         return node_list
 
-    def save(self, *args, **kwargs):
-
-        self.validate_unique()
-
-        super(WorkflowJobTemplate, self).save(*args, **kwargs)
-
     '''
     RelatedJobsMixin
     '''
