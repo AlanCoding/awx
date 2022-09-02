@@ -1,5 +1,6 @@
 # Python
 from base64 import b64encode
+from collections import namedtuple
 import concurrent.futures
 from enum import Enum
 import logging
@@ -299,6 +300,7 @@ class AWXReceptorJob:
 
         connections.close_all()
         transmit_finished = False
+        unit_id = None
 
         # This ThreadPoolExecutor runs for the duration of the job.
         # The cancel_func pattern is intended to guard againsnt any situation where we may
@@ -355,6 +357,9 @@ class AWXReceptorJob:
                     self.receptor_ctl.simple_command(f"work cancel {unit_id}")
                     resultsock.shutdown(socket.SHUT_RDWR)
                     resultfile.close()
+
+                result = namedtuple('result', ['status', 'rc'])
+                return result('canceled', 1), unit_id
 
     @property
     def sign_work(self):
