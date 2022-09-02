@@ -416,6 +416,7 @@ class AWXReceptorJob:
         self.task.instance.log_lifecycle("work_unit_id_received")
         self.task.update_model(self.task.instance.pk, work_unit_id=unit_id)
         self.task.instance.log_lifecycle("work_unit_id_assigned")
+        connections.close_all()
 
         return unit_id
 
