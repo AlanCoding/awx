@@ -362,6 +362,22 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             for f in unallowed_fields:
                 validated_kwargs.pop(f)
 
+        # For JobTemplate-based jobs with surveys, add passwords to list for perma-redaction
+        if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
+            for password in self.survey_password_variables():
+                new_job_passwords[password] = REPLACE_STR
+        if new_job_passwords:
+            kwargs['survey_passwords'] = new_job_passwords  # saved in config object for relaunch
+
+        if validated_kwargs.get('credentials'):
+            Credential = UnifiedJob._meta.get_field('credentials').related_model
+            cred_dict = Credential.unique_dict(self.credentials.all())
+            prompted_dict = Credential.unique_dict(validated_kwargs['credentials'])
+            # combine prompted credentials with JT
+            cred_dict.update(prompted_dict)
+            validated_kwargs['credentials'] = [cred for cred in cred_dict.values()]
+            kwargs['credentials'] = validated_kwargs['credentials']
+
         unified_job = copy_model_by_class(self, unified_job_class, fields, validated_kwargs)
 
         if eager_fields:
@@ -375,12 +391,8 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         setattr(unified_job, parent_field_name, self)
 
         # For JobTemplate-based jobs with surveys, add passwords to list for perma-redaction
-        if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
-            for password in self.survey_password_variables():
-                new_job_passwords[password] = REPLACE_STR
-        if new_job_passwords:
+        if 'survey_passwords' in kwargs:
             unified_job.survey_passwords = new_job_passwords
-            kwargs['survey_passwords'] = new_job_passwords  # saved in config object for relaunch
 
         if kwargs.get('instance_groups'):
             unified_job.preferred_instance_groups_cache = [ig.id for ig in kwargs['instance_groups']]
@@ -399,15 +411,6 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             unified_job.save()
 
         # Labels and credentials copied here
-        if validated_kwargs.get('credentials'):
-            Credential = UnifiedJob._meta.get_field('credentials').related_model
-            cred_dict = Credential.unique_dict(self.credentials.all())
-            prompted_dict = Credential.unique_dict(validated_kwargs['credentials'])
-            # combine prompted credentials with JT
-            cred_dict.update(prompted_dict)
-            validated_kwargs['credentials'] = [cred for cred in cred_dict.values()]
-            kwargs['credentials'] = validated_kwargs['credentials']
-
         with disable_activity_stream():
             copy_m2m_relationships(self, unified_job, fields, kwargs=validated_kwargs)
 
@@ -960,6 +963,44 @@ class UnifiedJob(
         except JobLaunchConfig.DoesNotExist:
             return None
 
+    def get_prompted_data(self, kwargs, parent=None):
+        """
+        Given kwargs passed on launch, this takes a diff against the parent
+        the result is the data we save on a launch config
+        """
+        if parent is None:
+            parent = getattr(self, self._get_parent_field_name())
+        if parent is None:
+            return {}
+        from awx.main.models.jobs import JobTemplate
+
+        valid_fields = list(JobTemplate.get_ask_mapping().keys())
+
+        valid_fields.append('survey_passwords')
+
+        data = {}
+
+        many_to_many_fields = []
+        for field_name, value in kwargs.items():
+            if field_name not in valid_fields:
+                raise Exception('Unrecognized launch config field {}.'.format(field_name))
+            field = getattr(JobTemplate, field_name).field
+            if isinstance(field, models.ManyToManyField):
+                many_to_many_fields.append(field_name)
+                continue
+            if isinstance(field, (models.ForeignKey)) and (value is None):
+                continue
+            data[field_name] = value
+
+        for field_name in many_to_many_fields:
+            # Make sure we preserve order in case this is a Ordered field
+            job_items = kwargs.get(field_name, [])
+            if job_items:
+                parent_items = getattr(parent, field_name, []).all()
+                data[field_name] = [item for item in job_items if item not in parent_items]
+
+        return data
+
     def create_config_from_prompts(self, kwargs, parent=None):
         """
         Create a launch configuration entry for this job, given prompts
@@ -971,7 +1012,9 @@ class UnifiedJob(
             parent = getattr(self, self._get_parent_field_name())
         if parent is None:
             return
-        valid_fields = list(parent.get_ask_mapping().keys())
+        from awx.main.models.jobs import JobTemplate
+
+        valid_fields = list(JobTemplate.get_ask_mapping().keys())
         # Special cases allowed for workflows
         if hasattr(self, 'extra_vars'):
             valid_fields.extend(['survey_passwords', 'extra_vars'])
@@ -998,17 +1041,15 @@ class UnifiedJob(
             if field_name == 'credentials':
                 # Credentials are a special case of many to many because of how they function
                 # (i.e. you can't have > 1 machine cred)
-                job_item = set(kwargs.get(field_name, []))
-                if field_name in [field.name for field in parent._meta.get_fields()]:
-                    job_item = job_item - set(getattr(parent, field_name).all())
-                if job_item:
-                    getattr(config, field_name).add(*job_item)
+                new_creds = set(kwargs.get(field_name, [])) - set(getattr(parent, field_name).all())
+                if new_creds:
+                    getattr(config, field_name).add(*new_creds)
             else:
                 # Here we are doing a loop to make sure we preserve order in case this is a Ordered field
-                job_item = kwargs.get(field_name, [])
-                if job_item:
+                job_items = kwargs.get(field_name, [])
+                if job_items:
                     parent_items = getattr(parent, field_name, []).all()
-                    for item in job_item:
+                    for item in job_items:
                         # Do not include this item in the config if its in the parent
                         if item not in parent_items:
                             getattr(config, field_name).add(item)
