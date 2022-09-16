@@ -345,35 +345,22 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             password_list = self.survey_password_variables()
             encrypt_dict(kwargs.get('extra_vars', {}), password_list)
 
-        unified_job_class = self._get_unified_job_class()
         fields = self._get_unified_job_field_names()
-        parent_field_name = None
-        if "_unified_job_class" in kwargs:
-            # Special case where spawned job is different type than usual
-            # Only used for slice jobs
-            unified_job_class = kwargs.pop("_unified_job_class")
-            fields = unified_job_class._get_unified_job_field_names() & fields
-            parent_field_name = kwargs.pop('_parent_field_name')
 
         unallowed_fields = set(kwargs.keys()) - set(fields)
         validated_kwargs = kwargs.copy()
         if unallowed_fields:
-            if parent_field_name is None:
-                logger.warning('Fields {} are not allowed as overrides to spawn from {}.'.format(', '.join(unallowed_fields), self))
+            logger.warning('Fields {} are not allowed as overrides to spawn from {}.'.format(', '.join(unallowed_fields), self))
             for f in unallowed_fields:
                 validated_kwargs.pop(f)
 
-        unified_job = copy_model_by_class(self, unified_job_class, fields, validated_kwargs)
+        unified_job = copy_model_by_class(self, self._get_unified_job_class(), fields, validated_kwargs)
 
         if eager_fields:
             for fd, val in eager_fields.items():
                 setattr(unified_job, fd, val)
 
-        # NOTE: slice workflow jobs _get_parent_field_name method
-        # is not correct until this is set
-        if not parent_field_name:
-            parent_field_name = unified_job._get_parent_field_name()
-        setattr(unified_job, parent_field_name, self)
+        setattr(unified_job, unified_job._get_parent_field_name(), self)
 
         # For JobTemplate-based jobs with surveys, add passwords to list for perma-redaction
         if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
@@ -416,7 +403,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             unified_job.handle_extra_data(validated_kwargs['extra_vars'])
 
         # Create record of provided prompts for relaunch and rescheduling
-        config = unified_job.create_config_from_prompts(kwargs, parent=self)
+        unified_job.create_config_from_prompts(kwargs, self)
         if instance_groups:
             for ig in instance_groups:
                 config.instance_groups.add(ig)
@@ -964,17 +951,16 @@ class UnifiedJob(
         except JobLaunchConfig.DoesNotExist:
             return None
 
-    def create_config_from_prompts(self, kwargs, parent=None):
+    def create_config_from_prompts(self, kwargs, parent, onto_self=False):
         """
         Create a launch configuration entry for this job, given prompts
         returns None if it can not be created
         """
-        JobLaunchConfig = self._meta.get_field('launch_config').related_model
-        config = JobLaunchConfig(job=self)
-        if parent is None:
-            parent = getattr(self, self._get_parent_field_name())
-        if parent is None:
-            return
+        if onto_self:
+            config = self
+        else:
+            JobLaunchConfig = self._meta.get_field('launch_config').related_model
+            config = JobLaunchConfig(job=self)
         valid_fields = list(parent.get_ask_mapping().keys())
         # Special cases allowed for workflows
         if hasattr(self, 'extra_vars'):
@@ -1008,8 +994,7 @@ class UnifiedJob(
                     getattr(config, field_name).add(item)
             else:
                 # Assuming this field merges prompts with parent, save just the diff
-                if field_name in [field.name for field in parent._meta.get_fields()]:
-                    prompted_items = set(prompted_items) - set(getattr(parent, field_name).all())
+                prompted_items = set(prompted_items) - set(getattr(parent, field_name).all())
                 if prompted_items:
                     getattr(config, field_name).add(*prompted_items)
 

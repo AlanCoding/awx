@@ -368,31 +368,42 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
         if errors:
             raise ValidationError(errors)
 
-    def create_unified_job(self, **kwargs):
-        prevent_slicing = kwargs.pop('_prevent_slicing', False)
-        slice_ct = self.get_effective_slice_ct(kwargs)
-        slice_event = bool(slice_ct > 1 and (not prevent_slicing))
-        if slice_event:
-            # A Slice Job Template will generate a WorkflowJob rather than a Job
-            from awx.main.models.workflow import WorkflowJobTemplate, WorkflowJobNode
+    def create_sliced_workflow_job(self, slice_ct, **kwargs):
+        """
+        A Slice Job Template will generate a WorkflowJob rather than a Job
+        Implementation is different from create_unified_job because we care to copy
+        prompts but not the JT fields themselves.
+        """
+        eager_fields = kwargs.pop('_eager_fields', {})
+        from awx.main.models.workflow import WorkflowJob
 
-            kwargs['_unified_job_class'] = WorkflowJobTemplate._get_unified_job_class()
-            kwargs['_parent_field_name'] = "job_template"
-            kwargs.setdefault('_eager_fields', {})
-            kwargs['_eager_fields']['is_sliced_job'] = True
-        elif self.job_slice_count > 1 and (not prevent_slicing):
+        workflow_job = WorkflowJob(name=self.name, description=self.description)
+        for fd, val in eager_fields.items():
+            setattr(workflow_job, fd, val)
+        workflow_job.job_template = self
+        workflow_job.unified_job_template = self
+        workflow_job.is_sliced_job = True
+        # independent slices run in parallel by design, so simultaneity is enforced by workflow
+        workflow_job.allow_simultaneous = self.allow_simultaneous
+        workflow_job.create_config_from_prompts(kwargs, self, onto_self=True)  # also saves
+        for idx in range(slice_ct):
+            workflow_job.workflow_job_nodes.create(unified_job_template=self, identifier=str(idx + 1))
+        return workflow_job
+
+    def create_unified_job(self, _prevent_slicing=False, **kwargs):
+        slice_ct = self.get_effective_slice_ct(kwargs)
+        slice_event = bool(slice_ct > 1 and (not _prevent_slicing))
+        if slice_event:
+            return self.create_sliced_workflow_job(slice_ct=slice_ct, **kwargs)
+        elif self.job_slice_count > 1 and (not _prevent_slicing):
             # Unique case where JT was set to slice but hosts not available
             kwargs.setdefault('_eager_fields', {})
             kwargs['_eager_fields']['job_slice_count'] = 1
-        elif prevent_slicing:
+        elif _prevent_slicing:
+            # This job is, itself, a sub-job of a sliced workflow job
             kwargs.setdefault('_eager_fields', {})
             kwargs['_eager_fields'].setdefault('job_slice_count', 1)
-        job = super(JobTemplate, self).create_unified_job(**kwargs)
-        if slice_event:
-            for idx in range(slice_ct):
-                create_kwargs = dict(workflow_job=job, unified_job_template=self, ancestor_artifacts=dict(job_slice=idx + 1))
-                WorkflowJobNode.objects.create(**create_kwargs)
-        return job
+        return super(JobTemplate, self).create_unified_job(**kwargs)
 
     def get_absolute_url(self, request=None):
         return reverse('api:job_template_detail', kwargs={'pk': self.pk}, request=request)
