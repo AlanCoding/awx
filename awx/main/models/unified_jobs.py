@@ -320,7 +320,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         """
         Return subclass of UnifiedJob that is created from this template.
         """
-        raise NotImplementedError  # Implement in subclass.
+        return unified_cls_mapping()[cls]
 
     @property
     def notification_templates(self):
@@ -356,7 +356,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             for fd, val in _eager_fields.items():
                 setattr(unified_job, fd, val)
 
-        setattr(unified_job, unified_job._get_parent_field_name(), self)
+        setattr(unified_job, unified_job.PARENT_FIELD_NAME, self)
 
         if hasattr(unified_job, 'survey_passwords'):
             # For JobTemplate-based or WFJT-based jobs with surveys, add passwords to list for perma-redaction
@@ -524,6 +524,8 @@ class UnifiedJob(
     """
     Concrete base class for unified job run by the task engine.
     """
+
+    PARENT_FIELD_NAME = None  # some job types have no associated template
 
     STATUS_CHOICES = UnifiedJobTemplate.JOB_STATUS_CHOICES
 
@@ -762,9 +764,6 @@ class UnifiedJob(
     def capacity_type(self):
         return get_capacity_type(self)
 
-    def _get_parent_field_name(self):
-        return 'unified_job_template'  # Override in subclasses.
-
     def _get_preferred_instance_group_cache(self):
         return [ig.pk for ig in self.preferred_instance_groups]
 
@@ -790,7 +789,7 @@ class UnifiedJob(
         return '{} {} ({})'.format(get_type_for_model(type(self)), self.id, self.status)
 
     def _get_parent_instance(self):
-        return getattr(self, self._get_parent_field_name(), None)
+        return getattr(self, self.PARENT_FIELD_NAME, None)
 
     def _update_parent_instance_no_save(self, parent_instance, update_fields=None):
         if update_fields is None:
@@ -914,8 +913,10 @@ class UnifiedJob(
         """
         unified_job_class = self.__class__
         unified_jt_class = self._get_unified_job_template_class()
-        parent_field_name = self._get_parent_field_name()
-        fields = unified_jt_class._get_unified_job_field_names() | set([parent_field_name])
+        parent_field_name = self.PARENT_FIELD_NAME
+        fields = unified_jt_class._get_unified_job_field_names()
+        if parent_field_name:
+            fields |= set([parent_field_name])
 
         create_data = {}
         if _eager_fields:
@@ -972,17 +973,21 @@ class UnifiedJob(
 
         many_to_many_fields = []
         for field_name, value in kwargs.items():
-            if field_name not in valid_fields:
-                raise Exception('Unrecognized launch config field {}.'.format(field_name))
             field = None
             # may use extra_data as a proxy for extra_vars
             if field_name in config.SUBCLASS_FIELDS and field_name != 'extra_vars':
                 field = config._meta.get_field(field_name)
+
             if isinstance(field, models.ManyToManyField):
                 many_to_many_fields.append(field_name)
                 continue
-            if isinstance(field, (models.ForeignKey)) and (value is None):
+            elif isinstance(field, (models.ForeignKey)) and (value is None):
                 continue  # the null value indicates not-provided for ForeignKey case
+            elif value is None:
+                continue  # in standard cases None indicates not-provided
+            elif field_name not in valid_fields:
+                raise Exception('Unrecognized launch config field {}.'.format(field_name))
+
             setattr(config, field_name, value)
         config.save()
 
@@ -1607,3 +1612,13 @@ class UnifiedJob(
     @property
     def ancestor_job(self):
         return self.get_workflow_job().ancestor_job if self.spawned_by_workflow else self
+
+
+def unified_cls_mapping():
+    ret = {}
+    for unified_job_cls in UnifiedJob.__subclasses__():
+        parent_field_name = unified_job_cls.PARENT_FIELD_NAME
+        if parent_field_name:
+            parent_cls = getattr(unified_job_cls, parent_field_name).field.related_model
+            ret[parent_cls] = unified_job_cls
+    return ret

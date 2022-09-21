@@ -276,10 +276,6 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
     )
 
     @classmethod
-    def _get_unified_job_class(cls):
-        return Job
-
-    @classmethod
     def _get_unified_job_field_names(cls):
         return set(f.name for f in JobOptions._meta.fields) | set(
             [
@@ -567,6 +563,8 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
     given parameters.
     """
 
+    PARENT_FIELD_NAME = 'job_template'
+
     class Meta:
         app_label = 'main'
         ordering = ('id',)
@@ -616,9 +614,6 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         default=1,
         help_text=_("If ran as part of sliced jobs, the total number of slices. " "If 1, job is not part of a sliced job."),
     )
-
-    def _get_parent_field_name(self):
-        return 'job_template'
 
     @classmethod
     def _get_task_class(cls):
@@ -1213,10 +1208,6 @@ class SystemJobTemplate(UnifiedJobTemplate, SystemJobOptions):
         app_label = 'main'
 
     @classmethod
-    def _get_unified_job_class(cls):
-        return SystemJob
-
-    @classmethod
     def _get_unified_job_field_names(cls):
         return ['name', 'description', 'organization', 'job_type', 'extra_vars']
 
@@ -1282,6 +1273,8 @@ class SystemJobTemplate(UnifiedJobTemplate, SystemJobOptions):
 
 
 class SystemJob(UnifiedJob, SystemJobOptions, JobNotificationMixin):
+    PARENT_FIELD_NAME = 'system_job_template'
+
     class Meta:
         app_label = 'main'
         ordering = ('id',)
@@ -1306,10 +1299,6 @@ class SystemJob(UnifiedJob, SystemJobOptions, JobNotificationMixin):
 
     def _set_default_dependencies_processed(self):
         self.dependencies_processed = True
-
-    @classmethod
-    def _get_parent_field_name(cls):
-        return 'system_job_template'
 
     @classmethod
     def _get_task_class(cls):
