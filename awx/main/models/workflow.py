@@ -501,10 +501,6 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
         return self.workflow_job_template_nodes
 
     @classmethod
-    def _get_unified_job_class(cls):
-        return WorkflowJob
-
-    @classmethod
     def _get_unified_jt_copy_names(cls):
         base_list = super(WorkflowJobTemplate, cls)._get_unified_jt_copy_names()
         base_list.remove('labels')
@@ -629,6 +625,8 @@ class WorkflowJobTemplate(UnifiedJobTemplate, WorkflowJobOptions, SurveyJobTempl
 
 
 class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificationMixin, WebhookMixin):
+    PARENT_FIELD_NAME = 'workflow_job_template'  # only used for create_unified_job, bypassed for sliced jobs
+
     class Meta:
         app_label = 'main'
         ordering = ('id',)
@@ -662,12 +660,6 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
     @property
     def event_processing_finished(self):
         return True
-
-    def _get_parent_field_name(self):
-        if self.is_sliced_job:
-            # This is a workflow job which is a container for slice jobs
-            return 'job_template'
-        return 'workflow_job_template'
 
     @classmethod
     def _get_unified_job_template_class(cls):
@@ -789,10 +781,6 @@ class WorkflowApprovalTemplate(UnifiedJobTemplate, RelatedJobsMixin):
     )
 
     @classmethod
-    def _get_unified_job_class(cls):
-        return WorkflowApproval
-
-    @classmethod
     def _get_unified_job_field_names(cls):
         return ['name', 'description', 'timeout']
 
@@ -812,6 +800,8 @@ class WorkflowApprovalTemplate(UnifiedJobTemplate, RelatedJobsMixin):
 
 
 class WorkflowApproval(UnifiedJob, JobNotificationMixin):
+    PARENT_FIELD_NAME = 'workflow_approval_template'
+
     class Meta:
         app_label = 'main'
 
@@ -860,9 +850,6 @@ class WorkflowApproval(UnifiedJob, JobNotificationMixin):
 
     def get_ui_url(self):
         return urljoin(settings.TOWER_URL_BASE, '/#/jobs/workflow/{}'.format(self.workflow_job.id))
-
-    def _get_parent_field_name(self):
-        return 'workflow_approval_template'
 
     def save(self, *args, **kwargs):
         update_fields = list(kwargs.get('update_fields', []))

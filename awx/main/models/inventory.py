@@ -988,6 +988,7 @@ class InventorySourceOptions(BaseModel):
 class InventorySource(UnifiedJobTemplate, InventorySourceOptions, CustomVirtualEnvMixin, RelatedJobsMixin):
 
     SOFT_UNIQUE_TOGETHER = [('polymorphic_ctype', 'name', 'inventory')]
+    # UNIFIED_JOB_CLASS = InventoryUpdate
 
     class Meta:
         app_label = 'main'
@@ -1018,10 +1019,6 @@ class InventorySource(UnifiedJobTemplate, InventorySourceOptions, CustomVirtualE
     update_cache_timeout = models.PositiveIntegerField(
         default=0,
     )
-
-    @classmethod
-    def _get_unified_job_class(cls):
-        return InventoryUpdate
 
     @classmethod
     def _get_unified_job_field_names(cls):
@@ -1167,6 +1164,8 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
     Internal job for tracking inventory updates from external sources.
     """
 
+    PARENT_FIELD_NAME = 'inventory_source'
+
     class Meta:
         app_label = 'main'
         ordering = ('inventory', 'name')
@@ -1213,9 +1212,6 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
     @property
     def is_container_group_task(self):
         return bool(self.instance_group and self.instance_group.is_container_group)
-
-    def _get_parent_field_name(self):
-        return 'inventory_source'
 
     @classmethod
     def _get_task_class(cls):
