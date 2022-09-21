@@ -385,7 +385,7 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
         workflow_job.is_sliced_job = True
         # independent slices run in parallel by design, so simultaneity is enforced by workflow
         workflow_job.allow_simultaneous = self.allow_simultaneous
-        workflow_job.create_config_from_prompts(kwargs, self, onto_self=True)  # also saves
+        workflow_job.save_prompts_data(self, onto_self=True, **kwargs)  # also saves
         for idx in range(slice_ct):
             workflow_job.workflow_job_nodes.create(unified_job_template=self, identifier=str(idx + 1))
         return workflow_job
