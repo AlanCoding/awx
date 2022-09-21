@@ -968,6 +968,8 @@ class UnifiedJob(
         if getattr(self, 'survey_passwords', None):
             config.survey_passwords = self.survey_passwords
 
+        valid_fields = list(parent.get_ask_mapping().keys())
+
         many_to_many_fields = []
         for field_name, value in kwargs.items():
             if field_name not in valid_fields:
