@@ -978,7 +978,6 @@ class InventorySourceOptions(BaseModel):
 class InventorySource(UnifiedJobTemplate, InventorySourceOptions, CustomVirtualEnvMixin, RelatedJobsMixin):
 
     SOFT_UNIQUE_TOGETHER = [('polymorphic_ctype', 'name', 'inventory')]
-    # UNIFIED_JOB_CLASS = InventoryUpdate
 
     class Meta:
         app_label = 'main'
