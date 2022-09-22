@@ -301,7 +301,6 @@ class WorkflowJobNode(WorkflowNodeBase):
         # reject/accept prompted fields
         data = {}
         wj_special_vars = {}
-        wj_special_passwords = {}
         ujt_obj = self.unified_job_template
         if ujt_obj is not None:
             node_prompts_data = self.prompts_dict(for_cls=ujt_obj.__class__)
@@ -312,7 +311,6 @@ class WorkflowJobNode(WorkflowNodeBase):
             # this is inconsistent, but maintained
             if not isinstance(ujt_obj, WorkflowJobTemplate):
                 wj_special_vars = wj_prompts_data.pop('extra_vars', {})
-                wj_special_passwords = wj_prompts_data.pop('survey_passwords', {})
             elif 'extra_vars' in node_prompts_data:
                 # Follow the vars combination rules
                 node_prompts_data['extra_vars'].update(wj_prompts_data.pop('extra_vars', {}))
@@ -329,6 +327,33 @@ class WorkflowJobNode(WorkflowNodeBase):
             # NOTE: no special rules for instance_groups, because they do not merge
             # or labels, because they do not propogate WFJT-->node at all
 
+            # This data will be processed fully after artifacts are included.
+
+        # build ancestor artifacts, save them to node model for later
+        aa_dict = {}
+        for parent_node in self.get_parent_nodes():
+            aa_dict.update(parent_node.ancestor_artifacts)
+            if parent_node.job:
+                aa_dict.update(parent_node.job.get_effective_artifacts(parents_set=set([self.workflow_job_id])))
+        if aa_dict:
+            self.ancestor_artifacts = aa_dict
+            self.save(update_fields=['ancestor_artifacts'])
+
+        if ujt_obj is not None:
+            # add no_log artifacts to password list
+            if '_ansible_no_log' in aa_dict:
+                for key in aa_dict:
+                    if key != '_ansible_no_log':
+                        node_prompts_data.setdefault('survey_passwords', {})
+                        node_prompts_data['survey_passwords'][key] = REPLACE_STR
+
+            # Add artifacts to extra_vars
+            if aa_dict:
+                functional_aa_dict = copy(aa_dict)
+                functional_aa_dict.pop('_ansible_no_log', None)
+                node_prompts_data.setdefault('extra_vars', {})
+                node_prompts_data['extra_vars'].update(functional_aa_dict)
+
             # Combine WFJT prompts with node here, WFJT at higher level
             node_prompts_data.update(wj_prompts_data)
             accepted_fields, ignored_fields, errors = ujt_obj._accept_or_ignore_job_kwargs(**node_prompts_data)
@@ -339,36 +364,11 @@ class WorkflowJobNode(WorkflowNodeBase):
                     )
                 )
             data.update(accepted_fields)  # missing fields are handled in the scheduler
-        # build ancestor artifacts, save them to node model for later
-        aa_dict = {}
-        for parent_node in self.get_parent_nodes():
-            aa_dict.update(parent_node.ancestor_artifacts)
-            if parent_node.job:
-                aa_dict.update(parent_node.job.get_effective_artifacts(parents_set=set([self.workflow_job_id])))
-        if aa_dict:
-            self.ancestor_artifacts = aa_dict
-            self.save(update_fields=['ancestor_artifacts'])
-        # process password list
-        password_dict = data.get('survey_passwords', {})
-        if '_ansible_no_log' in aa_dict:
-            for key in aa_dict:
-                if key != '_ansible_no_log':
-                    password_dict[key] = REPLACE_STR
-        password_dict.update(wj_special_passwords)
-        if password_dict:
-            data['survey_passwords'] = password_dict
-        # process extra_vars
-        extra_vars = data.get('extra_vars', {})
-        if ujt_obj and isinstance(ujt_obj, (JobTemplate, WorkflowJobTemplate)):
-            if aa_dict:
-                functional_aa_dict = copy(aa_dict)
-                functional_aa_dict.pop('_ansible_no_log', None)
-                extra_vars.update(functional_aa_dict)
 
         # Workflow Job extra_vars higher precedence than ancestor artifacts
-        extra_vars.update(wj_special_vars)
-        if extra_vars:
-            data['extra_vars'] = extra_vars
+        if wj_special_vars:
+            data.setdefault('extra_vars', {})
+            data['extra_vars'].update(wj_special_vars)
 
         # ensure that unified jobs created by WorkflowJobs are marked
         data['_eager_fields'] = {'launch_type': 'workflow'}
