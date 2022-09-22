@@ -458,17 +458,17 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
             new_value = kwargs[field_name]
             old_value = getattr(self, field_name)
 
-            field = self._meta.get_field(field_name)
-            if isinstance(field, models.ManyToManyField):
-                if field_name == 'instance_groups':
-                    # Instance groups are ordered so we can't make a set out of them
-                    old_value = old_value.all()
-                elif field_name == 'credentials':
-                    # Credentials have a weird pattern because of how they are layered
-                    old_value = set(old_value.all())
-                    new_value = set(kwargs[field_name]) - old_value
-                    if not new_value:
-                        continue
+            if field_name == 'instance_groups':
+                # Instance groups do not have a corresponding field on the parent, only skip not-provided
+                old_value = []
+                if not new_value:
+                    continue
+            elif field_name in ('credentials', 'labels'):
+                # Credentials have a weird pattern because of how they are layered
+                old_value = set(old_value.all())
+                new_value = set(kwargs[field_name]) - old_value
+                if not new_value:
+                    continue
 
             if new_value == old_value:
                 # no-op case: Fields the same as template's value
