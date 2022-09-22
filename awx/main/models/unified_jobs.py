@@ -394,7 +394,6 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
 
         if unified_job_data.get('labels'):
             # Labels are additive so we are going to add any src labels in addition to the override labels
-            Credential = UnifiedJob._meta.get_field('labels').related_model
             template_labels = set(self.labels.all())
             prompted_labels = set(unified_job_data['labels'])
             # combine prompted labels with JT
