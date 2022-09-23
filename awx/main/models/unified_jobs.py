@@ -524,7 +524,7 @@ class UnifiedJob(
     Concrete base class for unified job run by the task engine.
     """
 
-    PARENT_FIELD_NAME = None  # some job types have no associated template
+    PARENT_FIELD_NAME = ''  # some job types have no associated template
 
     STATUS_CHOICES = UnifiedJobTemplate.JOB_STATUS_CHOICES
 
