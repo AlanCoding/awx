@@ -325,12 +325,6 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
             raise ValidationError(_(f'Maximum number of forks ({settings.MAX_FORKS}) exceeded.'))
         return self.forks
 
-    def create_job(self, **kwargs):
-        """
-        Create a new job based on this template.
-        """
-        return self.create_unified_job(**kwargs)
-
     def get_effective_slice_ct(self, kwargs):
         actual_inventory = self.inventory
         if self.ask_inventory_on_launch and 'inventory' in kwargs:
@@ -373,18 +367,18 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
         if errors:
             raise ValidationError(errors)
 
-    def create_sliced_workflow_job(self, slice_ct, **kwargs):
+    def create_sliced_workflow_job(self, slice_ct, _eager_fields=None, **kwargs):
         """
         A Slice Job Template will generate a WorkflowJob rather than a Job
         Implementation is different from create_unified_job because we care to copy
         prompts but not the JT fields themselves.
         """
-        eager_fields = kwargs.pop('_eager_fields', {})
         from awx.main.models.workflow import WorkflowJob
 
         workflow_job = WorkflowJob(name=self.name, description=self.description)
-        for fd, val in eager_fields.items():
-            setattr(workflow_job, fd, val)
+        if _eager_fields:
+            for fd, val in _eager_fields.items():
+                setattr(workflow_job, fd, val)
         workflow_job.job_template = self
         workflow_job.unified_job_template = self
         workflow_job.is_sliced_job = True
