@@ -117,7 +117,7 @@ def data_to_internal(data):
     if 'execution_environment' in data:
         internal['execution_environment'] = ExecutionEnvironment.objects.get(pk=data['execution_environment'])
     if 'labels' in data:
-        internal['labels'] = [Label.objects.get(pk=_id) for _id in data['labels']]
+        internal['labels'] = set([Label.objects.get(pk=_id) for _id in data['labels']])
     if 'instance_groups' in data:
         internal['instance_groups'] = [InstanceGroup.objects.get(pk=_id) for _id in data['instance_groups']]
     return internal
