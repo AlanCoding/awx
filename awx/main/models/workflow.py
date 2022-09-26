@@ -754,6 +754,11 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
             prompts = self.prompts_dict()
         return prompts
 
+    def _get_parent_instance(self):
+        if self.is_sliced_job:
+            return self.job_template
+        return super()._get_parent_instance()
+
     @property
     def preferred_instance_groups(self):
         return []
