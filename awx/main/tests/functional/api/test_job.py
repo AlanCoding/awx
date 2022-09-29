@@ -5,6 +5,7 @@ from dateutil.parser import parse
 from dateutil.relativedelta import relativedelta
 from crum import impersonate
 import datetime
+import json
 
 # Django rest framework
 from rest_framework.exceptions import PermissionDenied
@@ -49,6 +50,17 @@ def test_job_relaunch_permission_denied_response(post, get, inventory, project, 
 
     # without any of those prompts, user can launch
     r = post(reverse('api:job_relaunch', kwargs={'pk': job.pk}), {}, jt_user, expect=201)
+
+
+@pytest.mark.django_db
+def test_system_job_launch(post, system_job_template, admin_user, mocker):
+    # result_stdout is not compatible with SQLite... and it is questionable to have this field in the first place
+    mocker.patch('awx.api.serializers.SystemJobSerializer.get_result_stdout', new=lambda self, obj: None)
+    r = post(reverse('api:system_job_template_launch', kwargs={'pk': system_job_template.pk}), {'extra_vars': {'days': 24}}, admin_user, expect=201)
+    assert 'id' in r.data
+    system_job = system_job_template._get_unified_job_class().objects.get(pk=r.data['id'])
+    assert json.loads(system_job.extra_vars) == {'days': 24}
+    assert system_job.launch_config.extra_data == {'days': 24}
 
 
 @pytest.mark.django_db

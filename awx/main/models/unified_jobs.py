@@ -50,10 +50,10 @@ from awx.main.utils.common import (
     get_event_partition_epoch,
     get_capacity_type,
 )
-from awx.main.utils.encryption import encrypt_dict, decrypt_field
+from awx.main.utils.encryption import decrypt_field
 from awx.main.utils import polymorphic
 from awx.main.constants import ACTIVE_STATES, CAN_CANCEL, JOB_VARIABLE_PREFIXES
-from awx.main.redact import UriCleaner, REPLACE_STR
+from awx.main.redact import UriCleaner
 from awx.main.consumers import emit_channel_notification
 from awx.main.fields import AskForField, OrderedManyToManyField, JSONBlob
 
@@ -336,11 +336,6 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         """
         Create a new unified job based on this unified job template.
         """
-        # automatically encrypt survey fields
-        if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
-            password_list = self.survey_password_variables()
-            encrypt_dict(prompts.get('extra_vars', {}), password_list)
-
         fields = self._get_unified_job_field_names()
 
         unallowed_fields = set(prompts.keys()) - set(fields)
@@ -352,19 +347,15 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
 
         unified_job = copy_model_by_class(self, self._get_unified_job_class(), fields, unified_job_data)
 
+        # automatically encrypt survey fields, TODO: we should not need survey_passwords field anymore
+        if hasattr(self, 'handle_launch_passwords'):
+            self.survey_passwords = self.handle_launch_passwords(prompts.get('extra_vars', {}), survey_passwords)
+
         if _eager_fields:
             for fd, val in _eager_fields.items():
                 setattr(unified_job, fd, val)
 
         setattr(unified_job, unified_job.PARENT_FIELD_NAME, self)
-
-        if hasattr(unified_job, 'survey_passwords'):
-            # For JobTemplate-based or WFJT-based jobs with surveys, add passwords to list for perma-redaction
-            if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
-                for password in self.survey_password_variables():
-                    unified_job.survey_passwords[password] = REPLACE_STR
-            if survey_passwords:
-                unified_job.survey_passwords.update(survey_passwords)
 
         if instance_groups:
             unified_job.preferred_instance_groups_cache = [ig.id for ig in instance_groups]
@@ -968,7 +959,9 @@ class UnifiedJob(
         if getattr(self, 'survey_passwords', None):
             config.survey_passwords = self.survey_passwords
 
-        valid_fields = list(parent.get_ask_mapping().keys())
+        from awx.main.models.jobs import JobTemplate
+
+        valid_fields = list(JobTemplate.get_ask_mapping().keys())
 
         many_to_many_fields = []
         for field_name, value in kwargs.items():
