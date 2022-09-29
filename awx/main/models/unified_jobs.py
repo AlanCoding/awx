@@ -349,7 +349,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
 
         # automatically encrypt survey fields, TODO: we should not need survey_passwords field anymore
         if hasattr(self, 'handle_launch_passwords'):
-            self.survey_passwords = self.handle_launch_passwords(prompts.get('extra_vars', {}), survey_passwords)
+            unified_job.survey_passwords = self.handle_launch_passwords(prompts.get('extra_vars', {}), survey_passwords)
 
         if _eager_fields:
             for fd, val in _eager_fields.items():
@@ -956,7 +956,7 @@ class UnifiedJob(
             config = JobLaunchConfig(job=self)
 
         # conservatively save survey_passwords if the job has them
-        if getattr(self, 'survey_passwords', None):
+        if getattr(self, 'survey_passwords', None) and (not onto_self):
             config.survey_passwords = self.survey_passwords
 
         from awx.main.models.jobs import JobTemplate
@@ -981,7 +981,15 @@ class UnifiedJob(
                 raise Exception('Unrecognized launch config field {}.'.format(field_name))
 
             setattr(config, field_name, value)
-        config.save()
+
+        # Actual job models have extra_vars as a text-like field, not a dict
+        if onto_self:
+            config.extra_vars = json.dumps(config.extra_vars)
+
+        from awx.main.signals import disable_activity_stream
+
+        with disable_activity_stream():
+            config.save()
 
         for field_name in many_to_many_fields:
             prompted_items = kwargs.get(field_name, [])

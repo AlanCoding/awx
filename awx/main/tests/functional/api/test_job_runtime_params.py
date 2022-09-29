@@ -260,7 +260,9 @@ def test_slice_with_survey(job_template_prompts, post, admin_user):
 
     node = workflow_job.workflow_nodes.first()
     kwargs = node.get_job_kwargs()
+    assert 'survey_passwords' in kwargs
     job = job_template.create_unified_job(**kwargs)
+    assert job.survey_passwords
     ev = json.loads(job.extra_vars)
     actual_ev = json.loads(job.decrypted_extra_vars())
 

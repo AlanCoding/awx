@@ -382,9 +382,7 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
         workflow_job.job_template = self
         workflow_job.unified_job_template = self
         workflow_job.is_sliced_job = True
-        # automatically encrypt survey fields, TODO: we should not need survey_passwords field anymore
-        if hasattr(self, 'handle_launch_passwords'):
-            self.survey_passwords = self.handle_launch_passwords(prompts.get('extra_vars', {}), survey_passwords)
+        workflow_job.survey_passwords = self.handle_launch_passwords(prompts.get('extra_vars', {}), survey_passwords)
         # independent slices run in parallel by design, so simultaneity is enforced by workflow
         workflow_job.allow_simultaneous = self.allow_simultaneous
         workflow_job.save_prompts_data(self, onto_self=True, **prompts)  # also saves

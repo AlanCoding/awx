@@ -146,19 +146,18 @@ class SurveyJobTemplateMixin(models.Model):
     def handle_launch_passwords(self, prompted_extra_vars, extra_passwords):
         """
         Intended to be called as a part of create_unified_job for any template allowing surveys
+        encrypts any incoming prompted extra_vars that are answers to password survey questions
+        If this is ran inside a WFJT, takes extra_passwords which may have come from workflow survey, or artifacts
         """
-        # automatically encrypt survey fields
-        password_list = self.survey_password_variables()
-        if self.survey_enabled:
-            encrypt_dict(prompted_extra_vars, password_list)
-
-        # For JobTemplate-based or WFJT-based jobs with surveys, add passwords to list for perma-redaction
         survey_passwords = {}
-        if hasattr(self, 'survey_spec') and getattr(self, 'survey_enabled', False):
-            for password in password_list:
-                survey_passwords[password] = REPLACE_STR
-        if survey_passwords:
-            survey_passwords.update(survey_passwords)
+        if self.survey_enabled:
+            password_list = self.survey_password_variables()
+            if password_list:
+                encrypt_dict(prompted_extra_vars, password_list)  # automatically encrypt survey fields
+                for password in password_list:
+                    survey_passwords[password] = REPLACE_STR
+        if extra_passwords:
+            survey_passwords.update(extra_passwords)
         return survey_passwords
 
     @property
@@ -435,17 +434,12 @@ class SurveyJobMixin(models.Model):
         """
         Decrypts fields marked as passwords in survey.
         """
-        extra_vars = self.extra_vars_dict
-        changed = False
-        for key in extra_vars:
-            value = extra_vars[key]
-            if value and isinstance(value, str) and value.startswith('$encrypted$'):
-                try:
+        if self.survey_passwords:
+            extra_vars = json.loads(self.extra_vars)
+            for key in self.survey_passwords:
+                value = extra_vars.get(key)
+                if value and isinstance(value, str) and value.startswith('$encrypted$'):
                     extra_vars[key] = decrypt_value(get_encryption_key('value', pk=None), value)
-                    changed = True
-                except Exception as exc:
-                    logger.info(f'Could not decrypt {key} from template {self.id}, error: {exc}')
-        if changed:
             return json.dumps(extra_vars)
         else:
             return self.extra_vars
