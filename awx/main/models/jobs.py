@@ -862,7 +862,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             timeout = now() - datetime.timedelta(seconds=timeout)
             hosts = hosts.filter(ansible_facts_modified__gte=timeout)
         written_ct = 0
-        for host in hosts:
+        for host in hosts.iterator():
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
@@ -892,7 +892,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         unmodified_ct = 0
         cleared_ct = 0
         hosts_to_update = []
-        for host in self._get_inventory_hosts():
+        for host in self._get_inventory_hosts().iterator():
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))

@@ -30,7 +30,9 @@ def inventory():
 @pytest.fixture
 def job(mocker, hosts, inventory):
     j = Job(inventory=inventory, id=2)
-    j._get_inventory_hosts = mocker.Mock(return_value=hosts)
+    host_queryset = mocker.Mock()
+    j._get_inventory_hosts = mocker.Mock(return_value=host_queryset)
+    host_queryset.iterator = mocker.Mock(return_value=hosts)
     return j
 
 
@@ -48,7 +50,9 @@ def test_start_job_fact_cache(hosts, job, inventory, tmpdir):
 
 
 def test_fact_cache_with_invalid_path_traversal(job, inventory, tmpdir, mocker):
-    job._get_inventory_hosts = mocker.Mock(
+    host_queryset = mocker.Mock()
+    job._get_inventory_hosts = mocker.Mock(return_value=host_queryset)
+    host_queryset.iterator = mocker.Mock(
         return_value=[
             Host(
                 name='../foo',
@@ -68,8 +72,7 @@ def test_finish_job_fact_cache_with_existing_data(job, hosts, inventory, mocker,
     modified_times = {}
     job.start_job_fact_cache(fact_cache, modified_times, 0)
 
-    for h in hosts:
-        h.save = mocker.Mock()
+    bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
     ansible_facts_new = {"foo": "bar"}
     filepath = os.path.join(fact_cache, hosts[1].name)
@@ -86,11 +89,10 @@ def test_finish_job_fact_cache_with_existing_data(job, hosts, inventory, mocker,
     job.finish_job_fact_cache(fact_cache, modified_times)
 
     for host in (hosts[0], hosts[2], hosts[3]):
-        host.save.assert_not_called()
         assert host.ansible_facts == {"a": 1, "b": 2}
         assert host.ansible_facts_modified is None
     assert hosts[1].ansible_facts == ansible_facts_new
-    hosts[1].save.assert_called_once_with(update_fields=['ansible_facts', 'ansible_facts_modified'])
+    bulk_update.assert_called_once_with([hosts[1]], ['ansible_facts', 'ansible_facts_modified'])
 
 
 def test_finish_job_fact_cache_with_bad_data(job, hosts, inventory, mocker, tmpdir):
@@ -98,8 +100,7 @@ def test_finish_job_fact_cache_with_bad_data(job, hosts, inventory, mocker, tmpd
     modified_times = {}
     job.start_job_fact_cache(fact_cache, modified_times, 0)
 
-    for h in hosts:
-        h.save = mocker.Mock()
+    bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
     for h in hosts:
         filepath = os.path.join(fact_cache, h.name)
@@ -111,8 +112,7 @@ def test_finish_job_fact_cache_with_bad_data(job, hosts, inventory, mocker, tmpd
 
     job.finish_job_fact_cache(fact_cache, modified_times)
 
-    for h in hosts:
-        h.save.assert_not_called()
+    bulk_update.assert_not_called()
 
 
 def test_finish_job_fact_cache_clear(job, hosts, inventory, mocker, tmpdir):
@@ -120,15 +120,13 @@ def test_finish_job_fact_cache_clear(job, hosts, inventory, mocker, tmpdir):
     modified_times = {}
     job.start_job_fact_cache(fact_cache, modified_times, 0)
 
-    for h in hosts:
-        h.save = mocker.Mock()
+    bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
     os.remove(os.path.join(fact_cache, hosts[1].name))
     job.finish_job_fact_cache(fact_cache, modified_times)
 
     for host in (hosts[0], hosts[2], hosts[3]):
-        host.save.assert_not_called()
         assert host.ansible_facts == {"a": 1, "b": 2}
         assert host.ansible_facts_modified is None
     assert hosts[1].ansible_facts == {}
-    hosts[1].save.assert_called_once_with()
+    bulk_update.assert_called_once_with([hosts[1]], ['ansible_facts', 'ansible_facts_modified'])
