@@ -845,6 +845,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         return "Job"
 
     def _get_inventory_hosts(self, only=['name', 'ansible_facts', 'ansible_facts_modified', 'modified', 'inventory_id']):
+        """Return value is an iterable for the hosts in related inventory for this job"""
         if not self.inventory:
             return []
         host_queryset = self.inventory.hosts.only(*only)
@@ -862,7 +863,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             timeout = now() - datetime.timedelta(seconds=timeout)
             hosts = hosts.filter(ansible_facts_modified__gte=timeout)
         written_ct = 0
-        for host in hosts.iterator():
+        for host in hosts:
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
@@ -892,7 +893,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         unmodified_ct = 0
         cleared_ct = 0
         hosts_to_update = []
-        for host in self._get_inventory_hosts().iterator():
+        for host in self._get_inventory_hosts():
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
