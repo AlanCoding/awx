@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.query import QuerySet
 
 # from django.core.cache import cache
 from django.utils.encoding import smart_str
@@ -848,8 +849,10 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         """Return value is an iterable for the hosts in related inventory for this job"""
         if not self.inventory:
             return []
-        host_queryset = self.inventory.hosts.only(*only)
-        return self.inventory.get_sliced_hosts(host_queryset, self.job_slice_number, self.job_slice_count)
+        host_queryset = self.inventory.get_sliced_hosts(self.inventory.hosts.only(*only), self.job_slice_number, self.job_slice_count)
+        if isinstance(host_queryset, QuerySet):
+            return host_queryset.iterator()
+        return host_queryset
 
     def start_job_fact_cache(self, destination, modification_times, timeout=None):
         self.log_lifecycle("start_job_fact_cache")
