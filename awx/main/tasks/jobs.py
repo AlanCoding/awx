@@ -1060,11 +1060,7 @@ class RunJob(SourceControlMixin, BaseTask):
         # Fetch "cached" fact data from prior runs and put on the disk
         # where ansible expects to find it
         if job.use_fact_cache:
-            self.fact_modification_times = {}
-            self.instance.start_job_fact_cache(
-                os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'),
-                self.fact_modification_times,
-            )
+            self.facts_write_time = self.instance.start_job_fact_cache(os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'))
 
     def build_project_dir(self, job, private_data_dir):
         self.sync_and_copy(job.project, private_data_dir, scm_branch=job.scm_branch)
@@ -1073,7 +1069,7 @@ class RunJob(SourceControlMixin, BaseTask):
         super(RunJob, self).post_run_hook(job, status)
         job.refresh_from_db(fields=['job_env'])
         private_data_dir = job.job_env.get('AWX_PRIVATE_DATA_DIR')
-        if (not private_data_dir) or (not hasattr(self, 'fact_modification_times')):
+        if (not private_data_dir) or (not hasattr(self, 'facts_write_time')):
             # If there's no private data dir, that means we didn't get into the
             # actual `run()` call; this _usually_ means something failed in
             # the pre_run_hook method
@@ -1081,7 +1077,7 @@ class RunJob(SourceControlMixin, BaseTask):
         if job.use_fact_cache:
             job.finish_job_fact_cache(
                 os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'),
-                self.fact_modification_times,
+                self.facts_write_time,
             )
 
     def final_run_hook(self, job, status, private_data_dir):

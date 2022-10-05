@@ -858,7 +858,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         return host_queryset
 
     @log_excess_runtime(logger, debug_cutoff=0.01, msg='Job {job_id} host facts prepared for {written_ct} hosts, took {delta:.3f} s', add_log_data=True)
-    def start_job_fact_cache(self, destination, modification_times, log_data, timeout=None):
+    def start_job_fact_cache(self, destination, log_data, timeout=None):
         self.log_lifecycle("start_job_fact_cache")
         os.makedirs(destination, mode=0o700)
         if timeout is None:
@@ -871,6 +871,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             hosts = self._get_inventory_hosts()
         log_data['written_ct'] = 0
         log_data['job_id'] = self.id
+        last_filepath_written = None
         for host in hosts:
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
@@ -881,11 +882,14 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
                     os.chmod(f.name, 0o600)
                     json.dump(host.ansible_facts, f)
                     log_data['written_ct'] += 1
+                    last_filepath_written = filepath
             except IOError:
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
                 continue
-            # make note of the time we wrote the file so we can check if it changed later
-            modification_times[filepath] = os.path.getmtime(filepath)
+        # make note of the time we wrote the last file so we can check if any file changed later
+        if last_filepath_written:
+            return os.path.getmtime(last_filepath_written)
+        return None
 
     @log_excess_runtime(
         logger,
@@ -893,7 +897,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         msg='Job {job_id} host facts: updated {updated_ct}, cleared {cleared_ct}, unchanged {unmodified_ct}, took {delta:.3f} s',
         add_log_data=True,
     )
-    def finish_job_fact_cache(self, destination, modification_times, log_data):
+    def finish_job_fact_cache(self, destination, facts_write_time, log_data):
         self.log_lifecycle("finish_job_fact_cache")
         log_data['job_id'] = self.id
         log_data['updated_ct'] = 0
@@ -908,7 +912,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             if os.path.exists(filepath):
                 # If the file changed since we wrote it pre-playbook run...
                 modified = os.path.getmtime(filepath)
-                if modified > modification_times.get(filepath, 0):
+                if (not facts_write_time) or modified > facts_write_time:
                     with codecs.open(filepath, 'r', encoding='utf-8') as f:
                         try:
                             ansible_facts = json.load(f)
