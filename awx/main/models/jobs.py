@@ -44,7 +44,7 @@ from awx.main.models.notifications import (
     NotificationTemplate,
     JobNotificationMixin,
 )
-from awx.main.utils import parse_yaml_or_json, getattr_dne, NullablePromptPseudoField, polymorphic
+from awx.main.utils import parse_yaml_or_json, getattr_dne, NullablePromptPseudoField, polymorphic, log_excess_runtime
 from awx.main.fields import ImplicitRoleField, AskForField, JSONBlob, OrderedManyToManyField
 from awx.main.models.mixins import (
     ResourceMixin,
@@ -857,9 +857,9 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             return host_queryset.iterator()
         return host_queryset
 
-    def start_job_fact_cache(self, destination, modification_times, timeout=None):
+    @log_excess_runtime(logger, debug_cutoff=0.01, msg='Job {job_id} host facts prepared for {written_ct} hosts, took {delta:.3f} s', add_log_data=True)
+    def start_job_fact_cache(self, destination, modification_times, log_data, timeout=None):
         self.log_lifecycle("start_job_fact_cache")
-        start_time = time.time()
         os.makedirs(destination, mode=0o700)
         if timeout is None:
             timeout = settings.ANSIBLE_FACT_CACHE_TIMEOUT
@@ -869,7 +869,8 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
             hosts = hosts = self._get_inventory_hosts(ansible_facts_modified__gte=timeout)
         else:
             hosts = self._get_inventory_hosts()
-        written_ct = 0
+        log_data['written_ct'] = 0
+        log_data['job_id'] = self.id
         for host in hosts:
             filepath = os.sep.join(map(str, [destination, host.name]))
             if not os.path.realpath(filepath).startswith(destination):
@@ -879,26 +880,25 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
                 with codecs.open(filepath, 'w', encoding='utf-8') as f:
                     os.chmod(f.name, 0o600)
                     json.dump(host.ansible_facts, f)
-                    written_ct += 1
+                    log_data['written_ct'] += 1
             except IOError:
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
                 continue
             # make note of the time we wrote the file so we can check if it changed later
             modification_times[filepath] = os.path.getmtime(filepath)
-        if written_ct:
-            dt = time.time() - start_time
-            if dt < 1.0:
-                logger_method = logger.debug
-            else:
-                logger_method = logger.info
-            logger_method(f'Job {self.id} host facts prepared for {written_ct} hosts, took {dt:.3f} s')
 
-    def finish_job_fact_cache(self, destination, modification_times):
+    @log_excess_runtime(
+        logger,
+        debug_cutoff=0.01,
+        msg='Job {job_id} host facts: updated {updated_ct}, cleared {cleared_ct}, unchanged {unmodified_ct}, took {delta:.3f} s',
+        add_log_data=True,
+    )
+    def finish_job_fact_cache(self, destination, modification_times, log_data):
         self.log_lifecycle("finish_job_fact_cache")
-        start_time = time.time()
-        updated_ct = 0
-        unmodified_ct = 0
-        cleared_ct = 0
+        log_data['job_id'] = self.id
+        log_data['updated_ct'] = 0
+        log_data['unmodified_ct'] = 0
+        log_data['cleared_ct'] = 0
         hosts_to_update = []
         for host in self._get_inventory_hosts():
             filepath = os.sep.join(map(str, [destination, host.name]))
@@ -927,28 +927,21 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
                                 job_id=self.id,
                             ),
                         )
-                        updated_ct += 1
+                        log_data['updated_ct'] += 1
                 else:
-                    unmodified_ct += 1
+                    log_data['unmodified_ct'] += 1
             else:
                 # if the file goes missing, ansible removed it (likely via clear_facts)
                 host.ansible_facts = {}
                 host.ansible_facts_modified = now()
                 hosts_to_update.append(host)
                 system_tracking_logger.info('Facts cleared for inventory {} host {}'.format(smart_str(host.inventory.name), smart_str(host.name)))
-                cleared_ct += 1
+                log_data['cleared_ct'] += 1
             if len(hosts_to_update) > 100:
                 self.inventory.hosts.bulk_update(hosts_to_update, ['ansible_facts', 'ansible_facts_modified'])
                 hosts_to_update = []
         if hosts_to_update:
             self.inventory.hosts.bulk_update(hosts_to_update, ['ansible_facts', 'ansible_facts_modified'])
-        if updated_ct or cleared_ct or unmodified_ct:
-            dt = time.time() - start_time
-            if dt < 1.0:
-                logger_method = logger.debug
-            else:
-                logger_method = logger.info
-            logger_method(f'Job {self.id} host facts: updated {updated_ct}, cleared {cleared_ct}, unchanged {unmodified_ct}, took {dt:.3f} s')
 
 
 class LaunchTimeConfigBase(BaseModel):
