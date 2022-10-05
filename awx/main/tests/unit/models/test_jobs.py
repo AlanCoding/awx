@@ -30,29 +30,24 @@ def inventory():
 @pytest.fixture
 def job(mocker, hosts, inventory):
     j = Job(inventory=inventory, id=2)
-    host_queryset = mocker.Mock()
-    j._get_inventory_hosts = mocker.Mock(return_value=host_queryset)
-    host_queryset.iterator = mocker.Mock(return_value=hosts)
+    j._get_inventory_hosts = mocker.Mock(return_value=hosts)
     return j
 
 
 def test_start_job_fact_cache(hosts, job, inventory, tmpdir):
     fact_cache = os.path.join(tmpdir, 'facts')
-    modified_times = {}
-    job.start_job_fact_cache(fact_cache, modified_times, 0)
+    last_modified = job.start_job_fact_cache(fact_cache, timeout=0)
 
     for host in hosts:
         filepath = os.path.join(fact_cache, host.name)
         assert os.path.exists(filepath)
         with open(filepath, 'r') as f:
             assert f.read() == json.dumps(host.ansible_facts)
-        assert filepath in modified_times
+        assert os.path.getmtime(filepath) <= last_modified
 
 
 def test_fact_cache_with_invalid_path_traversal(job, inventory, tmpdir, mocker):
-    host_queryset = mocker.Mock()
-    job._get_inventory_hosts = mocker.Mock(return_value=host_queryset)
-    host_queryset.iterator = mocker.Mock(
+    job._get_inventory_hosts = mocker.Mock(
         return_value=[
             Host(
                 name='../foo',
@@ -62,15 +57,14 @@ def test_fact_cache_with_invalid_path_traversal(job, inventory, tmpdir, mocker):
     )
 
     fact_cache = os.path.join(tmpdir, 'facts')
-    job.start_job_fact_cache(fact_cache, {}, 0)
+    job.start_job_fact_cache(fact_cache, timeout=0)
     # a file called "foo" should _not_ be written outside the facts dir
     assert os.listdir(os.path.join(fact_cache, '..')) == ['facts']
 
 
 def test_finish_job_fact_cache_with_existing_data(job, hosts, inventory, mocker, tmpdir):
     fact_cache = os.path.join(tmpdir, 'facts')
-    modified_times = {}
-    job.start_job_fact_cache(fact_cache, modified_times, 0)
+    last_modified = job.start_job_fact_cache(fact_cache, timeout=0)
 
     bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
@@ -86,7 +80,7 @@ def test_finish_job_fact_cache_with_existing_data(job, hosts, inventory, mocker,
         new_modification_time = time.time() + 3600
         os.utime(filepath, (new_modification_time, new_modification_time))
 
-    job.finish_job_fact_cache(fact_cache, modified_times)
+    job.finish_job_fact_cache(fact_cache, last_modified)
 
     for host in (hosts[0], hosts[2], hosts[3]):
         assert host.ansible_facts == {"a": 1, "b": 2}
@@ -97,8 +91,7 @@ def test_finish_job_fact_cache_with_existing_data(job, hosts, inventory, mocker,
 
 def test_finish_job_fact_cache_with_bad_data(job, hosts, inventory, mocker, tmpdir):
     fact_cache = os.path.join(tmpdir, 'facts')
-    modified_times = {}
-    job.start_job_fact_cache(fact_cache, modified_times, 0)
+    last_modified = job.start_job_fact_cache(fact_cache, timeout=0)
 
     bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
@@ -110,20 +103,19 @@ def test_finish_job_fact_cache_with_bad_data(job, hosts, inventory, mocker, tmpd
             new_modification_time = time.time() + 3600
             os.utime(filepath, (new_modification_time, new_modification_time))
 
-    job.finish_job_fact_cache(fact_cache, modified_times)
+    job.finish_job_fact_cache(fact_cache, last_modified)
 
     bulk_update.assert_not_called()
 
 
 def test_finish_job_fact_cache_clear(job, hosts, inventory, mocker, tmpdir):
     fact_cache = os.path.join(tmpdir, 'facts')
-    modified_times = {}
-    job.start_job_fact_cache(fact_cache, modified_times, 0)
+    last_modified = job.start_job_fact_cache(fact_cache, timeout=0)
 
     bulk_update = mocker.patch('django.db.models.query.QuerySet.bulk_update')
 
     os.remove(os.path.join(fact_cache, hosts[1].name))
-    job.finish_job_fact_cache(fact_cache, modified_times)
+    job.finish_job_fact_cache(fact_cache, last_modified)
 
     for host in (hosts[0], hosts[2], hosts[3]):
         assert host.ansible_facts == {"a": 1, "b": 2}

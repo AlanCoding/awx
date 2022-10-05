@@ -910,7 +910,7 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
                 system_tracking_logger.error('facts for host {} could not be cached'.format(smart_str(host.name)))
                 continue
             if os.path.exists(filepath):
-                # If the file changed since we wrote it pre-playbook run...
+                # If the file changed since we wrote the last facts file, pre-playbook run...
                 modified = os.path.getmtime(filepath)
                 if (not facts_write_time) or modified > facts_write_time:
                     with codecs.open(filepath, 'r', encoding='utf-8') as f:
