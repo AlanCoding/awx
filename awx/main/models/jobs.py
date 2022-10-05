@@ -845,11 +845,14 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
     def get_notification_friendly_name(self):
         return "Job"
 
-    def _get_inventory_hosts(self, only=['name', 'ansible_facts', 'ansible_facts_modified', 'modified', 'inventory_id']):
-        """Return value is an iterable for the hosts in related inventory for this job"""
+    def _get_inventory_hosts(self, only=('name', 'ansible_facts', 'ansible_facts_modified', 'modified', 'inventory_id'), **filters):
+        """Return value is an iterable for the relevant hosts for this job"""
         if not self.inventory:
             return []
-        host_queryset = self.inventory.get_sliced_hosts(self.inventory.hosts.only(*only), self.job_slice_number, self.job_slice_count)
+        host_queryset = self.inventory.hosts.only(*only)
+        if filters:
+            host_queryset = host_queryset.filter(**filters)
+        host_queryset = self.inventory.get_sliced_hosts(host_queryset, self.job_slice_number, self.job_slice_count)
         if isinstance(host_queryset, QuerySet):
             return host_queryset.iterator()
         return host_queryset
@@ -858,13 +861,14 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
         self.log_lifecycle("start_job_fact_cache")
         start_time = time.time()
         os.makedirs(destination, mode=0o700)
-        hosts = self._get_inventory_hosts()
         if timeout is None:
             timeout = settings.ANSIBLE_FACT_CACHE_TIMEOUT
         if timeout > 0:
             # exclude hosts with fact data older than `settings.ANSIBLE_FACT_CACHE_TIMEOUT seconds`
             timeout = now() - datetime.timedelta(seconds=timeout)
-            hosts = hosts.filter(ansible_facts_modified__gte=timeout)
+            hosts = hosts = self._get_inventory_hosts(ansible_facts_modified__gte=timeout)
+        else:
+            hosts = self._get_inventory_hosts()
         written_ct = 0
         for host in hosts:
             filepath = os.sep.join(map(str, [destination, host.name]))
