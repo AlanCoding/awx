@@ -249,8 +249,7 @@ class Inventory(CommonModelNameNotUnique, ResourceMixin, RelatedJobsMixin):
     def get_sliced_hosts(self, host_queryset, slice_number, slice_count):
         if slice_count > 1 and slice_number > 0:
             offset = slice_number - 1
-            return host_queryset[offset::slice_count]
-        # we prefer an iterator to reduce number fetched in memory, but only if not sliced
+            host_queryset = host_queryset[offset::slice_count]
         return host_queryset
 
     def get_script_data(self, hostvars=False, towervars=False, show_all=False, slice_number=1, slice_count=1):
