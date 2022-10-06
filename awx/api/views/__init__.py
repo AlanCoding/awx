@@ -3221,10 +3221,9 @@ class WorkflowJobRelaunch(GenericAPIView):
         obj = self.get_object()
         if obj.is_sliced_job:
             jt = obj.job_template
-            slice_ct = jt.get_effective_slice_ct(obj.launch_prompts())
             if not jt:
                 raise ParseError(_('Cannot relaunch slice workflow job orphaned from job template.'))
-            elif slice_ct != obj.workflow_nodes.count():
+            elif jt and jt.get_effective_slice_ct(obj.launch_prompts()) != obj.workflow_nodes.count():
                 raise ParseError(_('Cannot relaunch sliced workflow job after slice count has changed.'))
         new_workflow_job = obj.create_relaunch_workflow_job()
         new_workflow_job.signal_start()
