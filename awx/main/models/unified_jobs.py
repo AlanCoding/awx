@@ -382,6 +382,8 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             # combine prompted credentials with JT, but overwriting creds of same type
             cred_dict.update(prompted_dict)
             unified_job_data['credentials'] = [cred for cred in cred_dict.values()]
+        elif 'credentials' in unified_job_data:
+            unified_job_data.pop('credentials')
 
         if unified_job_data.get('labels'):
             # Labels are additive so we are going to add any src labels in addition to the override labels
@@ -389,6 +391,8 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             prompted_labels = set(unified_job_data['labels'])
             # combine prompted labels with JT
             unified_job_data['labels'] = template_labels | prompted_labels
+        elif 'labels' in unified_job_data:
+            unified_job_data.pop('labels')
 
         # Labels and credentials copied here
         with disable_activity_stream():
