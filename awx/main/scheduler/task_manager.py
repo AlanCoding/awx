@@ -21,11 +21,6 @@ from django.contrib.contenttypes.models import ContentType
 from awx.main.dispatch.reaper import reap_job
 from awx.main.models import (
     Instance,
-    InventorySource,
-    InventoryUpdate,
-    Job,
-    Project,
-    ProjectUpdate,
     UnifiedJob,
     WorkflowApproval,
     WorkflowJob,
@@ -267,183 +262,15 @@ class DependencyManager(TaskBase):
     def __init__(self):
         super().__init__(prefix="dependency_manager")
 
-    def create_project_update(self, task, project_id=None):
-        if project_id is None:
-            project_id = task.project_id
-        project_task = Project.objects.get(id=project_id).create_project_update(_eager_fields=dict(launch_type='dependency'))
-
-        # Project created 1 seconds behind
-        project_task.created = task.created - timedelta(seconds=1)
-        project_task.status = 'pending'
-        project_task.save()
-        logger.debug('Spawned {} as dependency of {}'.format(project_task.log_format, task.log_format))
-        return project_task
-
-    def create_inventory_update(self, task, inventory_source_task):
-        inventory_task = InventorySource.objects.get(id=inventory_source_task.id).create_inventory_update(_eager_fields=dict(launch_type='dependency'))
-
-        inventory_task.created = task.created - timedelta(seconds=2)
-        inventory_task.status = 'pending'
-        inventory_task.save()
-        logger.debug('Spawned {} as dependency of {}'.format(inventory_task.log_format, task.log_format))
-
-        return inventory_task
-
-    def add_dependencies(self, task, dependencies):
-        with disable_activity_stream():
-            task.dependent_jobs.add(*dependencies)
-
-    def get_inventory_source_tasks(self):
-        inventory_ids = set()
-        for task in self.all_tasks:
-            if isinstance(task, Job):
-                inventory_ids.add(task.inventory_id)
-        self.all_inventory_sources = [invsrc for invsrc in InventorySource.objects.filter(inventory_id__in=inventory_ids, update_on_launch=True)]
-
-    def get_latest_inventory_update(self, inventory_source):
-        latest_inventory_update = InventoryUpdate.objects.filter(inventory_source=inventory_source).order_by("-created")
-        if not latest_inventory_update.exists():
-            return None
-        return latest_inventory_update.first()
-
-    def should_update_inventory_source(self, job, latest_inventory_update):
-        now = tz_now()
-
-        if latest_inventory_update is None:
-            return True
-        '''
-        If there's already a inventory update utilizing this job that's about to run
-        then we don't need to create one
-        '''
-        if latest_inventory_update.status in ['waiting', 'pending', 'running']:
-            return False
-
-        timeout_seconds = timedelta(seconds=latest_inventory_update.inventory_source.update_cache_timeout)
-        if (latest_inventory_update.finished + timeout_seconds) < now:
-            return True
-        if latest_inventory_update.inventory_source.update_on_launch is True and latest_inventory_update.status in ['failed', 'canceled', 'error']:
-            return True
-        return False
-
-    def get_latest_project_update(self, project_id):
-        latest_project_update = ProjectUpdate.objects.filter(project=project_id, job_type='check').order_by("-created")
-        if not latest_project_update.exists():
-            return None
-        return latest_project_update.first()
-
-    def should_update_related_project(self, job, latest_project_update):
-        now = tz_now()
-
-        if latest_project_update is None:
-            return True
-
-        if latest_project_update.status in ['failed', 'canceled']:
-            return True
-
-        '''
-        If there's already a project update utilizing this job that's about to run
-        then we don't need to create one
-        '''
-        if latest_project_update.status in ['waiting', 'pending', 'running']:
-            return False
-
-        '''
-        If the latest project update has a created time == job_created_time-1
-        then consider the project update found. This is so we don't enter an infinite loop
-        of updating the project when cache timeout is 0.
-        '''
-        if (
-            latest_project_update.project.scm_update_cache_timeout == 0
-            and latest_project_update.launch_type == 'dependency'
-            and latest_project_update.created == job.created - timedelta(seconds=1)
-        ):
-            return False
-        '''
-        Normal Cache Timeout Logic
-        '''
-        timeout_seconds = timedelta(seconds=latest_project_update.project.scm_update_cache_timeout)
-        if (latest_project_update.finished + timeout_seconds) < now:
-            return True
-        return False
-
-    def gen_dep_for_job(self, task):
-        created_dependencies = []
-        dependencies = []
-        # TODO: Can remove task.project None check after scan-job-default-playbook is removed
-        if task.project is not None and task.project.scm_update_on_launch is True:
-            latest_project_update = self.get_latest_project_update(task.project_id)
-            if self.should_update_related_project(task, latest_project_update):
-                latest_project_update = self.create_project_update(task)
-                created_dependencies.append(latest_project_update)
-            dependencies.append(latest_project_update)
-
-        # Inventory created 2 seconds behind job
-        try:
-            start_args = json.loads(decrypt_field(task, field_name="start_args"))
-        except ValueError:
-            start_args = dict()
-        # generator for inventory sources related to this task
-        task_inv_sources = (invsrc for invsrc in self.all_inventory_sources if invsrc.inventory_id == task.inventory_id)
-        for inventory_source in task_inv_sources:
-            if "inventory_sources_already_updated" in start_args and inventory_source.id in start_args['inventory_sources_already_updated']:
-                continue
-            if not inventory_source.update_on_launch:
-                continue
-            latest_inventory_update = self.get_latest_inventory_update(inventory_source)
-            if self.should_update_inventory_source(task, latest_inventory_update):
-                inventory_task = self.create_inventory_update(task, inventory_source)
-                created_dependencies.append(inventory_task)
-                dependencies.append(inventory_task)
-            else:
-                dependencies.append(latest_inventory_update)
-
-        if dependencies:
-            self.add_dependencies(task, dependencies)
-
-        return created_dependencies
-
-    def gen_dep_for_inventory_update(self, inventory_task):
-        created_dependencies = []
-        if inventory_task.source == "scm":
-            invsrc = inventory_task.inventory_source
-            if not invsrc.source_project.scm_update_on_launch:
-                return created_dependencies
-
-            latest_src_project_update = self.get_latest_project_update(invsrc.source_project_id)
-            if self.should_update_related_project(inventory_task, latest_src_project_update):
-                latest_src_project_update = self.create_project_update(inventory_task, project_id=invsrc.source_project_id)
-                created_dependencies.append(latest_src_project_update)
-            self.add_dependencies(inventory_task, [latest_src_project_update])
-            latest_src_project_update.scm_inventory_updates.add(inventory_task)
-        return created_dependencies
-
-    @timeit
-    def generate_dependencies(self, undeped_tasks):
-        created_dependencies = []
-        for task in undeped_tasks:
-            task.log_lifecycle("acknowledged")
-            if type(task) is Job:
-                created_dependencies += self.gen_dep_for_job(task)
-            elif type(task) is InventoryUpdate:
-                created_dependencies += self.gen_dep_for_inventory_update(task)
-            else:
-                continue
-        UnifiedJob.objects.filter(pk__in=[task.pk for task in undeped_tasks]).update(dependencies_processed=True)
-
-        return created_dependencies
-
-    def process_tasks(self):
-        deps = self.generate_dependencies(self.all_tasks)
-        self.generate_dependencies(deps)
-        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", len(self.all_tasks) + len(deps))
-
     @timeit
     def _schedule(self):
-        self.get_tasks(dict(status__in=["pending"], dependencies_processed=False))
-
-        if len(self.all_tasks) > 0:
-            self.get_inventory_source_tasks()
-            self.process_tasks()
+        r = (
+            UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
+            .exclude(dependent_jobs__status__in=ACTIVE_STATES)
+            .update(dependencies_processed=True)
+        )
+        if r:
+            logger.info(f'Dependencies fully processed for {r} tasks')
             ScheduleTaskManager().schedule()
 
 

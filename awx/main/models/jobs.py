@@ -637,18 +637,24 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
     def get_ui_url(self):
         return urljoin(settings.TOWER_URL_BASE, "/#/jobs/playbook/{}".format(self.pk))
 
-    def _set_default_dependencies_processed(self):
+    def spawn_or_link_dependencies(self, deps_already_updated=()):
         """
-        This sets the initial value of dependencies_processed
-        and here we use this as a shortcut to avoid the DependencyManager for jobs that do not need it
+        This makes the jobs that this job depends on based on update_on_launch triggers
         """
-        if (not self.project) or self.project.scm_update_on_launch:
-            self.dependencies_processed = False
-        elif (not self.inventory) or self.inventory.inventory_sources.filter(update_on_launch=True).exists():
-            self.dependencies_processed = False
-        else:
-            # No dependencies to process
-            self.dependencies_processed = True
+        created_dependencies = []
+
+        if self.inventory:
+            for inv_src in self.inventory.inventory_sources.filter(update_on_launch=True):
+                if inv_src.id in deps_already_updated:
+                    continue
+                created_dependencies.extend(inv_src.spawn_or_get_update(self.created))
+
+        if self.project and self.project.scm_update_on_launch:
+            created_dependencies.extend(self.project.spawn_or_get_update(self.created))
+
+        self.add_dependencies(created_dependencies)
+
+        return created_dependencies
 
     @property
     def event_class(self):
@@ -1296,8 +1302,8 @@ class SystemJob(UnifiedJob, SystemJobOptions, JobNotificationMixin):
 
     extra_vars_dict = VarsDictProperty('extra_vars', True)
 
-    def _set_default_dependencies_processed(self):
-        self.dependencies_processed = True
+    def spawn_or_link_dependencies(self):
+        return []
 
     @classmethod
     def _get_parent_field_name(cls):

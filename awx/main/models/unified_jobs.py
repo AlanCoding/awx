@@ -332,7 +332,14 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
 
         return NotificationTemplate.objects.none()
 
-    def create_unified_job(self, instance_groups=None, **kwargs):
+    def add_dependencies(self, dependencies):
+
+        from awx.main.signals import disable_activity_stream
+
+        with disable_activity_stream():
+            self.dependent_jobs.add(*dependencies)
+
+    def create_unified_job(self, deps_already_updated=(), instance_groups=None, **kwargs):
         """
         Create a new unified job based on this unified job template.
         """
@@ -388,7 +395,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         else:
             unified_job.preferred_instance_groups_cache = unified_job._get_preferred_instance_group_cache()
 
-        unified_job._set_default_dependencies_processed()
+        unified_job.dependencies_processed = bool(unified_job.spawn_or_link_dependencies(deps_already_updated=deps_already_updated))
         unified_job.task_impact = unified_job._get_task_impact()
 
         from awx.main.signals import disable_activity_stream, activity_stream_create
@@ -833,8 +840,8 @@ class UnifiedJob(
             update_fields = self._update_parent_instance_no_save(parent_instance)
             parent_instance.save(update_fields=update_fields)
 
-    def _set_default_dependencies_processed(self):
-        pass
+    def spawn_or_link_dependencies(self):
+        return []
 
     def save(self, *args, **kwargs):
         """Save the job, with current status, to the database.
