@@ -653,8 +653,8 @@ class WorkflowJob(UnifiedJob, WorkflowJobOptions, SurveyJobMixin, JobNotificatio
     )
     is_sliced_job = models.BooleanField(default=False)
 
-    def _set_default_dependencies_processed(self):
-        self.dependencies_processed = True
+    def spawn_or_link_dependencies(self):
+        return []
 
     @property
     def workflow_nodes(self):
@@ -850,8 +850,8 @@ class WorkflowApproval(UnifiedJob, JobNotificationMixin):
         on_delete=models.SET_NULL,
     )
 
-    def _set_default_dependencies_processed(self):
-        self.dependencies_processed = True
+    def spawn_or_link_dependencies(self):
+        return []
 
     @classmethod
     def _get_unified_job_template_class(cls):

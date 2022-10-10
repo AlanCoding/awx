@@ -1027,6 +1027,32 @@ class InventorySource(UnifiedJobTemplate, InventorySourceOptions, CustomVirtualE
     def _get_unified_job_field_names(cls):
         return set(f.name for f in InventorySourceOptions._meta.fields) | set(['name', 'description', 'organization', 'credentials', 'inventory'])
 
+    def spawn_or_get_update(self, as_of_datetime):
+        latest_inventory_update = self.inventory_updates.order_by("-created").first()
+        if self.should_update_on_launch(as_of_datetime, latest_inventory_update):
+            inventory_update = self.create_unified_job(_eager_fields=dict(launch_type='dependency'))
+            logger.debug(f'Spawned {inventory_update.log_format} for job created at {as_of_datetime}')
+            inventory_update.signal_start()
+            return inventory_update
+        return latest_inventory_update
+
+    def should_update_inventory_source(self, as_of_datetime, latest_inventory_update):
+        if latest_inventory_update is None:
+            return True
+        '''
+        If there's already a inventory update utilizing this job that's about to run
+        then we don't need to create one
+        '''
+        if latest_inventory_update.status in ['waiting', 'pending', 'running']:
+            return False
+
+        timeout_seconds = datetime.timedelta(seconds=latest_inventory_update.inventory_source.update_cache_timeout)
+        if (latest_inventory_update.finished + timeout_seconds) < as_of_datetime:
+            return True
+        if latest_inventory_update.inventory_source.update_on_launch is True and latest_inventory_update.status in ['failed', 'canceled', 'error']:
+            return True
+        return False
+
     def save(self, *args, **kwargs):
         # if this is a new object, inherit organization from its inventory
         if not self.pk and self.inventory and self.inventory.organization_id and not self.organization_id:
@@ -1275,6 +1301,22 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
 
     def get_notification_friendly_name(self):
         return "Inventory Update"
+
+    def spawn_or_link_dependencies(self, as_of_datetime=None):
+        """
+        Inventory updates can have, at most, one dependency, which is an update
+        of its related source_project
+        """
+        created_dependencies = []
+
+        if self.source_project and self.source_project.scm_update_on_launch:
+            if as_of_datetime is None:
+                as_of_datetime = self.created
+            created_dependencies.append(self.source_project.spawn_or_get_update(as_of_datetime))
+
+        self.add_dependencies(created_dependencies)
+
+        return created_dependencies
 
     @property
     def preferred_instance_groups(self):
