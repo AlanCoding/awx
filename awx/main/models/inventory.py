@@ -1043,7 +1043,7 @@ class InventorySource(UnifiedJobTemplate, InventorySourceOptions, CustomVirtualE
         If there's already a inventory update utilizing this job that's about to run
         then we don't need to create one
         '''
-        if latest_inventory_update.status in ['waiting', 'pending', 'running']:
+        if latest_inventory_update.status in ['new', 'waiting', 'pending', 'running']:
             return False
 
         timeout_seconds = datetime.timedelta(seconds=latest_inventory_update.inventory_source.update_cache_timeout)
@@ -1302,19 +1302,17 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
     def get_notification_friendly_name(self):
         return "Inventory Update"
 
-    def spawn_or_link_dependencies(self, as_of_datetime=None):
+    def spawn_or_link_dependencies(self, **kwargs):
         """
         Inventory updates can have, at most, one dependency, which is an update
         of its related source_project
         """
+        super().spawn_or_link_dependencies(**kwargs)
+
         created_dependencies = []
 
         if self.source_project and self.source_project.scm_update_on_launch:
-            if as_of_datetime is None:
-                as_of_datetime = self.created
-            created_dependencies.append(self.source_project.spawn_or_get_update(as_of_datetime))
-
-        self.add_dependencies(created_dependencies)
+            created_dependencies.append(self.source_project.spawn_or_get_update(self.created))
 
         return created_dependencies
 

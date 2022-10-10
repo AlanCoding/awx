@@ -639,20 +639,20 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
 
     def spawn_or_link_dependencies(self, deps_already_updated=()):
         """
-        This makes the jobs that this job depends on based on update_on_launch triggers
+        Jobs need to combine inventory source and project dependencies
         """
+        super().spawn_or_link_dependencies(deps_already_updated=deps_already_updated)
+
         created_dependencies = []
 
         if self.inventory:
             for inv_src in self.inventory.inventory_sources.filter(update_on_launch=True):
                 if inv_src.id in deps_already_updated:
                     continue
-                created_dependencies.extend(inv_src.spawn_or_get_update(self.created))
+                created_dependencies.append(inv_src.spawn_or_get_update(self.created))
 
         if self.project and self.project.scm_update_on_launch:
-            created_dependencies.extend(self.project.spawn_or_get_update(self.created))
-
-        self.add_dependencies(created_dependencies)
+            created_dependencies.append(self.project.spawn_or_get_update(self.created))
 
         return created_dependencies
 
@@ -1301,9 +1301,6 @@ class SystemJob(UnifiedJob, SystemJobOptions, JobNotificationMixin):
     )
 
     extra_vars_dict = VarsDictProperty('extra_vars', True)
-
-    def spawn_or_link_dependencies(self):
-        return []
 
     @classmethod
     def _get_parent_field_name(cls):

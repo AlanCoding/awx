@@ -90,9 +90,6 @@ class AdHocCommand(UnifiedJob, JobNotificationMixin):
 
     extra_vars_dict = VarsDictProperty('extra_vars', True)
 
-    def spawn_or_link_dependencies(self):
-        return []
-
     def clean_inventory(self):
         inv = self.inventory
         if not inv:

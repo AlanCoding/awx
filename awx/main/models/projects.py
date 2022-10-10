@@ -383,8 +383,11 @@ class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEn
         If there's already a project update utilizing this job that's about to run
         then we don't need to create one
         '''
-        if latest_project_update.status in ['waiting', 'pending', 'running']:
+        if latest_project_update.status in ['new', 'waiting', 'pending', 'running']:
             return False
+
+        if latest_project_update.finished is None:
+            logger.warning(f'Project update not finished, status {latest_project_update.status}')
 
         '''
         Normal Cache Timeout Logic
@@ -565,9 +568,6 @@ class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin, TaskManage
         verbose_name=_('SCM Revision'),
         help_text=_('The SCM Revision discovered by this update for the given project and branch.'),
     )
-
-    def spawn_or_link_dependencies(self):
-        return []
 
     def _get_parent_field_name(self):
         return 'project'
