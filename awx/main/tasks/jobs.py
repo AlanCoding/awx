@@ -67,12 +67,7 @@ from awx.main.exceptions import AwxTaskError, PostRunError, ReceptorNodeNotFound
 from awx.main.utils.ansible import read_ansible_config
 from awx.main.utils.execution_environments import CONTAINER_ROOT, to_container_path
 from awx.main.utils.safe_yaml import safe_dump, sanitize_jinja
-from awx.main.utils.common import (
-    update_scm_url,
-    extract_ansible_vars,
-    get_awx_version,
-    create_partition,
-)
+from awx.main.utils.common import update_scm_url, extract_ansible_vars, get_awx_version, create_partition, ScheduleDependencyManager
 from awx.conf.license import get_license
 from awx.main.utils.handlers import SpecialInventoryHandler
 from awx.main.tasks.system import update_smart_memberships_for_inventory, update_inventory_computed_fields
@@ -1397,6 +1392,10 @@ class RunProjectUpdate(BaseTask):
             p.inventory_files = p.inventories
             p.save(update_fields=['scm_revision', 'playbook_files', 'inventory_files'])
 
+    def final_run_hook(self, project_update, status, private_data_dir, fact_modification_times):
+        if project_update.launch_type == 'dependency':
+            ScheduleDependencyManager().schedule()
+
     def build_execution_environment_params(self, instance, private_data_dir):
         if settings.IS_K8S:
             return {}
@@ -1654,6 +1653,10 @@ class RunInventoryUpdate(SourceControlMixin, BaseTask):
         except Exception:
             logger.exception('Exception saving {} content, rolling back changes.'.format(inventory_update.log_format))
             raise PostRunError('Error occured while saving inventory data, see traceback or server logs', status='error', tb=traceback.format_exc())
+
+    def final_run_hook(self, inventory_update, status, private_data_dir, fact_modification_times):
+        if inventory_update.launch_type == 'dependency':
+            ScheduleDependencyManager().schedule()
 
 
 @task(queue=get_local_queuename)
