@@ -272,6 +272,7 @@ class DependencyManager(TaskBase):
         if r:
             logger.info(f'Dependencies fully processed for {r} tasks')
             ScheduleTaskManager().schedule()
+        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", r)
 
 
 class TaskManager(TaskBase):
