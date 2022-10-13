@@ -1277,8 +1277,8 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
         return "Inventory Update"
 
     def dependent_templates(self):
-        if self.source_project and self.source_project.scm_update_on_launch:
-            return [self.source_project]
+        if self.inventory_source and self.inventory_source.source_project and self.inventory_source.source_project.scm_update_on_launch:
+            return [self.inventory_source.source_project]
         return super().dependent_templates()
 
     @property
