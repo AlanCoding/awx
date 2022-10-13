@@ -388,7 +388,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         else:
             unified_job.preferred_instance_groups_cache = unified_job._get_preferred_instance_group_cache()
 
-        deps = unified_job.spawn_or_link_dependencies(deps_already_updated=deps_already_updated)
+        deps = unified_job.get_or_spawn_dependent_jobs(deps_already_updated=deps_already_updated)
         unified_job.dependencies_processed = bool(not deps)
         unified_job.task_impact = unified_job._get_task_impact()
 
@@ -844,7 +844,15 @@ class UnifiedJob(
         with disable_activity_stream():
             self.dependent_jobs.add(*dependencies)
 
-    def spawn_or_link_dependencies(self, **kwargs):
+    def dependent_templates(self):
+        """
+        Returns an ordered list of associated UnifiedJobTemplates that should be updated
+        due to update_on_launch flag being set to True.
+        Ordering is so that dependencies-of-dependencies come before others that depend on them.
+        """
+        return []
+
+    def get_or_spawn_dependent_jobs(self, available_deps=()):
         """
         Should only be called from create_unified_job
         This makes the jobs that this job depends on based on update_on_launch triggers
@@ -852,6 +860,43 @@ class UnifiedJob(
         if not self.created:
             # set created time for new objects for dependency resolution usage
             self.created = now()
+        available_deps = set(available_deps)  # create mutable copy for internal use
+        dependent_jobs = []
+        for ujt in self.dependent_templates():
+            # If a job matching the template is in available_deps then use that
+            found = False
+            for uj in available_deps:
+                if uj.unified_job_template_id == ujt.id:
+                    dependent_jobs.append(uj)
+                    available_deps.add(uj)
+                    found = True
+                    break
+            if found:
+                continue
+
+            # Use last job in database if still active or cache criteria fit
+            last_ujt_job = UnifiedJob.objects.order_by("-created").first()
+            if last_ujt_job:
+                if last_ujt_job.status in ACTIVE_STATES:
+                    dependent_jobs.append(uj)
+                    available_deps.add(uj)
+                    continue
+
+                if last_ujt_job.status not in ['failed', 'canceled', 'error'] and last_ujt_job.finished:
+                    cache_timeout = getattr(ujt, 'scm_update_cache_timeout', getattr(ujt, 'update_cache_timeout'))
+                    timeout_seconds = datetime.timedelta(seconds=cache_timeout)
+                    if (last_ujt_job.finished + timeout_seconds) >= self.created:
+                        dependent_jobs.append(uj)
+                        available_deps.add(uj)
+                        continue
+                elif last_ujt_job.finished:
+                    logger.warning(f'Programming error: {last_ujt_job.log_format} was in a finished state but has no finished timestamp')
+
+            # If not avilable by the above sources, then create an launch new one
+            new_ujt_job = ujt.create_unified_job(available_deps=available_deps, _eager_fields=dict(launch_type='dependency', created=self.created))
+            logger.debug(f'Spawned {new_ujt_job.log_format} for job created at {self.created}')
+            new_ujt_job.signal_start()
+            return new_ujt_job
         return []
 
     def save(self, *args, **kwargs):
