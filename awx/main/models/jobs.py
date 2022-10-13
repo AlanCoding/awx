@@ -637,25 +637,6 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
     def get_ui_url(self):
         return urljoin(settings.TOWER_URL_BASE, "/#/jobs/playbook/{}".format(self.pk))
 
-    def spawn_or_link_dependencies(self, deps_already_updated=()):
-        """
-        Jobs need to combine inventory source and project dependencies
-        """
-        super().spawn_or_link_dependencies(deps_already_updated=deps_already_updated)
-
-        created_dependencies = []
-
-        if self.inventory:
-            for inv_src in self.inventory.inventory_sources.filter(update_on_launch=True):
-                if inv_src.id in deps_already_updated:
-                    continue
-                created_dependencies.append(inv_src.spawn_or_get_update(self.created))
-
-        if self.project and self.project.scm_update_on_launch:
-            created_dependencies.append(self.project.spawn_or_get_update(self.created))
-
-        return created_dependencies
-
     @property
     def event_class(self):
         if self.has_unpartitioned_events:
@@ -849,6 +830,22 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
 
     def get_notification_friendly_name(self):
         return "Job"
+
+    def dependent_templates(self):
+        ujts = []
+
+        if self.inventory:
+            for inv_src in self.inventory.inventory_sources.filter(update_on_launch=True):
+                for project in inv_src.dependent_templates():
+                    if project not in ujts:
+                        ujts.append(project)
+                ujts.append(inv_src)
+
+        if self.project and self.project.scm_update_on_launch:
+            if self.project not in ujts:
+                ujts.append(self.project)
+
+        return ujts
 
     def _get_inventory_hosts(self, only=['name', 'ansible_facts', 'ansible_facts_modified', 'modified', 'inventory_id']):
         if not self.inventory:

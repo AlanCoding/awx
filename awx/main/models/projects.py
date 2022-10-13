@@ -5,8 +5,6 @@
 import datetime
 import os
 import urllib.parse as urlparse
-from datetime import timedelta
-import logging
 
 # Django
 from django.conf import settings
@@ -42,9 +40,6 @@ from awx.main.models.rbac import (
 )
 
 __all__ = ['Project', 'ProjectUpdate']
-
-
-logger = logging.getLogger('awx.main.models.projects')
 
 
 class ProjectOptions(models.Model):
@@ -356,46 +351,6 @@ class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEn
     @classmethod
     def _get_unified_job_field_names(cls):
         return set(f.name for f in ProjectOptions._meta.fields) | set(['name', 'description', 'organization'])
-
-    def spawn_or_get_update(self, as_of_datetime):
-        latest_project_update = self.project_updates.filter(job_type='check').order_by("-created").first()
-        if self.should_update_on_launch(as_of_datetime, latest_project_update):
-            project_update = self.create_unified_job(_eager_fields=dict(launch_type='dependency'))
-            logger.debug(f'Spawned {project_update.log_format} for job created at {as_of_datetime}')
-            project_update.signal_start()
-            return project_update
-        return latest_project_update
-
-    # NOTE: old name in task manager was should_update_related_project
-    def should_update_on_launch(self, as_of_datetime, latest_project_update):
-        """
-        For a unified job that needs a project update as a dependency (update_on_launch)
-        where that job was created at the as_of_datetime time,
-        return True or False, whether a new project update should be spawned
-        """
-        if latest_project_update is None:
-            return True
-
-        if latest_project_update.status in ['failed', 'canceled']:
-            return True
-
-        '''
-        If there's already a project update utilizing this job that's about to run
-        then we don't need to create one
-        '''
-        if latest_project_update.status in ['new', 'waiting', 'pending', 'running']:
-            return False
-
-        if latest_project_update.finished is None:
-            logger.warning(f'Project update not finished, status {latest_project_update.status}')
-
-        '''
-        Normal Cache Timeout Logic
-        '''
-        timeout_seconds = timedelta(seconds=self.scm_update_cache_timeout)
-        if (latest_project_update.finished + timeout_seconds) <= as_of_datetime:
-            return True
-        return False
 
     def clean_organization(self):
         if self.pk:
