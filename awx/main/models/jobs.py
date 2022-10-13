@@ -836,9 +836,10 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
 
         if self.inventory:
             for inv_src in self.inventory.inventory_sources.filter(update_on_launch=True):
-                for project in inv_src.dependent_templates():
-                    if project not in ujts:
-                        ujts.append(project)
+                # Criteria same as method InventoryUpdate.dependent_templates
+                if inv_src.source_project and inv_src.source_project.scm_update_on_launch:
+                    if inv_src.source_project not in ujts:
+                        ujts.append(inv_src.source_project)
                 ujts.append(inv_src)
 
         if self.project and self.project.scm_update_on_launch:
