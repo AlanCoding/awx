@@ -35,7 +35,7 @@ from awx.main.models.base import CommonModelNameNotUnique, PasswordFieldsModel, 
 from awx.main.dispatch import get_local_queuename
 from awx.main.dispatch.control import Control as ControlDispatcher
 from awx.main.registrar import activity_stream_registrar
-from awx.main.models.mixins import ResourceMixin, TaskManagerUnifiedJobMixin, ExecutionEnvironmentMixin
+from awx.main.models.mixins import ResourceMixin, ExecutionEnvironmentMixin
 from awx.main.utils.common import (
     camelcase_to_underscore,
     get_model_for_type,
@@ -533,9 +533,7 @@ class StdoutMaxBytesExceeded(Exception):
         self.supported = supported
 
 
-class UnifiedJob(
-    PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique, UnifiedJobTypeStringMixin, TaskManagerUnifiedJobMixin, ExecutionEnvironmentMixin
-):
+class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique, UnifiedJobTypeStringMixin, ExecutionEnvironmentMixin):
     """
     Concrete base class for unified job run by the task engine.
     """
@@ -1521,10 +1519,19 @@ class UnifiedJob(
             logger.exception("error encountered when checking task status")
         return bool(self.celery_task_id in canceled)  # True or False, whether confirmation was obtained
 
+    def get_cancel_chain(self):
+        """
+        Returns other jobs to cancel if this one is canceled.
+        Normally, this is just the set of jobs which are blocked by this job.
+        """
+        if self.status == 'running':
+            return []  # running necessarily means that dependent_jobs have finished
+        return list(self.unifiedjob_blocked_jobs.all())  # reverse relationship for dependent_jobs
+
     def cancel(self, job_explanation=None, is_chain=False):
         if self.can_cancel:
             if not is_chain:
-                for x in self.get_jobs_fail_chain():
+                for x in self.get_cancel_chain():
                     x.cancel(job_explanation=self._build_job_explanation(), is_chain=True)
 
             cancel_fields = []

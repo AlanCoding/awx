@@ -327,14 +327,14 @@ class TaskManager(TaskBase):
         self.controlplane_ig = self.instance_groups.controlplane_ig
 
     @timeit
-    def start_task(self, task, instance_group, dependent_tasks=None, instance=None):
+    def start_task(self, task, instance_group, instance=None):
         self.dependency_graph.add_job(task)
         self.subsystem_metrics.inc(f"{self.prefix}_tasks_started", 1)
         self.start_task_limit -= 1
         if self.start_task_limit == 0:
             # schedule another run immediately after this task manager
             ScheduleTaskManager().schedule()
-        from awx.main.tasks.system import handle_work_error, handle_work_success
+        from awx.main.tasks.system import handle_work_finish
 
         # update capacity for control node and execution node
         if task.controller_node:
@@ -342,13 +342,10 @@ class TaskManager(TaskBase):
         if task.execution_node:
             self.instances[task.execution_node].consume_capacity(task.task_impact)
 
-        dependent_tasks = dependent_tasks or []
-
         task_actual = {
             'type': get_type_for_model(type(task)),
             'id': task.id,
         }
-        dependencies = [{'type': get_type_for_model(type(t)), 'id': t.id} for t in dependent_tasks]
 
         task.status = 'waiting'
 
@@ -388,8 +385,8 @@ class TaskManager(TaskBase):
                 opts,
                 queue=task.get_queue_name(),
                 uuid=task.celery_task_id,
-                callbacks=[{'task': handle_work_success.name, 'kwargs': {'task_actual': task_actual}}],
-                errbacks=[{'task': handle_work_error.name, 'args': [task.celery_task_id], 'kwargs': {'subtasks': [task_actual] + dependencies}}],
+                callbacks=[{'task': handle_work_finish.name, 'kwargs': {'task_actual': task_actual}}],
+                errbacks=[{'task': handle_work_finish.name, 'kwargs': {'task_actual': task_actual}}],
             )
 
         # In exception cases, like a job failing pre-start checks, we send the websocket status message
@@ -427,7 +424,7 @@ class TaskManager(TaskBase):
             if isinstance(task, WorkflowJob):
                 # Previously we were tracking allow_simultaneous blocking both here and in DependencyGraph.
                 # Double check that using just the DependencyGraph works for Workflows and Sliced Jobs.
-                self.start_task(task, None, task.get_jobs_fail_chain(), None)
+                self.start_task(task, None, None)
                 continue
 
             found_acceptable_queue = False
@@ -453,13 +450,13 @@ class TaskManager(TaskBase):
                 execution_instance = self.instances[control_instance.hostname].obj
                 task.log_lifecycle("controller_node_chosen")
                 task.log_lifecycle("execution_node_chosen")
-                self.start_task(task, self.controlplane_ig, task.get_jobs_fail_chain(), execution_instance)
+                self.start_task(task, self.controlplane_ig, execution_instance)
                 found_acceptable_queue = True
                 continue
 
             for instance_group in self.instance_groups.get_instance_groups_from_task_cache(task):
                 if instance_group.is_container_group:
-                    self.start_task(task, instance_group, task.get_jobs_fail_chain(), None)
+                    self.start_task(task, instance_group, None)
                     found_acceptable_queue = True
                     break
 
@@ -484,7 +481,7 @@ class TaskManager(TaskBase):
                         )
                     )
                     execution_instance = self.instances[execution_instance.hostname].obj
-                    self.start_task(task, instance_group, task.get_jobs_fail_chain(), execution_instance)
+                    self.start_task(task, instance_group, execution_instance)
                     found_acceptable_queue = True
                     break
                 else:

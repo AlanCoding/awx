@@ -29,7 +29,7 @@ from awx.main.models.unified_jobs import (
     UnifiedJobTemplate,
 )
 from awx.main.models.jobs import Job
-from awx.main.models.mixins import ResourceMixin, TaskManagerProjectUpdateMixin, CustomVirtualEnvMixin, RelatedJobsMixin
+from awx.main.models.mixins import ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin
 from awx.main.utils import update_scm_url, polymorphic
 from awx.main.utils.ansible import skip_directory, could_be_inventory, could_be_playbook
 from awx.main.utils.execution_environments import get_control_plane_execution_environment
@@ -489,7 +489,7 @@ class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEn
         return r
 
 
-class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin, TaskManagerProjectUpdateMixin):
+class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin):
     """
     Internal job for tracking project updates from SCM.
     """
@@ -606,13 +606,6 @@ class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin, TaskManage
 
     def get_ui_url(self):
         return urlparse.urljoin(settings.TOWER_URL_BASE, "/#/jobs/project/{}".format(self.pk))
-
-    def cancel(self, job_explanation=None, is_chain=False):
-        res = super(ProjectUpdate, self).cancel(job_explanation=job_explanation, is_chain=is_chain)
-        if res and self.launch_type != 'sync':
-            for inv_src in self.scm_inventory_updates.filter(status='running'):
-                inv_src.cancel(job_explanation='Source project update `{}` was canceled.'.format(self.name))
-        return res
 
     '''
     JobNotificationMixin
