@@ -49,7 +49,6 @@ from awx.main.models.mixins import (
     ResourceMixin,
     SurveyJobTemplateMixin,
     SurveyJobMixin,
-    TaskManagerJobMixin,
     CustomVirtualEnvMixin,
     RelatedJobsMixin,
     WebhookMixin,
@@ -558,7 +557,7 @@ class JobTemplate(UnifiedJobTemplate, JobOptions, SurveyJobTemplateMixin, Resour
         return UnifiedJob.objects.filter(unified_job_template=self)
 
 
-class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskManagerJobMixin, CustomVirtualEnvMixin, WebhookMixin):
+class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, CustomVirtualEnvMixin, WebhookMixin):
     """
     A job applies a project (with playbook) to an inventory source with a given
     credential.  It represents a single invocation of ansible-playbook with the
@@ -830,6 +829,12 @@ class Job(UnifiedJob, JobOptions, SurveyJobMixin, JobNotificationMixin, TaskMana
 
     def get_notification_friendly_name(self):
         return "Job"
+
+    def get_cancel_chain(self):
+        r = super().get_cancel_chain()
+        if self.project_update_id:
+            r.append(self.project_update)
+        return r
 
     def dependent_templates(self):
         ujts = []

@@ -221,7 +221,7 @@ def test_single_jt_multi_job_launch_allow_simul_allowed(job_template_factory):
 
 
 @pytest.mark.django_db
-def test_multi_jt_capacity_blocking(hybrid_instance, job_template_factory, mocker):
+def test_multi_jt_capacity_blocking(hybrid_instance, job_template_factory):
     instance = hybrid_instance
     controlplane_instance_group = instance.rampart_groups.first()
     objects1 = job_template_factory('jt1', organization='org1', project='proj1', inventory='inv1', credential='cred1')
@@ -242,7 +242,7 @@ def test_multi_jt_capacity_blocking(hybrid_instance, job_template_factory, mocke
 
 
 @pytest.mark.django_db
-def test_single_job_dependencies_project_launch(job_template_factory, mocker):
+def test_single_job_dependencies_project_launch(job_template_factory):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
     p = objects.project
     p.scm_update_on_launch = True
@@ -270,7 +270,7 @@ def test_single_job_dependencies_project_launch(job_template_factory, mocker):
 
 
 @pytest.mark.django_db
-def test_single_job_dependencies_inventory_update_launch(job_template_factory, mocker, inventory_source_factory):
+def test_single_job_dependencies_inventory_update_launch(job_template_factory, inventory_source_factory):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
 
     i = objects.inventory
@@ -339,7 +339,7 @@ def test_job_dependency_with_already_updated(job_template_factory, inventory_sou
 
 
 @pytest.mark.django_db
-def test_shared_dependencies_launch(job_template_factory, mocker, inventory_source_factory):
+def test_shared_dependencies_launch(job_template_factory, inventory_source_factory):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
     objects.job_template.allow_simultaneous = True
     objects.job_template.save()
