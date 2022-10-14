@@ -326,16 +326,6 @@ class TaskManager(TaskBase):
         self.instance_groups = TaskManagerInstanceGroups(instances_by_hostname=self.instances)
         self.controlplane_ig = self.instance_groups.controlplane_ig
 
-    def job_blocked_by(self, task):
-        # TODO: I'm not happy with this, I think blocking behavior should be decided outside of the dependency graph
-        #       in the old task manager this was handled as a method on each task object outside of the graph and
-        #       probably has the side effect of cutting down *a lot* of the logic from this task manager class
-        blocked_by = self.dependency_graph.task_blocked_by(task)
-        if blocked_by:
-            return blocked_by
-
-        return None
-
     @timeit
     def start_task(self, task, instance_group, dependent_tasks=None, instance=None):
         self.dependency_graph.add_job(task)
@@ -423,7 +413,7 @@ class TaskManager(TaskBase):
             if self.timed_out():
                 logger.warning("Task manager has reached time out while processing pending jobs, exiting loop early")
                 break
-            blocked_by = self.job_blocked_by(task)
+            blocked_by = self.dependency_graph.task_blocked_by(task)
             if blocked_by:
                 self.subsystem_metrics.inc(f"{self.prefix}_tasks_blocked", 1)
                 task.log_lifecycle("blocked", blocked_by=blocked_by)
