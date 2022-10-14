@@ -258,16 +258,15 @@ class DependencyManager(TaskBase):
 
     @timeit
     def _schedule(self):
-        failing_job_qs = (
-            UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
-            .filter(dependent_jobs__status__in=['failed', 'error'])
-            .prefetch_related('dependent_jobs')
-        )
+        failing_job_qs = UnifiedJob.objects.filter(
+            status='pending', dependencies_processed=False, dependent_jobs__status__in=['failed', 'error']
+        ).prefetch_related('dependent_jobs')
         failed_job_ct = 0
-        for task in failing_job_qs:
+        already_failed = set()
+        for task in failing_job_qs.iterator():
             messages = []
             for dep in task.dependent_jobs.all():
-                if dep.status in ('failed', 'error'):
+                if dep.status in ('failed', 'error') or dep.id in already_failed:
                     messages.append(
                         'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
                         % (
@@ -285,10 +284,11 @@ class DependencyManager(TaskBase):
             task.save(update_fields=['status', 'job_explanation'])
             task.websocket_emit_status('failed')
             failed_job_ct += 1
+            already_failed.add(task.id)
 
         advancing_job_ct = (
             UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
-            .exclude(dependent_jobs__status__in=ACTIVE_STATES)
+            .exclude(dependent_jobs__status__in=ACTIVE_STATES + ('failed', 'error'))
             .update(dependencies_processed=True)
         )
         if advancing_job_ct:
