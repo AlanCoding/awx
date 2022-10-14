@@ -40,7 +40,7 @@ def test_multi_group_with_shared_dependency(instance_factory, controlplane_insta
         credential='cred1',
     )
     objects1.job_template.instance_groups.add(ig1)
-    j1 = create_job(objects1.job_template, dependencies_processed=False)
+
     p = objects1.project
     p.scm_update_on_launch = True
     p.scm_update_cache_timeout = 0
@@ -49,17 +49,38 @@ def test_multi_group_with_shared_dependency(instance_factory, controlplane_insta
     p.save()
     objects2 = job_template_factory('jt2', organization=objects1.organization, project=p, inventory='inv2', credential='cred2')
     objects2.job_template.instance_groups.add(ig2)
-    j2 = create_job(objects2.job_template, dependencies_processed=False)
+
+    j1 = objects1.job_template.create_unified_job()
+    j1.signal_start()
+    assert j1.dependencies_processed is False
+    j2 = objects2.job_template.create_unified_job()
+    j2.signal_start()
+    assert j2.dependencies_processed is False
+    assert j1.job_template.project == j2.job_template.project
+
+    pu = p.project_updates.first()
+    assert p.project_updates.count() == 1
+
+    DependencyManager().schedule()  # no progress, dependency not finished
+    for j in (j1, j2):
+        j.refresh_from_db()
+        assert j.dependencies_processed is False
+
     with mocker.patch("awx.main.scheduler.TaskManager.start_task"):
-        DependencyManager().schedule()
-        TaskManager().schedule()
-        pu = p.project_updates.first()
+        TaskManager().schedule()  # should submit just the dependency
+
         TaskManager.start_task.assert_called_once_with(pu, controlplane_instance_group, [j1, j2], controlplane_instance_group.instances.all()[0])
-        pu.finished = pu.created + timedelta(seconds=1)
-        pu.status = "successful"
-        pu.save()
+
+    pu.status = "successful"
+    pu.save()
+
+    DependencyManager().schedule()  # dependency processed, should advance job
+    for j in (j1, j2):
+        j.refresh_from_db()
+        assert j.dependencies_processed is True
+
     with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        DependencyManager().schedule()
+
         TaskManager().schedule()
 
         TaskManager.start_task.assert_any_call(j1, ig1, [], i1)

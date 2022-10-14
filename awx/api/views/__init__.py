@@ -2821,7 +2821,10 @@ class JobTemplateCallback(GenericAPIView):
             kv['extra_vars'] = extra_vars_redacted
         kv['_prevent_slicing'] = True  # will only run against 1 host, so no point
         with transaction.atomic():
-            job = job_template.create_job(available_deps=inventory_update_list, **kv)
+            if inventory_update_list:
+                job = job_template.create_job(available_deps=inventory_update_list, **kv)
+            else:
+                job = job_template.create_job(**kv)
 
         # Send a signal to signify that the job should be started.
         result = job.signal_start()
