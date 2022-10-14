@@ -55,7 +55,7 @@ from awx.main.utils.common import (
     ignore_inventory_computed_fields,
     ignore_inventory_group_removal,
     ScheduleWorkflowManager,
-    ScheduleTaskManager,
+    ScheduleDependencyManager,
 )
 
 from awx.main.utils.external_logging import reconfigure_rsyslog
@@ -702,7 +702,7 @@ def awx_periodic_scheduler():
 
 def schedule_manager_success_or_error(instance):
     if instance.unifiedjob_blocked_jobs.exists():
-        ScheduleTaskManager().schedule()
+        ScheduleDependencyManager().schedule()
     if instance.spawned_by_workflow:
         ScheduleWorkflowManager().schedule()
 
