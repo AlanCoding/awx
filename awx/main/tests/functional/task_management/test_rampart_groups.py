@@ -1,6 +1,5 @@
 import pytest
 from unittest import mock
-from datetime import timedelta
 from awx.main.scheduler import TaskManager, DependencyManager
 from awx.main.models import InstanceGroup
 from awx.main.tasks.system import apply_cluster_membership_policies
