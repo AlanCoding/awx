@@ -887,7 +887,7 @@ class UnifiedJob(
                     logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} with still-active {last_ujt_job.log_format}')
                     continue  # still active so always technically satisfies cache timeout window, use it
 
-                if last_ujt_job.status not in ['failed', 'canceled', 'error'] and last_ujt_job.finished:
+                if (last_ujt_job.status not in ['failed', 'canceled', 'error']) and last_ujt_job.finished:
                     if hasattr(ujt, 'scm_update_cache_timeout'):
                         cache_timeout = ujt.scm_update_cache_timeout  # for projects
                     else:
@@ -898,7 +898,7 @@ class UnifiedJob(
                         available_deps.add(last_ujt_job)
                         logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} within cache timeout {last_ujt_job.log_format}')
                         continue  # ran within the cache timeout window, use it
-                elif last_ujt_job.finished:  # this should not happen
+                elif not last_ujt_job.finished:  # this should not happen
                     logger.warning(f'Programming error: {last_ujt_job.log_format} was in a finished state but has no finished timestamp')
 
             # If not avilable by the above sources, then create an launch new one

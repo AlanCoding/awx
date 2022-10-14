@@ -65,7 +65,6 @@ class TestJobLifeCycle:
 
         # Submits jobs
         # intermission - jobs will run and reschedule TM when finished
-        self.run_tm(DependencyManager())  # flip dependencies_processed to True
         self.run_tm(TaskManager())
         # I am the job runner
         for job in jt.jobs.all():
@@ -105,7 +104,6 @@ class TestJobLifeCycle:
         for uj in all_ujs:
             uj.signal_start()
 
-        DependencyManager().schedule()
         tm = TaskManager()
         self.run_tm(tm)
 
@@ -128,7 +126,6 @@ class TestJobLifeCycle:
         for uj in all_ujs:
             uj.signal_start()
 
-        DependencyManager().schedule()
         # There is only enough control capacity to run one of the jobs so one should end up in pending and the other in waiting
         tm = TaskManager()
         self.run_tm(tm)
@@ -151,7 +148,6 @@ class TestJobLifeCycle:
         for uj in all_ujs:
             uj.signal_start()
 
-        DependencyManager().schedule()
         # There is only enough control capacity to run one of the jobs so one should end up in pending and the other in waiting
         tm = TaskManager()
         self.run_tm(tm)
@@ -249,37 +245,38 @@ def test_multi_jt_capacity_blocking(hybrid_instance, job_template_factory, mocke
 
 
 @pytest.mark.django_db
-def test_single_job_dependencies_project_launch(controlplane_instance_group, job_template_factory, mocker):
+def test_single_job_dependencies_project_launch(job_template_factory, mocker):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
-    instance = controlplane_instance_group.instances.all()[0]
-    j = create_job(objects.job_template, dependencies_processed=False)
     p = objects.project
     p.scm_update_on_launch = True
     p.scm_update_cache_timeout = 0
     p.scm_type = "git"
     p.scm_url = "http://github.com/ansible/ansible.git"
     p.save(skip_update=True)
-    with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        dm = DependencyManager()
-        with mock.patch.object(DependencyManager, "create_project_update", wraps=dm.create_project_update) as mock_pu:
-            dm.schedule()
-            mock_pu.assert_called_once_with(j)
-            pu = [x for x in p.project_updates.all()]
-            assert len(pu) == 1
-            TaskManager().schedule()
-            TaskManager.start_task.assert_called_once_with(pu[0], controlplane_instance_group, [j], instance)
-            pu[0].status = "successful"
-            pu[0].save()
-    with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        TaskManager().schedule()
-        TaskManager.start_task.assert_called_once_with(j, controlplane_instance_group, [], instance)
+
+    j = objects.job_template.create_unified_job()
+    j.signal_start()
+    assert j.dependencies_processed is False
+    assert j.status == 'pending'
+
+    deps = list(j.dependent_jobs.all())
+    assert len(deps) == 1
+    pu = deps[0]
+    assert pu.project == p
+    assert pu.status == 'pending'
+
+    pu.status = 'successful'
+    pu.save(update_fields=['status'])
+    dm = DependencyManager()
+    dm.schedule()
+    j.refresh_from_db()
+    assert j.dependencies_processed is True
 
 
 @pytest.mark.django_db
-def test_single_job_dependencies_inventory_update_launch(controlplane_instance_group, job_template_factory, mocker, inventory_source_factory):
+def test_single_job_dependencies_inventory_update_launch(job_template_factory, mocker, inventory_source_factory):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
-    instance = controlplane_instance_group.instances.all()[0]
-    j = create_job(objects.job_template, dependencies_processed=False)
+
     i = objects.inventory
     ii = inventory_source_factory("ec2")
     ii.source = "ec2"
@@ -287,36 +284,44 @@ def test_single_job_dependencies_inventory_update_launch(controlplane_instance_g
     ii.update_cache_timeout = 0
     ii.save()
     i.inventory_sources.add(ii)
-    with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        dm = DependencyManager()
-        with mock.patch.object(DependencyManager, "create_inventory_update", wraps=dm.create_inventory_update) as mock_iu:
-            dm.schedule()
-            mock_iu.assert_called_once_with(j, ii)
-            iu = [x for x in ii.inventory_updates.all()]
-            assert len(iu) == 1
-            TaskManager().schedule()
-            TaskManager.start_task.assert_called_once_with(iu[0], controlplane_instance_group, [j], instance)
-            iu[0].status = "successful"
-            iu[0].save()
-    with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        TaskManager().schedule()
-        TaskManager.start_task.assert_called_once_with(j, controlplane_instance_group, [], instance)
+
+    j = objects.job_template.create_unified_job()
+    j.signal_start()
+    assert j.dependencies_processed is False
+    assert j.status == 'pending'
+    deps = list(j.dependent_jobs.all())
+    assert len(deps) == 1
+    inv_update = deps[0]
+
+    inv_update.status = 'successful'
+    inv_update.save()
+    dm = DependencyManager()
+    dm.schedule()
+    j.refresh_from_db()
+    assert j.dependencies_processed is True
 
 
 @pytest.mark.django_db
-def test_inventory_update_launches_project_update(controlplane_instance_group, scm_inventory_source):
+def test_inventory_update_launches_project_update(scm_inventory_source):
     ii = scm_inventory_source
     project = scm_inventory_source.source_project
     project.scm_update_on_launch = True
     project.save()
-    iu = ii.create_inventory_update()
-    iu.status = "pending"
-    iu.save()
-    with mock.patch("awx.main.scheduler.TaskManager.start_task"):
-        dm = DependencyManager()
-        with mock.patch.object(DependencyManager, "create_project_update", wraps=dm.create_project_update) as mock_pu:
-            dm.schedule()
-            mock_pu.assert_called_with(iu, project_id=project.id)
+
+    iu = ii.create_unified_job()
+    iu.signal_start()
+    assert iu.dependencies_processed is False
+    assert iu.status == 'pending'
+    deps = list(iu.dependent_jobs.all())
+    assert len(deps) == 1
+    pu = deps[0]
+
+    pu.status = 'successful'
+    pu.save()
+    dm = DependencyManager()
+    dm.schedule()
+    iu.refresh_from_db()
+    assert iu.dependencies_processed is True
 
 
 @pytest.mark.django_db
