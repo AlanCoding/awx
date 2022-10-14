@@ -1524,7 +1524,7 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
         Returns other jobs to cancel if this one is canceled.
         Normally, this is just the set of jobs which are blocked by this job.
         """
-        if self.status == 'running':
+        if self.status == 'running' or (not self.pk):
             return []  # running necessarily means that dependent_jobs have finished
         return list(self.unifiedjob_blocked_jobs.all())  # reverse relationship for dependent_jobs
 

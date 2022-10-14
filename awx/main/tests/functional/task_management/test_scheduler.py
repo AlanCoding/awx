@@ -15,7 +15,7 @@ def test_single_job_scheduler_launch(hybrid_instance, controlplane_instance_grou
     j = create_job(objects.job_template)
     with mocker.patch("awx.main.scheduler.TaskManager.start_task"):
         TaskManager().schedule()
-        TaskManager.start_task.assert_called_once_with(j, controlplane_instance_group, [], instance)
+        TaskManager.start_task.assert_called_once_with(j, controlplane_instance_group, instance)
 
 
 @pytest.mark.django_db
@@ -233,12 +233,12 @@ def test_multi_jt_capacity_blocking(hybrid_instance, job_template_factory):
         mock_task_impact.return_value = 505
         with mock.patch.object(TaskManager, "start_task", wraps=tm.start_task) as mock_job:
             tm.schedule()
-            mock_job.assert_called_once_with(j1, controlplane_instance_group, [], instance)
+            mock_job.assert_called_once_with(j1, controlplane_instance_group, instance)
             j1.status = "successful"
             j1.save()
     with mock.patch.object(TaskManager, "start_task", wraps=tm.start_task) as mock_job:
         tm.schedule()
-        mock_job.assert_called_once_with(j2, controlplane_instance_group, [], instance)
+        mock_job.assert_called_once_with(j2, controlplane_instance_group, instance)
 
 
 @pytest.mark.django_db
@@ -246,9 +246,6 @@ def test_single_job_dependencies_project_launch(job_template_factory):
     objects = job_template_factory('jt', organization='org1', project='proj', inventory='inv', credential='cred')
     p = objects.project
     p.scm_update_on_launch = True
-    p.scm_update_cache_timeout = 0
-    p.scm_type = "git"
-    p.scm_url = "http://github.com/ansible/ansible.git"
     p.save(skip_update=True)
 
     j = objects.job_template.create_unified_job()
@@ -347,8 +344,6 @@ def test_shared_dependencies_launch(job_template_factory, inventory_source_facto
     p = objects.project
     p.scm_update_on_launch = True
     p.scm_update_cache_timeout = 300
-    p.scm_type = "git"
-    p.scm_url = "http://github.com/ansible/ansible.git"
     p.save()
 
     i = objects.inventory
@@ -363,17 +358,11 @@ def test_shared_dependencies_launch(job_template_factory, inventory_source_facto
     j1.signal_start()
     j2 = objects.job_template.create_unified_job()
     j2.signal_start()
-    deps1 = set(j1.dependent_jobs.all())
-    deps2 = set(j2.dependent_jobs.all())
-    assert deps1 == deps2
-    assert len(deps1) == 2
-    for dep in deps1:
-        if dep._meta.model_name == 'inventoryupdate':
-            pu = dep
-        elif dep._meta.model_name == 'projectupdate':
-            iu = dep
-        else:
-            raise Exception(f'unexpected dep type in {deps1}')
+    pu = p.project_updates.first()
+    iu = ii.inventory_updates.first()
+    assert set([iu, pu]) == set(j1.dependent_jobs.all()) == set(j2.dependent_jobs.all())
+    assert list(p.project_updates.all()) == [pu]
+    assert list(ii.inventory_updates.all()) == [iu]
 
     DependencyManager().schedule()
     for j in (j1, j2):
@@ -381,20 +370,17 @@ def test_shared_dependencies_launch(job_template_factory, inventory_source_facto
         assert j.status == 'pending'
         assert j.dependencies_processed is False
 
-    pu.status = 'successful'
-    pu.save()
-    iu.status = 'successful'
-    iu.save()
+    for uj in (pu, iu):
+        uj.status = 'successful'
+        uj.save()
 
     DependencyManager().schedule()
     for j in (j1, j2):
         j.refresh_from_db()
         assert j.dependencies_processed
 
-    pu = [x for x in p.project_updates.all()]
-    iu = [x for x in ii.inventory_updates.all()]
-    assert len(pu) == 1
-    assert len(iu) == 1
+    j3 = objects.job_template.create_unified_job()
+    assert set(j3.dependent_jobs.all()) == set([iu, pu])  # dependencies all inside cache timeout
 
 
 @pytest.mark.django_db
@@ -414,7 +400,7 @@ def test_job_not_blocking_project_update(controlplane_instance_group, job_templa
         project_update.status = "pending"
         project_update.save()
         TaskManager().schedule()
-        TaskManager.start_task.assert_called_once_with(project_update, controlplane_instance_group, [], instance)
+        TaskManager.start_task.assert_called_once_with(project_update, controlplane_instance_group, instance)
 
 
 @pytest.mark.django_db
@@ -438,7 +424,7 @@ def test_job_not_blocking_inventory_update(controlplane_instance_group, job_temp
 
         DependencyManager().schedule()
         TaskManager().schedule()
-        TaskManager.start_task.assert_called_once_with(inventory_update, controlplane_instance_group, [], instance)
+        TaskManager.start_task.assert_called_once_with(inventory_update, controlplane_instance_group, instance)
 
 
 @pytest.mark.django_db

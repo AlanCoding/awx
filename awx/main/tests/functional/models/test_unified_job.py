@@ -46,8 +46,6 @@ def test_job_fail_chain_shared_project(job_template_factory, scm_inventory_sourc
 
     project = scm_inventory_source.source_project
     project.scm_update_on_launch = True
-    project.scm_type = "git"
-    project.scm_url = "http://github.com/ansible/ansible.git"
     project.save()
 
     objects = job_template_factory('jt', organization='org1', project=project, inventory=scm_inventory_source.inventory, credential='cred')
