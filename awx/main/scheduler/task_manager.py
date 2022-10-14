@@ -288,7 +288,7 @@ class DependencyManager(TaskBase):
 
         advancing_job_ct = (
             UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
-            .exclude(dependent_jobs__status__in=ACTIVE_STATES + ('failed', 'error'))
+            .exclude(dependent_jobs__status__in=ACTIVE_STATES + ('failed', 'error', 'canceled'))
             .update(dependencies_processed=True)
         )
         if advancing_job_ct:
