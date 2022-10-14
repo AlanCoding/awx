@@ -82,13 +82,7 @@ class TaskBase:
     @timeit
     def get_tasks(self, filter_args):
         wf_approval_ctype_id = ContentType.objects.get_for_model(WorkflowApproval).id
-        qs = (
-            UnifiedJob.objects.filter(**filter_args)
-            .exclude(launch_type='sync')
-            .exclude(polymorphic_ctype_id=wf_approval_ctype_id)
-            .order_by('created')
-            .prefetch_related('dependent_jobs')
-        )
+        qs = UnifiedJob.objects.filter(**filter_args).exclude(launch_type='sync').exclude(polymorphic_ctype_id=wf_approval_ctype_id).order_by('created')
         self.all_tasks = [t for t in qs]
 
     def record_aggregate_metrics(self, *args):
@@ -264,15 +258,44 @@ class DependencyManager(TaskBase):
 
     @timeit
     def _schedule(self):
-        r = (
+        failing_job_qs = (
+            UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
+            .filter(dependent_jobs__status__in=['failed', 'error'])
+            .prefetch_related('dependent_jobs')
+        )
+        failed_job_ct = 0
+        for task in failing_job_qs:
+            messages = []
+            for dep in task.dependent_jobs.all():
+                if dep.status in ('failed', 'error'):
+                    messages.append(
+                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                        % (
+                            get_type_for_model(type(dep)),
+                            dep.name,
+                            dep.id,
+                        )
+                    )
+            # if we detect a failed or error dependency, go ahead and fail this
+            # task. The errback on the dependency takes some time to trigger,
+            # and we don't want the task to enter running state if its
+            # dependency has failed or errored.
+            task.status = 'failed'
+            task.job_explanation = '\n'.join(messages)
+            task.save(update_fields=['status', 'job_explanation'])
+            task.websocket_emit_status('failed')
+            failed_job_ct += 1
+
+        advancing_job_ct = (
             UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
             .exclude(dependent_jobs__status__in=ACTIVE_STATES)
             .update(dependencies_processed=True)
         )
-        if r:
-            logger.info(f'Dependencies fully processed for {r} tasks')
+        if advancing_job_ct:
+            logger.info(f'Dependencies fully processed for {advancing_job_ct} tasks')
             ScheduleTaskManager().schedule()
-        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", r)
+
+        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", advancing_job_ct + failed_job_ct)
 
 
 class TaskManager(TaskBase):
@@ -310,24 +333,6 @@ class TaskManager(TaskBase):
         blocked_by = self.dependency_graph.task_blocked_by(task)
         if blocked_by:
             return blocked_by
-
-        for dep in task.dependent_jobs.all():
-            if dep.status in ACTIVE_STATES:
-                return dep
-            # if we detect a failed or error dependency, go ahead and fail this
-            # task. The errback on the dependency takes some time to trigger,
-            # and we don't want the task to enter running state if its
-            # dependency has failed or errored.
-            elif dep.status in ("error", "failed"):
-                task.status = 'failed'
-                task.job_explanation = 'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (
-                    get_type_for_model(type(dep)),
-                    dep.name,
-                    dep.id,
-                )
-                task.save(update_fields=['status', 'job_explanation'])
-                task.websocket_emit_status('failed')
-                return dep
 
         return None
 
