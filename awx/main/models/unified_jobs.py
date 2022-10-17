@@ -1494,11 +1494,6 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
     def can_cancel(self):
         return bool(self.status in CAN_CANCEL)
 
-    def _build_job_explanation(self):
-        if not self.job_explanation:
-            return 'Previous Task Canceled: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (self.model_to_str(), self.name, self.id)
-        return None
-
     def fallback_cancel(self):
         if not self.celery_task_id:
             self.refresh_from_db(fields=['celery_task_id'])
@@ -1532,7 +1527,10 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
         if self.can_cancel:
             if not is_chain:
                 for x in self.get_cancel_chain():
-                    x.cancel(job_explanation=self._build_job_explanation(), is_chain=True)
+                    x.cancel(
+                        job_explanation=f'Previous Task Canceled: {{"job_type": "{self.model_to_str()}", "job_name": "{self.name}", "job_id": "{self.id}"}}',
+                        is_chain=True,
+                    )
 
             cancel_fields = []
             if not self.cancel_flag:

@@ -97,6 +97,29 @@ def test_job_fail_chain_different_projects(job_template_factory, scm_inventory_s
 
 
 @pytest.mark.django_db
+def test_dependency_job_explanation_after_cancel(scm_inventory_source):
+    scm_inventory_source.update_on_launch = True
+    scm_inventory_source.save()
+
+    job = JobTemplate.objects.create(inventory=scm_inventory_source.inventory).create_unified_job()
+    job.signal_start()
+
+    dependent_jobs = list(job.dependent_jobs.all())
+    assert len(dependent_jobs) == 1
+    iu = dependent_jobs[0]
+    assert iu._meta.model_name == 'inventoryupdate'
+
+    iu.cancel()
+
+    job.refresh_from_db()
+    assert job.job_explanation == 'Previous Task Canceled: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % (
+        'inventory_update',
+        iu.name,
+        iu.id,
+    )
+
+
+@pytest.mark.django_db
 class TestCreateUnifiedJob:
     """
     Ensure that copying a job template to a job handles many to many field copy
