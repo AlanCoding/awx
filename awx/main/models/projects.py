@@ -29,7 +29,7 @@ from awx.main.models.unified_jobs import (
     UnifiedJobTemplate,
 )
 from awx.main.models.jobs import Job
-from awx.main.models.mixins import ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin
+from awx.main.models.mixins import ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin, ExecutionEnvironmentMixin
 from awx.main.utils import update_scm_url, polymorphic
 from awx.main.utils.ansible import skip_directory, could_be_inventory, could_be_playbook
 from awx.main.utils.execution_environments import get_control_plane_execution_environment
@@ -489,7 +489,7 @@ class Project(UnifiedJobTemplate, ProjectOptions, ResourceMixin, CustomVirtualEn
         return r
 
 
-class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin):
+class ProjectUpdate(UnifiedJob, ProjectOptions, JobNotificationMixin, ExecutionEnvironmentMixin):
     """
     Internal job for tracking project updates from SCM.
     """
