@@ -1277,15 +1277,16 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
 
     def get_cancel_chain(self):
         r = super().get_cancel_chain()
-        if self.source_project_update_id:
-            r.append(self.source_project_update)
         # Special case for multiple inventory updates in same inventory
         # If other sources in this same inventory are running as dependencies of the same job, cancel them too
-        job_id = self.unifiedjob_blocked_jobs.filter(job__isnull=False).values_list('pk', flat=True).first()
-        if job_id:
-            for other_inv_update in InventoryUpdate.objects.filter(unifiedjob_blocked_jobs=job_id, inventory_id=self.inventory_id):
-                if other_inv_update not in r:
-                    r.append(other_inv_update)
+        for uj in r:
+            if uj._meta.model_name == 'job':
+                for inv_update in InventoryUpdate.objects.filter(unifiedjob_blocked_jobs=uj.id, inventory_id=self.inventory_id).exclude(id=self.id):
+                    if inv_update not in r:
+                        r.append(inv_update)
+                break
+        if self.source_project_update_id:
+            r.append(self.source_project_update)
         return r
 
     def dependent_templates(self):
