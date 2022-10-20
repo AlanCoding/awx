@@ -1279,12 +1279,11 @@ class InventoryUpdate(UnifiedJob, InventorySourceOptions, JobNotificationMixin, 
         r = super().get_cancel_chain()
         # Special case for multiple inventory updates in same inventory
         # If other sources in this same inventory are running as dependencies of the same job, cancel them too
-        for uj in r:
-            if uj._meta.model_name == 'job':
-                for inv_update in InventoryUpdate.objects.filter(unifiedjob_blocked_jobs=uj.id, inventory_id=self.inventory_id).exclude(id=self.id):
-                    if inv_update not in r:
-                        r.append(inv_update)
-                break
+        for uj in self.unifiedjob_blocked_jobs.filter(job__isnull=False):
+            for inv_update in InventoryUpdate.objects.filter(unifiedjob_blocked_jobs=uj.id, inventory_id=self.inventory_id).exclude(id=self.id):
+                if inv_update not in r:
+                    r.append(inv_update)
+            break
         if self.source_project_update_id:
             r.append(self.source_project_update)
         return r

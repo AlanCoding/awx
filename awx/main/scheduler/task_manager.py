@@ -258,37 +258,45 @@ class DependencyManager(TaskBase):
 
     @timeit
     def _schedule(self):
-        failing_job_qs = UnifiedJob.objects.filter(
-            status='pending', dependencies_processed=False, dependent_jobs__status__in=['failed', 'error']
-        ).prefetch_related('dependent_jobs')
+        FAILED_STATES = ('failed', 'error', 'canceled')
+        failing_job_qs = UnifiedJob.objects.filter(status='pending', dependencies_processed=False, dependent_jobs__status__in=FAILED_STATES).prefetch_related(
+            'dependent_jobs'
+        )
         failed_job_ct = 0
         already_failed = set()
         for task in failing_job_qs.iterator():
             messages = []
+            task.status = 'failed'
+            update_fields = ['status', 'job_explanation']
             for dep in task.dependent_jobs.all():
                 if dep.status in ('failed', 'error') or dep.id in already_failed:
                     messages.append(
-                        'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
+                        'Previous Task %s: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}'
                         % (
+                            dep.status.capitalize(),
                             get_type_for_model(type(dep)),
                             dep.name,
                             dep.id,
                         )
                     )
+                    if dep.status == 'canceled':
+                        task.status = 'canceled'
+                        task.cancel_flag = True
+                        task.start_args = ''
+                        update_fields.extend(['status', 'cancel_flag', 'start_args'])
             # if we detect a failed or error dependency, go ahead and fail this
             # task. The errback on the dependency takes some time to trigger,
             # and we don't want the task to enter running state if its
             # dependency has failed or errored.
-            task.status = 'failed'
             task.job_explanation = '\n'.join(messages)
-            task.save(update_fields=['status', 'job_explanation'])
+            task.save(update_fields=update_fields)
             task.websocket_emit_status('failed')
             failed_job_ct += 1
             already_failed.add(task.id)
 
         advancing_job_ct = (
             UnifiedJob.objects.filter(status='pending', dependencies_processed=False)
-            .exclude(dependent_jobs__status__in=ACTIVE_STATES + ('failed', 'error', 'canceled'))
+            .exclude(dependent_jobs__status__in=ACTIVE_STATES + FAILED_STATES)
             .update(dependencies_processed=True)
         )
         if advancing_job_ct:

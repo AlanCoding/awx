@@ -1516,12 +1516,11 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
 
     def get_cancel_chain(self):
         """
-        Returns other jobs to cancel if this one is canceled.
-        Normally, this is just the set of jobs which are blocked by this job.
+        Returns other jobs to auto-cancel if this one is canceled.
+        This list does not include jobs that are waiting on this job as an update_on_launch dependency
+        canceling downstream jobs of that type is handled by the DependencyManager.
         """
-        if not self.pk:
-            return []
-        return list(self.unifiedjob_blocked_jobs.all())  # reverse relationship for dependent_jobs
+        return []
 
     def cancel(self, job_explanation=None, is_chain=False):
         if self.can_cancel:
