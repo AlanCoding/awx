@@ -56,6 +56,7 @@ from awx.main.constants import ACTIVE_STATES, CAN_CANCEL, JOB_VARIABLE_PREFIXES
 from awx.main.redact import UriCleaner, REPLACE_STR
 from awx.main.consumers import emit_channel_notification
 from awx.main.fields import AskForField, OrderedManyToManyField, JSONBlob
+from awx.main.utils.pglock import advisory_lock
 
 __all__ = ['UnifiedJobTemplate', 'UnifiedJob', 'StdoutMaxBytesExceeded']
 
@@ -877,34 +878,37 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
                 continue
 
             # See if we can use last job in database
-            last_ujt_job = UnifiedJob.objects.filter(unified_job_template=ujt).order_by("-created").first()
-            if last_ujt_job:
-                if last_ujt_job.status in ACTIVE_STATES:
-                    dependent_jobs.append(last_ujt_job)
-                    available_deps.add(last_ujt_job)
-                    logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} with still-active {last_ujt_job.log_format}')
-                    continue  # still active so always technically satisfies cache timeout window, use it
-
-                if (last_ujt_job.status not in ['failed', 'canceled', 'error']) and last_ujt_job.finished:
-                    if hasattr(ujt, 'scm_update_cache_timeout'):
-                        cache_timeout = ujt.scm_update_cache_timeout  # for projects
-                    else:
-                        cache_timeout = ujt.update_cache_timeout  # for inventory updates
-                    timeout_seconds = datetime.timedelta(seconds=cache_timeout)
-                    if (last_ujt_job.finished + timeout_seconds) >= self.created:
+            with advisory_lock(f'ujt_scheduling_{ujt.id}'):
+                last_ujt_job = UnifiedJob.objects.filter(unified_job_template=ujt).order_by("-created").first()
+                if last_ujt_job:
+                    if last_ujt_job.status in ACTIVE_STATES:
                         dependent_jobs.append(last_ujt_job)
                         available_deps.add(last_ujt_job)
-                        logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} within cache timeout {last_ujt_job.log_format}')
-                        continue  # ran within the cache timeout window, use it
-                elif not last_ujt_job.finished:  # this should not happen
-                    logger.warning(f'Programming error: {last_ujt_job.log_format} was in a finished state but has no finished timestamp')
+                        logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} with still-active {last_ujt_job.log_format}')
+                        continue  # still active so always technically satisfies cache timeout window, use it
 
-            # If not avilable by the above sources, then create an launch new one
-            new_ujt_job = ujt.create_unified_job(available_deps=available_deps, _eager_fields=dict(launch_type='dependency', created=self.created))
-            logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} with new {new_ujt_job.log_format}, created time: {self.created}')
-            new_ujt_job.signal_start()
-            dependent_jobs.append(new_ujt_job)
-            available_deps.add(new_ujt_job)
+                    if (last_ujt_job.status not in ['failed', 'canceled', 'error']) and last_ujt_job.finished:
+                        if hasattr(ujt, 'scm_update_cache_timeout'):
+                            cache_timeout = ujt.scm_update_cache_timeout  # for projects
+                        else:
+                            cache_timeout = ujt.update_cache_timeout  # for inventory updates
+                        timeout_seconds = datetime.timedelta(seconds=cache_timeout)
+                        if (last_ujt_job.finished + timeout_seconds) >= self.created:
+                            dependent_jobs.append(last_ujt_job)
+                            available_deps.add(last_ujt_job)
+                            logger.info(f'Satisfied {ujt.pk} dependency for {self.log_format} within cache timeout {last_ujt_job.log_format}')
+                            continue  # ran within the cache timeout window, use it
+                    elif not last_ujt_job.finished:  # this should not happen
+                        logger.warning(f'Programming error: {last_ujt_job.log_format} was in a finished state but has no finished timestamp')
+
+                # If not avilable by the above sources, then create an launch new one
+                new_ujt_job = ujt.create_unified_job(available_deps=available_deps, _eager_fields=dict(launch_type='dependency', created=self.created))
+                logger.info(
+                    f'Satisfied {ujt.pk} dependency with new {new_ujt_job.log_format}, created time: {self.created}, last_job={last_ujt_job.pk}, last_created={last_ujt_job.created}, last_status={last_ujt_job.status}'
+                )
+                new_ujt_job.signal_start()
+                dependent_jobs.append(new_ujt_job)
+                available_deps.add(new_ujt_job)
         return dependent_jobs
 
     def save(self, *args, **kwargs):

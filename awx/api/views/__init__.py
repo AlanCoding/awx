@@ -2297,6 +2297,10 @@ class JobTemplateLaunch(RetrieveAPIView):
     serializer_class = serializers.JobLaunchSerializer
     always_allow_superuser = False
 
+    @transaction.non_atomic_requests
+    def dispatch(self, *args, **kwargs):
+        return super(JobTemplateLaunch, self).dispatch(*args, **kwargs)
+
     def update_raw_data(self, data):
         try:
             obj = self.get_object()
