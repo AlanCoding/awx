@@ -183,6 +183,7 @@ class RunnerCallback:
         }
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.dispatcher.dispatch(event_data)
+        self.dispatcher.flush()
         if self.wrapup_event_type == 'EOF':
             self.wrapup_event_dispatched = True
 
