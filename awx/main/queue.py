@@ -5,7 +5,6 @@
 import json
 import logging
 import redis
-from datetime import datetime, timedelta
 
 # Django
 from django.conf import settings
@@ -28,15 +27,10 @@ class CallbackQueueDispatcher(object):
         self.queue = getattr(settings, 'CALLBACK_QUEUE', '')
         self.logger = logging.getLogger('awx.main.queue.CallbackQueueDispatcher')
         self.connection = redis.Redis.from_url(settings.BROKER_URL)
-        self.last_write = datetime.now()
         self.pipe = self.connection.pipeline()
 
     def dispatch(self, obj):
         self.pipe.rpush(self.queue, json.dumps(obj, cls=AnsibleJSONEncoder))
-
-        if datetime.now() - timedelta(seconds=2) > self.last_write:
-            self.flush()
-            self.last_write = datetime.now()
 
     def flush(self):
         self.pipe.execute()

@@ -381,7 +381,13 @@ class AWXReceptorJob:
                 # address race condition where SIGTERM was issued after this dispatcher task started
                 if signal_callback():
                     raise SignalExit()
-                res = processor_future.result()
+                while True:
+                    try:
+                        res = processor_future.result(timeout=2)
+                        self.task.runner_callback.dispatcher.flush()
+                        break
+                    except TimeoutError:
+                        self.task.runner_callback.dispatcher.flush()
             except SignalExit:
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
