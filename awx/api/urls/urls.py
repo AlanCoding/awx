@@ -30,6 +30,7 @@ from awx.api.views import (
     OAuth2TokenList,
     ApplicationOAuth2TokenList,
     OAuth2ApplicationDetail,
+    BulkJobLaunchView,
 )
 from awx.api.views.bulk import (
     BulkView,
@@ -142,6 +143,7 @@ v2_urls = [
     re_path(r'^workflow_approvals/', include(workflow_approval_urls)),
     re_path(r'^bulk/host_create/$', BulkHostCreateView.as_view(), name='bulk_host_create'),
     re_path(r'^bulk/$', BulkView.as_view(), name='bulk'),
+    re_path(r'^bulk_jobs/launch/$', BulkJobLaunchView.as_view(), name='bulk_job_launch'),
 ]
 
 
