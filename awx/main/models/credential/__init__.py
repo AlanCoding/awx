@@ -250,6 +250,11 @@ class Credential(PasswordFieldsModel, CommonModelNameNotUnique, ResourceMixin):
             else:
                 fmt_str = '{}_{}'
             return fmt_str.format(type_alias, self.get_input('vault_id'))
+        if self.credential_type.kind == 'cloud' and (not self.credential_type.managed):
+            type_alias = 'cloud-'
+            for injector, data in self.credential_type.injector.items():
+                for key in data:
+                    type_alias += key
         return str(type_alias)
 
     @staticmethod
