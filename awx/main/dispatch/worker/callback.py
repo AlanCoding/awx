@@ -168,26 +168,17 @@ class CallbackBrokerWorker(BaseWorker):
                     cls.objects.bulk_create(events)
                     metrics_bulk_events_saved += len(events)
                 except Exception as exc:
-                    logger.warning(f'Error in events bulk_create, will try indiviually up to 5 errors, error {str(exc)}')
+                    logger.warning(f'Error in events bulk_create, will try indiviually, error {str(exc)}')
                     # if an exception occurs, we should re-attempt to save the
                     # events one-by-one, because something in the list is
                     # broken/stale
-                    consecutive_errors = 0
-                    events_saved = 0
                     metrics_events_batch_save_errors += 1
                     for e in events:
                         try:
                             e.save()
-                            events_saved += 1
-                            consecutive_errors = 0
+                            metrics_singular_events_saved += 1
                         except Exception as exc_indv:
-                            consecutive_errors += 1
                             logger.info(f'Database Error Saving individual Job Event, error {str(exc_indv)}')
-                        if consecutive_errors >= 5:
-                            raise
-                    metrics_singular_events_saved += events_saved
-                    if events_saved == 0:
-                        raise
                 metrics_duration_to_save = time.perf_counter() - metrics_duration_to_save
                 for e in events:
                     if not getattr(e, '_skip_websocket_message', False):
