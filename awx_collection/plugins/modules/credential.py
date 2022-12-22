@@ -234,7 +234,17 @@ def main():
     team = module.params.get('team')
     state = module.params.get('state')
 
-    cred_type_id = module.resolve_name_to_id('credential_types', credential_type)
+    if state == 'absent':
+        result = module.get_one('credential_types', name_or_id=credential_type, allow_none=True)
+        if result is None:
+            # If credential_type doesnt exist, credential cant exist
+            module.json_output['changed'] = False
+            module.json_output['state'] = 'absent'
+            module.exit_json(**module.json_output)
+        cred_type_id = result['id']
+    else:
+        cred_type_id = module.resolve_name_to_id('credential_types', credential_type)
+
     if organization:
         org_id = module.resolve_name_to_id('organizations', organization)
 
