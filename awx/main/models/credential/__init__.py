@@ -103,7 +103,7 @@ class Credential(PasswordFieldsModel, CommonModelNameNotUnique, ResourceMixin):
         related_name='credentials',
     )
     inputs = CredentialInputField(
-        blank=True, default=dict, help_text=_('Enter inputs using either JSON or YAML syntax. ' 'Refer to the documentation for example syntax.')
+        blank=True, default=dict, help_text=_('Enter inputs using either JSON or YAML syntax. Refer to the documentation for example syntax.')
     )
     admin_role = ImplicitRoleField(
         parent_role=[
