@@ -902,7 +902,7 @@ ManagedCredentialType(
                 'id': 'cloud_environment',
                 'label': gettext_noop('Azure Cloud Environment'),
                 'type': 'string',
-                'help_text': gettext_noop('Environment variable AZURE_CLOUD_ENVIRONMENT when' ' using Azure GovCloud or Azure stack.'),
+                'help_text': gettext_noop('Environment variable AZURE_CLOUD_ENVIRONMENT when using Azure GovCloud or Azure stack.'),
             },
         ],
         'required': ['subscription'],
