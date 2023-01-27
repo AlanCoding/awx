@@ -1,8 +1,10 @@
 import logging
+import json
 
 from django.core.management.base import BaseCommand
 from django.core.cache import cache
 from awx.main.dispatch import pg_bus_conn
+from awx.main.dispatch.worker.task import TaskWorker
 from awx.conf import settings_registry
 
 logger = logging.getLogger('awx.main.cache_clear')
@@ -22,7 +24,11 @@ class Command(BaseCommand):
                 conn.listen("tower_settings_change")
                 for e in conn.events(yield_timeouts=True):
                     if e is not None:
+                        body = json.loads(e.payload)
                         logger.warning(f"Cache clear request received. Clearing now, paylod: {e.payload}")
+                        TaskWorker.run_callable(body)
+                    else:
+                        logger.info('run_clear_cache got timeout')
         except Exception:
             # Log unanticipated exception in addition to writing to stderr to get timestamps and other metadata
             logger.exception('Encountered unhandled error in cache clear main loop')
