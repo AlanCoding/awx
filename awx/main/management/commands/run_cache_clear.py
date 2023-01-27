@@ -22,16 +22,7 @@ class Command(BaseCommand):
                 conn.listen("tower_settings_change")
                 for e in conn.events(yield_timeouts=True):
                     if e is not None:
-                        logger.info("Cache clear request received. Clearing now")
-                        # clear the cache of the keys in the payload
-                        setting_keys = e.payload
-                        orig_len = len(setting_keys)
-                        for i in range(orig_len):
-                            for dependent_key in settings_registry.get_dependent_settings(setting_keys[i]):
-                                setting_keys.append(dependent_key)
-                        cache_keys = set(setting_keys)
-                        logger.info('cache delete_many(%r)', cache_keys)
-                        cache.delete_many(cache_keys)
+                        logger.warning(f"Cache clear request received. Clearing now, paylod: {e.payload}")
         except Exception:
             # Log unanticipated exception in addition to writing to stderr to get timestamps and other metadata
             logger.exception('Encountered unhandled error in cache clear main loop')
