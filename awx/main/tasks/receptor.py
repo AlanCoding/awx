@@ -435,9 +435,9 @@ class AWXReceptorJob:
                         lines = resultfile.readlines()
                         receptor_output = b"".join(lines).decode()
                     if receptor_output:
-                        self.task.runner_callback.delay_update(result_traceback=receptor_output)
+                        self.task.runner_callback.delay_update(result_traceback=f'Worker output:\n{receptor_output}')
                     elif detail:
-                        self.task.runner_callback.delay_update(result_traceback=detail)
+                        self.task.runner_callback.delay_update(result_traceback=f'Receptor detail:\n{detail}')
                     else:
                         logger.warning(f'No result details or output from {self.task.instance.log_format}, status:\n{state_name}')
                 except Exception:
