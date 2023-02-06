@@ -974,9 +974,14 @@ class OrderedManyToManyField(models.ManyToManyField):
     def _update_m2m_position(self, sender, **kwargs):
         if kwargs.get('action') in ('post_add', 'post_remove'):
             order_with_respect_to = None
-            for field in sender._meta.local_fields:
-                if isinstance(field, models.ForeignKey) and isinstance(kwargs['instance'], field.related_model):
-                    order_with_respect_to = field.name
+            if self.model is self.related_model:
+                if not self.remote_field.through_fields:
+                    return  # field has not been completely populated by Django, that is fine, this will be called again
+                order_with_respect_to = self.remote_field.through_fields[0]
+            else:
+                for field in sender._meta.local_fields:
+                    if isinstance(field, models.ForeignKey) and isinstance(kwargs['instance'], field.related_model):
+                        order_with_respect_to = field.name
             for i, ig in enumerate(sender.objects.filter(**{order_with_respect_to: kwargs['instance'].pk})):
                 if ig.position != i:
                     ig.position = i
