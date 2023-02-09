@@ -431,7 +431,6 @@ class AWXReceptorJob:
                         # massive, only ask for last 1000 bytes
                         startpos = max(stdout_size - 1000, 0)
                         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, startpos=startpos, return_socket=True, return_sockfile=True)
-                        resultsock.setblocking(False)  # this makes resultfile reads non blocking
                         lines = resultfile.readlines()
                         receptor_output = b"".join(lines).decode()
                     if receptor_output:
@@ -441,6 +440,7 @@ class AWXReceptorJob:
                     else:
                         logger.warning(f'No result details or output from {self.task.instance.log_format}, status:\n{state_name}')
                 except Exception:
+                    logger.exception(f'Work results error from job id={self.task.instance.id} work_unit={self.task.instance.work_unit_id}')
                     raise RuntimeError(detail)
 
         return res
