@@ -3854,7 +3854,7 @@ class WorkflowApprovalListSerializer(WorkflowApprovalSerializer, UnifiedJobListS
 class WorkflowApprovalTemplateSerializer(UnifiedJobTemplateSerializer):
     class Meta:
         model = WorkflowApprovalTemplate
-        fields = ('*', 'timeout', 'name')
+        fields = ('*', 'timeout', 'name', '-execution_environment')
 
     def get_related(self, obj):
         res = super(WorkflowApprovalTemplateSerializer, self).get_related(obj)
