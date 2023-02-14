@@ -16,16 +16,96 @@ author: "Seth Foster (@fosterseth)"
 short_description: Bulk job launch in Automation Platform Controller
 description:
     - Single-request bulk job launch in Automation Platform Controller.
-    - Results in a workflow where each node corresponds to each item specified in the jobs field.
+    - Creates a workflow where each node corresponds to an item specified in the jobs option.
     - Any options specified at the top level will inherited by the launched jobs (if prompt on launch is enabled for those fields).
     - Provides a way to submit many jobs at once to Controller.
 options:
     jobs:
       description:
         - List of jobs to create.
-        - Any promptable field on unified_job_template can be provided as a field on the list item (e.g. limit).
       required: True
       type: list
+      elements: dict
+      suboptions:
+        unified_job_template:
+          description:
+            - Job template ID to use when launching.
+          type: int
+          required: True
+        extra_data:
+          description:
+            - Extra variables to apply at launch time, if job template prompts for extra variables
+          type: dict
+          default: {}
+        inventory:
+          description:
+            - Inventory ID applied as a prompt, if job template prompts for inventory
+          type: int
+        execution_environment:
+          description:
+            - Execution environment ID applied as a prompt, if job template prompts for execution environments
+          type: int
+        instance_groups:
+          description:
+            - Instance group IDs applied as a prompt, if job template prompts for instance groups
+          type: list
+          elements: int
+        credentials:
+          description:
+            - Credential ID applied as a prompt, if job template prompts for credentials
+          type: int
+        labels:
+          description:
+            - Label IDs to use for the job,  if job template prompts for labels
+          type: list
+          elements: int
+        diff_mode:
+          description:
+            - Show the changes made by Ansible tasks where supported
+          type: bool
+        verbosity:
+          description:
+            - Verbosity level for this ad hoc command run
+          type: int
+          choices: [ 0, 1, 2, 3, 4, 5 ]
+        scm_branch:
+          description:
+            - SCM branch applied as a prompt, if job template prompts for SCM branch
+            - This is only applicable if the project allows for branch override
+          type: str
+        job_type:
+          description:
+            - Job type applied as a prompt, if job template prompts for job type
+          type: str
+          choices:
+            - 'run'
+            - 'check'
+        job_tags:
+          description:
+            - Job tags applied as a prompt, if job template prompts for job tags
+          type: str
+        skip_tags:
+          description:
+            - Tags to skip, applied as a prompt, if job template prompts for job tags
+          type: str
+        limit:
+          description:
+            - Limit to act on, applied as a prompt, if job template prompts for limit
+          type: str
+        forks:
+          description:
+            - The number of parallel or simultaneous processes to use while executing the playbook, if job template prompts for forks
+          type: int
+        job_slice_count:
+          description:
+            - The number of jobs to slice into at runtime, if job template prompts for job slices.
+            - Will cause the Job Template to launch a workflow if value is greater than 1.
+          type: int
+          default: '1'
+        timeout:
+          description:
+            - Maximum time in seconds to wait for a job to finish (server-side), if job template prompts for timeout.
+          type: int
     name:
       description:
         - The name of the bulk job that is created
@@ -39,7 +119,7 @@ options:
       type: int
     inventory:
       description:
-        - Inventory to use for the jobs ran within the bulk job, only used if prompt for inventory is set.
+        - Inventory ID to use for the jobs ran within the bulk job, only used if prompt for inventory is set.
       type: int
     limit:
       description:
@@ -48,7 +128,7 @@ options:
     scm_branch:
       description:
         - A specific branch of the SCM project to run the template on.
-        - This is only applicable if your project allows for branch override.
+        - This is only applicable if the project allows for branch override.
       type: str
     extra_vars:
       description:
@@ -65,7 +145,7 @@ options:
       type: str
     wait:
       description:
-        - Wait for the workflow to complete.
+        - Wait for the bulk job to complete.
       default: True
       type: bool
     interval:
@@ -76,7 +156,7 @@ options:
       type: float
     timeout:
       description:
-        - If waiting for the workflow to complete this will abort after this
+        - If waiting for the bulk job to complete this will abort after this
           amount of seconds
       type: int
 extends_documentation_fragment: awx.awx.auth
@@ -95,6 +175,7 @@ EXAMPLES = '''
     name: My Bulk Job Launch
     jobs:
       - unified_job_template: 7
+        skip_tags: foo
       - unified_job_template: 10
         limit: foo
         extra_data:
@@ -171,14 +252,13 @@ def main():
     module.json_output['id'] = result['json']['id']
     module.json_output['status'] = result['json']['status']
     # This is for backwards compatability
-    module.json_output['job_info'] = {'id': result['json']['id']}
+    module.json_output['job_info'] = result['json']
 
     if not wait:
         module.exit_json(**module.json_output)
 
     # Invoke wait function
-    module.wait_on_url(url=result['json']['url'], object_name=name, object_type='Bulk Job Launch', timeout=timeout,
-                       interval=interval)
+    module.wait_on_url(url=result['json']['url'], object_name=name, object_type='Bulk Job Launch', timeout=timeout, interval=interval)
 
     module.exit_json(**module.json_output)
 

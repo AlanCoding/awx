@@ -23,9 +23,31 @@ options:
         - List of hosts to add to inventory.
       required: True
       type: list
+      elements: dict
+      suboptions:
+        name:
+          description:
+            - The name to use for the host.
+          type: str
+          require: True
+        description:
+          - The description to use for the host.
+        type: str
+        enabled:
+          description:
+            - If the host should be enabled.
+          type: bool
+        variables:
+          description:
+            - Variables to use for the host.
+          type: dict
+        instance_id:
+          description:
+            - instance_id to use for the host.
+          type: str
     inventory:
       description:
-        - Inventory the hosts should be made a member of.
+        - Inventory ID the hosts should be made a member of.
       required: True
       type: int
 extends_documentation_fragment: awx.awx.auth
@@ -58,6 +80,9 @@ def main():
     inventory = module.params.get('inventory')
     hosts = module.params.get('hosts')
 
+    for h in hosts:
+      if 'variables' in h:
+        h['variables'] = json.dumps(h['variables'])
     # Launch the jobs
     result = module.post_endpoint("bulk/host_create", data={"inventory": inventory, "hosts": hosts})
 
