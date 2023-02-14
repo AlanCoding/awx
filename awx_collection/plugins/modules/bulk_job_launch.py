@@ -116,6 +116,10 @@ options:
         - The name of the bulk job that is created
       required: False
       type: str
+    description:
+      description:
+        - Optional description of this bulk job.
+      type: str
     organization:
       description:
         - If not provided, will use the organization the user is in.
@@ -159,11 +163,6 @@ options:
       required: False
       default: 2
       type: float
-    timeout:
-      description:
-        - If waiting for the bulk job to complete this will abort after this
-          amount of seconds
-      type: int
 extends_documentation_fragment: awx.awx.auth
 '''
 
