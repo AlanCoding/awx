@@ -200,7 +200,6 @@ EXAMPLES = '''
 '''
 
 from ..module_utils.controller_api import ControllerAPIModule
-import json
 
 
 def main():
