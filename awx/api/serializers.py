@@ -4571,12 +4571,10 @@ class BulkJobNodeSerializer(serializers.Serializer):
     scm_branch = serializers.CharField(required=False, write_only=True, allow_blank=False)
     verbosity = serializers.IntegerField(required=False, min_value=1)
     forks = serializers.IntegerField(required=False, min_value=1)
-    char_prompts = serializers.CharField(required=False, write_only=True, allow_blank=False)
     diff_mode = serializers.CharField(required=False, write_only=True, allow_blank=False)
     job_tags = serializers.CharField(required=False, write_only=True, allow_blank=False)
     job_type = serializers.CharField(required=False, write_only=True, allow_blank=False)
     skip_tags = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    survey_passwords = serializers.CharField(required=False, write_only=True, allow_blank=False)
     job_slice_count = serializers.IntegerField(required=False, min_value=1)
     timeout = serializers.IntegerField(required=False, min_value=1)
     extra_data = serializers.JSONField(write_only=True, required=False)
@@ -4594,17 +4592,13 @@ class BulkJobNodeSerializer(serializers.Serializer):
             'scm_branch',
             'verbosity',
             'forks',
-            'char_prompts',
             'diff_mode',
             'extra_data',
             'job_slice_count',
             'job_tags',
             'job_type',
             'skip_tags',
-            'survey_passwords',
             'timeout',
-            # these are related objects and we need to add extra validation for them in the parent BulkJobLaunchSerializer
-            #
         )
 
 
@@ -4646,8 +4640,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
             else:
                 node['identifier'] = str(uuid4())
 
-        # Build sets of all the requested resources
-        # TODO: As we add other related items, we need to add them here
         requested_ujts = {j['unified_job_template'] for j in attrs['jobs']}
         requested_use_inventories = {job['inventory'] for job in attrs['jobs'] if 'inventory' in job}
         requested_use_execution_environments = {job['execution_environment'] for job in attrs['jobs'] if 'execution_environment' in job}
@@ -4726,12 +4718,10 @@ class BulkJobLaunchSerializer(BaseSerializer):
             'scm_branch',
             'verbosity',
             'forks',
-            'char_prompts',
             'diff_mode',
             'job_tags',
             'job_type',
             'skip_tags',
-            'survey_passwords',
             'job_slice_count',
             'timeout',
         )
