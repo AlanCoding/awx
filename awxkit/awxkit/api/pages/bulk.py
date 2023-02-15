@@ -19,12 +19,3 @@ class BulkJobLaunch(base.Base):
 
 
 page.register_page(resources.bulk_job_launch, BulkJobLaunch)
-
-
-class BulkHostCreate(base.Base):
-    def post(self, payload={}):
-        result = self.connection.post(self.endpoint, payload)
-        return result.json()
-
-
-page.register_page(resources.bulk_host_create, BulkHostCreate)

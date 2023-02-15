@@ -32,11 +32,6 @@ options:
             - Job template ID to use when launching.
           type: int
           required: True
-        extra_data:
-          description:
-            - Extra variables to apply at launch time, if job template prompts for extra variables
-          type: dict
-          default: {}
         inventory:
           description:
             - Inventory ID applied as a prompt, if job template prompts for inventory
@@ -52,13 +47,19 @@ options:
           elements: int
         credentials:
           description:
-            - Credential ID applied as a prompt, if job template prompts for credentials
-          type: int
-        labels:
-          description:
-            - Label IDs to use for the job,  if job template prompts for labels
+            - Credential IDs applied as a prompt, if job template prompts for credentials
           type: list
           elements: int
+        labels:
+          description:
+            - Label IDs to use for the job, if job template prompts for labels
+          type: list
+          elements: int
+        extra_data:
+          description:
+            - Extra variables to apply at launch time, if job template prompts for extra variables
+          type: dict
+          default: {}
         diff_mode:
           description:
             - Show the changes made by Ansible tasks where supported
@@ -102,6 +103,10 @@ options:
             - Will cause the Job Template to launch a workflow if value is greater than 1.
           type: int
           default: '1'
+        identifier:
+          description:
+            - Identifier for the resulting workflow node that represents this job
+          type: str
         timeout:
           description:
             - Maximum time in seconds to wait for a job to finish (server-side), if job template prompts for timeout.
@@ -110,6 +115,10 @@ options:
       description:
         - The name of the bulk job that is created
       required: False
+      type: str
+    description:
+      description:
+        - Optional description of this bulk job.
       type: str
     organization:
       description:
@@ -121,10 +130,6 @@ options:
       description:
         - Inventory ID to use for the jobs ran within the bulk job, only used if prompt for inventory is set.
       type: int
-    limit:
-      description:
-        - Limit to use for the bulk job.
-      type: str
     scm_branch:
       description:
         - A specific branch of the SCM project to run the template on.
@@ -135,6 +140,10 @@ options:
         - Any extra vars required to launch the job.
         - Extends the extra_data field at the individual job level.
       type: dict
+    limit:
+      description:
+        - Limit to use for the bulk job.
+      type: str
     job_tags:
       description:
         - A comma-separated list of playbook tags to specify what parts of the playbooks should be executed.
@@ -154,11 +163,6 @@ options:
       required: False
       default: 2
       type: float
-    timeout:
-      description:
-        - If waiting for the bulk job to complete this will abort after this
-          amount of seconds
-      type: int
 extends_documentation_fragment: awx.awx.auth
 '''
 
