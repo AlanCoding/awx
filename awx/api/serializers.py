@@ -4566,7 +4566,6 @@ class BulkJobNodeSerializer(serializers.Serializer):
     labels = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     instance_groups = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     execution_environment = serializers.IntegerField(required=False, min_value=1)
-    #
     limit = serializers.CharField(required=False, write_only=True, allow_blank=False)
     scm_branch = serializers.CharField(required=False, write_only=True, allow_blank=False)
     verbosity = serializers.IntegerField(required=False, min_value=1)
