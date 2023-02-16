@@ -4580,7 +4580,6 @@ class BulkJobNodeSerializer(serializers.Serializer):
     extra_data = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
-        model = Work
         fields = (
             'unified_job_template',
             'identifier',
