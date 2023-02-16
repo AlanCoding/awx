@@ -1991,6 +1991,7 @@ class BulkHostCreateSerializer(serializers.Serializer):
     )
 
     class Meta:
+        model = Inventory
         fields = ('inventory', 'hosts')
         read_only_fields = ()
 
@@ -4579,6 +4580,7 @@ class BulkJobNodeSerializer(serializers.Serializer):
     extra_data = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
+        model = WorkflowJobNode
         fields = (
             'unified_job_template',
             'identifier',
