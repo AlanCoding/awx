@@ -2035,14 +2035,11 @@ class BulkHostCreateSerializer(serializers.Serializer):
         inv = attrs['inventory']
         if request and not request.user.is_superuser:
             if inv.organization:
-                #org_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'admin_role')}
-                #inv_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'inventory_admin_role')}
                 is_org_admin = request.user in inv.organization.admin_role
                 is_org_inv_admin = request.user in inv.organization.inventory_admin_role
             else:
                 is_org_admin = False
                 is_org_inv_admin = False
-            # This may not work, need to figure out what the role is called
             is_inventory_admin = request.user in inv.admin_role
             if not any([is_inventory_admin, is_org_admin, is_org_inv_admin]):
                 raise serializers.ValidationError(_(f'Inventory with id {inv.id} not found or lack permissions to add hosts.'))
