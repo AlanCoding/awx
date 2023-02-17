@@ -1972,6 +1972,7 @@ class BulkHostSerializer(HostSerializer):
     variables = serializers.CharField(write_only=True, required=False)
 
     class Meta:
+        model = Host
         fields = (
             'name',
             'enabled',
@@ -2003,7 +2004,7 @@ class BulkHostCreateSerializer(serializers.Serializer):
         if org:
             org_active_count = Host.objects.org_active_count(org.id)
             new_hosts = [h['name'] for h in attrs['hosts']]
-            org_net_new_host_count = Host.objects.filter(inventory__organization=org.id).exclude(name__in=new_hosts).count()
+            org_net_new_host_count = len(new_hosts) - Host.objects.filter(inventory__organization=1, name__in=new_hosts).values('name').distinct().count()
             if org.max_hosts > 0 and org_active_count + org_net_new_host_count > org.max_hosts:
                 raise PermissionDenied(
                     _(
@@ -2083,7 +2084,8 @@ class BulkHostCreateSerializer(serializers.Serializer):
         # This actually updates the cached "total_hosts" field on the inventory
         update_inventory_computed_fields.delay(validated_data['inventory'].id)
         return_keys = [k for k in BulkHostSerializer().fields.keys()] + ['id']
-        return_data = []
+        return_data = {}
+        host_data = []
         for r in result:
             item = {k: getattr(r, k) for k in return_keys}
             if not settings.IS_TESTING_MODE:
@@ -2091,7 +2093,9 @@ class BulkHostCreateSerializer(serializers.Serializer):
                 # to get it, you have to do an additional query, which is not useful for our tests
                 item['url'] = reverse('api:host_detail', kwargs={'pk': r.id})
             item['inventory'] = reverse('api:inventory_detail', kwargs={'pk': validated_data['inventory'].id})
-            return_data.append(item)
+            host_data.append(item)
+        return_data['url'] = reverse('api:inventory_hosts_list', kwargs={'pk': validated_data['inventory'].id})
+        return_data['hosts'] = host_data
         return return_data
 
 
@@ -4556,12 +4560,8 @@ class WorkflowJobLaunchSerializer(BaseSerializer):
 
 
 class BulkJobNodeSerializer(serializers.Serializer):
-    # if we can find out the user, we can filter down the UnifiedJobTemplate objects
-    unified_job_template = serializers.IntegerField(
-        required=True,
-        min_value=1,
-    )
-    inventory = serializers.IntegerField(required=False, min_value=1)
+    unified_job_template = serializers.PrimaryKeyRelatedField(queryset=UnifiedJobTemplate.objects.all(), required=True)
+    inventory = serializers.PrimaryKeyRelatedField(queryset=Inventory.objects.all(), required=False, write_only=True)
     credentials = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     identifier = serializers.CharField(required=False, write_only=True, allow_blank=False)
     labels = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
@@ -4619,9 +4619,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
     inventory = serializers.PrimaryKeyRelatedField(queryset=Inventory.objects.all(), required=False, write_only=True)
     limit = serializers.CharField(write_only=True, required=False, allow_blank=False)
     scm_branch = serializers.CharField(write_only=True, required=False, allow_blank=False)
-    # not implemented yet
-    # webhook_service: null,  # Here we can use PrimaryKeyRelatedField so it will automagically do rbac/turn into object, I think, I'm actually not sure how to use this
-    # webhook_credential: null,  # Here we can use PrimaryKeyRelatedField so it will automagically do rbac/turn into object  I think, I'm actually not sure how to use this
     skip_tags = serializers.CharField(write_only=True, required=False, allow_blank=False)
     job_tags = serializers.CharField(write_only=True, required=False, allow_blank=False)
 
@@ -4656,15 +4653,11 @@ class BulkJobLaunchSerializer(BaseSerializer):
                 [requested_use_instance_groups.add(instance_group) for instance_group in job['instance_groups']]
 
         # If we are not a superuser, check we have permissions
-        # TODO: As we add other related items, we need to add them here
         if request and not request.user.is_superuser:
             self.check_organization_permission(attrs, request)
             self.check_unified_job_permission(request, requested_ujts)
-            if requested_use_inventories:
-                self.check_inventory_permission(request, requested_use_inventories)
-
-            if requested_use_credentials:
-                self.check_credential_permission(request, requested_use_credentials)
+            if requested_use_inventories or 'inventory' in attrs:
+                self.check_inventory_permission(attrs, request, requested_use_inventories)
 
             if requested_use_labels:
                 self.check_label_permission(requested_use_labels)
@@ -4678,8 +4671,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
         # all of the unified job templates and related items have now been checked, we can now grab the objects from the DB
         jobs_object = self.get_objectified_jobs(
             attrs,
-            requested_ujts,
-            requested_use_inventories,
             requested_use_credentials,
             requested_use_labels,
             requested_use_instance_groups,
@@ -4695,9 +4686,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
 
     def create(self, validated_data):
         job_node_data = validated_data.pop('jobs')
-        # FIXME: Need to set organization on the WorkflowJob in order for users to be able to see it --
-        # normally their permission is sourced from the underlying WorkflowJobTemplate
-        # maybe we need to add Organization to WorkflowJob
         wfj_deferred_attr_names = ('skip_tags', 'limit', 'job_tags')
         wfj_deferred_vals = {}
         for item in wfj_deferred_attr_names:
@@ -4804,15 +4792,20 @@ class BulkJobLaunchSerializer(BaseSerializer):
         accessible_inventories_qs = Inventory.accessible_pk_qs(request.user, 'update_role')
         [allowed_ujts.add(tup[0]) for tup in InventorySource.objects.filter(inventory__in=accessible_inventories_qs).values_list('id')]
 
-        if requested_ujts - allowed_ujts:
-            not_allowed = requested_ujts - allowed_ujts
-            raise serializers.ValidationError(_(f"Unified Job Templates {not_allowed} not found."))
+        for ujts in requested_ujts:
+            if ujts.id not in allowed_ujts:
+                raise serializers.ValidationError(_(f"Unified Job Templates {ujts.id} not found or you don't have access to it."))
 
-    def check_inventory_permission(self, request, requested_use_inventories):
+    def check_inventory_permission(self, attrs, request, requested_use_inventories):
         accessible_use_inventories = {tup[0] for tup in Inventory.accessible_pk_qs(request.user, 'use_role')}
-        if requested_use_inventories - accessible_use_inventories:
-            not_allowed = requested_use_inventories - accessible_use_inventories
-            raise serializers.ValidationError(_(f"Inventories {not_allowed} not found."))
+        if requested_use_inventories:
+            for inv in requested_use_inventories:
+                if inv.id not in accessible_use_inventories:
+                    raise serializers.ValidationError(_(f"Inventories {inv.id} not found or you don't have access to it."))
+        if 'inventory' in attrs:
+            requested_workflow_inventory = attrs['inventory']
+            if requested_workflow_inventory.id not in accessible_use_inventories:
+                raise serializers.ValidationError(_(f"Inventories {requested_workflow_inventory.id} not found or you don't have access to it."))
 
     def check_credential_permission(self, request, requested_use_credentials):
         accessible_use_credentials = {tup[0] for tup in Credential.accessible_pk_qs(request.user, 'use_role').all()}
@@ -4849,8 +4842,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
     def get_objectified_jobs(
         self,
         attrs,
-        requested_ujts,
-        requested_use_inventories,
         requested_use_credentials,
         requested_use_labels,
         requested_use_instance_groups,
@@ -4858,8 +4849,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
     ):
         objectified_jobs = []
         key_to_obj_map = {
-            "unified_job_template": {obj.id: obj for obj in UnifiedJobTemplate.objects.filter(id__in=requested_ujts)},
-            "inventory": {obj.id: obj for obj in Inventory.objects.filter(id__in=requested_use_inventories)},
             "credentials": {obj.id: obj for obj in Credential.objects.filter(id__in=requested_use_credentials)},
             "labels": {obj.id: obj for obj in Label.objects.filter(id__in=requested_use_labels)},
             "instance_groups": {obj.id: obj for obj in InstanceGroup.objects.filter(id__in=requested_use_instance_groups)},

@@ -47,7 +47,7 @@ def test_bulk_host_create_num_queries(organization, inventory, post, get, user, 
         hosts = [{'name': uuid4()} for i in range(num_hosts)]
         with withAssertNumQueriesLessThan(num_queries):
             bulk_host_create_response = post(reverse('api:bulk_host_create'), {'inventory': inventory.id, 'hosts': hosts}, u, expect=201).data
-            assert len(bulk_host_create_response) == len(hosts), f"unexpected number of hosts created for user {u}"
+            assert len(bulk_host_create_response['hosts']) == len(hosts), f"unexpected number of hosts created for user {u}"
 
 
 @pytest.mark.django_db
@@ -80,7 +80,7 @@ def test_bulk_host_create_rbac(organization, inventory, post, get, user):
         bulk_host_create_response = post(
             reverse('api:bulk_host_create'), {'inventory': inventory.id, 'hosts': [{'name': f'foobar-{indx}'}]}, u, expect=201
         ).data
-        assert len(bulk_host_create_response) == 1, f"unexpected number of hosts created for user {u}"
+        assert len(bulk_host_create_response['hosts']) == 1, f"unexpected number of hosts created for user {u}"
 
     for indx, u in enumerate([member, auditor, use_inv_member]):
         bulk_host_create_response = post(
