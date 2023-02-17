@@ -6,6 +6,7 @@ from rest_framework.reverse import reverse
 from rest_framework import status
 from rest_framework.response import Response
 
+from awx.main.models import UnifiedJob, Host
 from awx.api.generics import (
     GenericAPIView,
     APIView,
@@ -17,7 +18,6 @@ from awx.api import (
 
 
 class BulkView(APIView):
-    _ignore_model_permissions = True
     permission_classes = [IsAuthenticated]
     renderer_classes = [
         renderers.BrowsableAPIRenderer,
@@ -34,8 +34,8 @@ class BulkView(APIView):
 
 
 class BulkJobLaunchView(GenericAPIView):
-    _ignore_model_permissions = True
     permission_classes = [IsAuthenticated]
+    model = UnifiedJob
     serializer_class = serializers.BulkJobLaunchSerializer
     allowed_methods = ['GET', 'POST', 'OPTIONS']
 
@@ -53,8 +53,8 @@ class BulkJobLaunchView(GenericAPIView):
 
 
 class BulkHostCreateView(GenericAPIView):
-    _ignore_model_permissions = True
     permission_classes = [IsAuthenticated]
+    model = Host
     serializer_class = serializers.BulkHostCreateSerializer
     allowed_methods = ['GET', 'POST', 'OPTIONS']
 
