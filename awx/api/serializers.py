@@ -4779,7 +4779,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             if request and not request.user.is_superuser:
                 [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
                 if requested_org.id not in allowed_orgs:
-                    raise ValidationError(_(f"Organization {requested_org.id} not found"))
+                    raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
     def check_unified_job_permission(self, request, requested_ujts):
         allowed_ujts = set()
@@ -4791,30 +4791,30 @@ class BulkJobLaunchSerializer(BaseSerializer):
 
         for ujts in requested_ujts:
             if ujts.id not in allowed_ujts:
-                raise serializers.ValidationError(_(f"Unified Job Templates {ujts.id} not found or you don't have access to it."))
+                raise serializers.ValidationError(_(f"Unified Job Templates {ujts.id} not found or you don't have permission to access it"))
 
     def check_inventory_permission(self, attrs, request, requested_use_inventories):
         accessible_use_inventories = {tup[0] for tup in Inventory.accessible_pk_qs(request.user, 'use_role')}
         if requested_use_inventories:
             for inv in requested_use_inventories:
                 if inv.id not in accessible_use_inventories:
-                    raise serializers.ValidationError(_(f"Inventories {inv.id} not found or you don't have access to it."))
+                    raise serializers.ValidationError(_(f"Inventories {inv.id} not found or you don't have permissions to access it"))
         if 'inventory' in attrs:
             requested_workflow_inventory = attrs['inventory']
             if requested_workflow_inventory.id not in accessible_use_inventories:
-                raise serializers.ValidationError(_(f"Inventories {requested_workflow_inventory.id} not found or you don't have access to it."))
+                raise serializers.ValidationError(_(f"Inventories {requested_workflow_inventory.id} not found or you don't have permissions to access it"))
 
     def check_credential_permission(self, request, requested_use_credentials):
         accessible_use_credentials = {tup[0] for tup in Credential.accessible_pk_qs(request.user, 'use_role').all()}
         if requested_use_credentials - accessible_use_credentials:
             not_allowed = requested_use_credentials - accessible_use_credentials
-            raise serializers.ValidationError(_(f"Credentials {not_allowed} not found."))
+            raise serializers.ValidationError(_(f"Credentials {not_allowed} not found or you don't have permissions to access it"))
 
     def check_label_permission(self, requested_use_labels):
         accessible_use_labels = {tup.id for tup in Label.objects.all()}
         if requested_use_labels - accessible_use_labels:
             not_allowed = requested_use_labels - accessible_use_labels
-            raise serializers.ValidationError(_(f"Labels {not_allowed} not found"))
+            raise serializers.ValidationError(_(f"Labels {not_allowed} not found or you don't have permissions to access it"))
 
     def check_instance_group_permission(self, request, requested_use_instance_groups):
         # only org admins are allowed to see instance groups
@@ -4823,7 +4823,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             accessible_use_instance_groups = {tup.id for tup in InstanceGroup.objects.all()}
             if requested_use_instance_groups - accessible_use_instance_groups:
                 not_allowed = requested_use_instance_groups - accessible_use_instance_groups
-                raise serializers.ValidationError(_(f"Instance Groups {not_allowed} not found"))
+                raise serializers.ValidationError(_(f"Instance Groups {not_allowed} not found or you don't have permissions to access it"))
 
     def check_execution_environment_permission(self, request, requested_use_execution_environments):
         accessible_execution_env = {
@@ -4834,7 +4834,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
         }
         if requested_use_execution_environments - accessible_execution_env:
             not_allowed = requested_use_execution_environments - accessible_execution_env
-            raise serializers.ValidationError(_(f"Execution Environments {not_allowed} not found"))
+            raise serializers.ValidationError(_(f"Execution Environments {not_allowed} not found or you don't have permissions to access it"))
 
     def get_objectified_jobs(
         self,
