@@ -1996,7 +1996,7 @@ class BulkHostCreateSerializer(serializers.Serializer):
         fields = ('inventory', 'hosts')
         read_only_fields = ()
 
-    def raise_if_cannot_add_hosts(self, attrs):
+    def raise_if_host_counts_violated(self, attrs):
         validation_info = get_licenser().validate()
 
         org = attrs['inventory'].organization
@@ -2035,15 +2035,15 @@ class BulkHostCreateSerializer(serializers.Serializer):
         inv = attrs['inventory']
         if request and not request.user.is_superuser:
             if inv.organization:
-                org_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'admin_role')}
-                inv_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'inventory_admin_role')}
-                is_org_admin = inv.organization.id in org_admin_orgs
-                is_org_inv_admin = inv.organization.id in inv_admin_orgs
+                #org_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'admin_role')}
+                #inv_admin_orgs = {tup[0] for tup in Organization.accessible_pk_qs(request.user, 'inventory_admin_role')}
+                is_org_admin = request.user in inv.organization.admin_role
+                is_org_inv_admin = request.user in inv.organization.inventory_admin_role
             else:
                 is_org_admin = False
                 is_org_inv_admin = False
             # This may not work, need to figure out what the role is called
-            is_inventory_admin = inv.admin_role.members.filter(id=request.user.id).exists()
+            is_inventory_admin = request.user in inv.admin_role
             if not any([is_inventory_admin, is_org_admin, is_org_inv_admin]):
                 raise serializers.ValidationError(_(f'Inventory with id {inv.id} not found or lack permissions to add hosts.'))
         current_hostnames = {h[0] for h in Host.objects.filter(inventory=inv).values_list('name').all()}
@@ -2052,7 +2052,7 @@ class BulkHostCreateSerializer(serializers.Serializer):
         if duplicate_new_names:
             raise serializers.ValidationError(_(f'Hostnames must be unique in an inventory. Duplicates found: {duplicate_new_names}'))
 
-        self.raise_if_cannot_add_hosts(attrs)
+        self.raise_if_host_counts_violated(attrs)
 
         _now = now()
         for host in attrs['hosts']:
