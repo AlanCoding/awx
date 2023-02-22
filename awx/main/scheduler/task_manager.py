@@ -269,11 +269,13 @@ class WorkflowManager(TaskBase):
 class DependencyManager(TaskBase):
     def __init__(self):
         super().__init__(prefix="dependency_manager")
+        self.all_projects = {}
+        self.all_inventory_sources = {}
 
-    def cache_projects_and_sources(self):
+    def cache_projects_and_sources(self, task_list):
         project_ids = set()
         inventory_ids = set()
-        for task in self.all_tasks:
+        for task in task_list:
             if isinstance(task, Job):
                 if task.project_id:
                     project_ids.add(task.project_id)
@@ -283,11 +285,9 @@ class DependencyManager(TaskBase):
                 if task.inventory_source and task.inventory_source.source_project_id:
                     project_ids.add(task.inventory_source.source_project_id)
 
-        self.all_projects = {}
         for proj in Project.objects.filter(id__in=project_ids, scm_update_on_launch=True):
             self.all_projects[proj.id] = proj
 
-        self.all_inventory_sources = {}
         for invsrc in InventorySource.objects.filter(inventory_id__in=inventory_ids, update_on_launch=True):
             self.all_inventory_sources.setdefault(invsrc.inventory_id, [])
             self.all_inventory_sources[invsrc.inventory_id].append(invsrc)
@@ -350,11 +350,8 @@ class DependencyManager(TaskBase):
     @timeit
     def generate_dependencies(self, undeped_tasks):
         dependencies = []
-        processed_ids = []
+        self.cache_projects_and_sources(undeped_tasks)
         for task in undeped_tasks:
-            if task.dependencies_processed:
-                continue
-            processed_ids.append(task.id)
             task.log_lifecycle("acknowledged")
             if type(task) is Job:
                 job_deps = self.gen_dep_for_job(task)
@@ -366,23 +363,23 @@ class DependencyManager(TaskBase):
                 dependencies += job_deps
                 with disable_activity_stream():
                     task.dependent_jobs.add(*dependencies)
-                logger.debug(f'Spawned {[dep.log_format for dep in dependencies]} as dependencies of {task.log_format}')
+                logger.debug(f'Linked {[dep.log_format for dep in dependencies]} as dependencies of {task.log_format}')
 
-        UnifiedJob.objects.filter(pk__in=processed_ids).update(dependencies_processed=True)
+        UnifiedJob.objects.filter(pk__in=[task.pk for task in undeped_tasks]).update(dependencies_processed=True)
 
         return dependencies
 
     def process_tasks(self):
         deps = self.generate_dependencies(self.all_tasks)
-        self.generate_dependencies(deps)
-        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", len(self.all_tasks) + len(deps))
+        undeped_deps = [dep for dep in deps if dep.dependencies_processed is False]
+        self.generate_dependencies(undeped_deps)
+        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", len(self.all_tasks) + len(undeped_deps))
 
     @timeit
     def _schedule(self):
         self.get_tasks(dict(status__in=["pending"], dependencies_processed=False))
 
         if len(self.all_tasks) > 0:
-            self.cache_projects_and_sources()
             self.process_tasks()
             ScheduleTaskManager().schedule()
 
