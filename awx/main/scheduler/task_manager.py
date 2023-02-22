@@ -369,18 +369,15 @@ class DependencyManager(TaskBase):
 
         return dependencies
 
-    def process_tasks(self):
-        deps = self.generate_dependencies(self.all_tasks)
-        undeped_deps = [dep for dep in deps if dep.dependencies_processed is False]
-        self.generate_dependencies(undeped_deps)
-        self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", len(self.all_tasks) + len(undeped_deps))
-
     @timeit
     def _schedule(self):
         self.get_tasks(dict(status__in=["pending"], dependencies_processed=False))
 
         if len(self.all_tasks) > 0:
-            self.process_tasks()
+            deps = self.generate_dependencies(self.all_tasks)
+            undeped_deps = [dep for dep in deps if dep.dependencies_processed is False]
+            self.generate_dependencies(undeped_deps)
+            self.subsystem_metrics.inc(f"{self.prefix}_pending_processed", len(self.all_tasks) + len(undeped_deps))
             ScheduleTaskManager().schedule()
 
 
