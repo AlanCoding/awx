@@ -4733,7 +4733,7 @@ class BulkJobLaunchSerializer(serializers.Serializer):
             if org:
                 attrs['organization'] = org
             else:
-                raise serializers.ValidationError("User not part of any organization, please assign an organization to assign to the bulk job")
+                raise serializers.ValidationError(_("User not part of any organization, please assign an organization to assign to the bulk job"))
         else:
             allowed_orgs = set()
             requested_org = attrs['organization']
