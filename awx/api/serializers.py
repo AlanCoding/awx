@@ -31,7 +31,6 @@ from django.utils.encoding import force_str
 from django.utils.text import capfirst
 from django.utils.timezone import now
 from django.core.validators import RegexValidator, MaxLengthValidator
-from django.db.models import Q
 
 # Django REST Framework
 from rest_framework.exceptions import ValidationError, PermissionDenied
@@ -45,7 +44,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from polymorphic.models import PolymorphicModel
 
 # AWX
-from awx.main.access import get_user_capabilities
+from awx.main.access import get_user_capabilities, UnifiedJobTemplateAccess, LabelAccess, ExecutionEnvironmentAccess
 from awx.main.constants import ACTIVE_STATES, CENSOR_VALUE
 from awx.main.models import (
     ActivityStream,
@@ -4534,55 +4533,24 @@ class WorkflowJobLaunchSerializer(BaseSerializer):
         return accepted
 
 
-class BulkJobNodeSerializer(serializers.Serializer):
-    # We don't do a PrimaryKeyRelatedField for unified_job_template and inventory, because that increases the number
+class BulkJobNodeSerializer(WorkflowJobNodeSerializer):
+    # We don't do a PrimaryKeyRelatedField for unified_job_template and others, because that increases the number
     # of database queries, rather we take them as integer and later convert them to objects in get_objectified_jobs
     unified_job_template = serializers.IntegerField(
         required=True, min_value=1, help_text=_('Primary key of the template for this job, can be a job template or inventory source.')
     )
     inventory = serializers.IntegerField(required=False, min_value=1)
     credentials = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
-    identifier = serializers.CharField(required=False, write_only=True, allow_blank=False)
     labels = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     instance_groups = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     execution_environment = serializers.IntegerField(required=False, min_value=1)
-    limit = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    scm_branch = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    verbosity = serializers.IntegerField(required=False, min_value=1)
-    forks = serializers.IntegerField(required=False, min_value=1)
-    diff_mode = serializers.BooleanField(required=False, allow_null=True, default=None)
-    job_tags = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    job_type = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    skip_tags = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    job_slice_count = serializers.IntegerField(required=False, min_value=1)
-    timeout = serializers.IntegerField(required=False, min_value=1)
-    extra_data = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
         model = WorkflowJobNode
-        fields = (
-            'unified_job_template',
-            'identifier',
-            'inventory',
-            'credentials',
-            'limit',
-            'labels',
-            'instance_groups',
-            'execution_environment',
-            'scm_branch',
-            'verbosity',
-            'forks',
-            'diff_mode',
-            'extra_data',
-            'job_slice_count',
-            'job_tags',
-            'job_type',
-            'skip_tags',
-            'timeout',
-        )
+        fields = ('*', 'credentials', 'labels', 'instance_groups')  # m2m fields are not canonical for WJ nodes
 
 
-class BulkJobLaunchSerializer(BaseSerializer):
+class BulkJobLaunchSerializer(serializers.Serializer):
     name = serializers.CharField(default='Bulk Job Launch', max_length=512, write_only=True, required=False, allow_blank=True)  # limited by max name of jobs
     jobs = BulkJobNodeSerializer(
         many=True,
@@ -4598,7 +4566,8 @@ class BulkJobLaunchSerializer(BaseSerializer):
         required=False,
         default=None,
         allow_null=True,
-        help_text=_('Inherit permissions from organization roles.'),
+        write_only=True,
+        help_text=_('Inherit permissions from this organization. If not provided, a organization the user is a member of will be selected automatically.'),
     )
     inventory = serializers.PrimaryKeyRelatedField(queryset=Inventory.objects.all(), required=False, write_only=True)
     limit = serializers.CharField(write_only=True, required=False, allow_blank=False)
@@ -4751,8 +4720,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             if through_models:
                 obj_through_model.objects.bulk_create(through_models)
 
-        wfj.status = 'pending'
-        wfj.save()
+        wfj.signal_start()
 
         return WorkflowJobSerializer().to_representation(wfj)
 
@@ -4760,27 +4728,22 @@ class BulkJobLaunchSerializer(BaseSerializer):
         # validate Organization
         # - If the orgs is not set, set it to the org of the launching user
         # - If the user is part of multiple orgs, throw a validation error saying user is part of multiple orgs, please provide one
-        if not request.user.is_superuser:
-            if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
-                if Organization.accessible_pk_qs(request.user, 'read_role').count() == 1:
-                    for tup in Organization.accessible_pk_qs(request.user, 'read_role').all():
-                        attrs['organization'] = Organization.objects.filter(id__in=str(tup[0])).first()
-                elif Organization.accessible_pk_qs(request.user, 'read_role').count() > 1:
-                    raise serializers.ValidationError("User has permission to multiple Organizations, please set one of them in the request")
-                else:
-                    raise serializers.ValidationError("User not part of any organization, please assign an organization to assign to the bulk job")
+        if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
+            org = Organization.accessible_objects(request.user, 'member_role').first()
+            if org:
+                attrs['organization'] = org
             else:
-                allowed_orgs = set()
-                requested_org = attrs['organization']
-                if request and not request.user.is_superuser:
-                    [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
-                    if requested_org.id not in allowed_orgs:
-                        raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
+                raise serializers.ValidationError("User not part of any organization, please assign an organization to assign to the bulk job")
+        else:
+            allowed_orgs = set()
+            requested_org = attrs['organization']
+            if request and not request.user.is_superuser:
+                [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
+                if requested_org.id not in allowed_orgs:
+                    raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
     def check_unified_job_permission(self, request, requested_ujts):
-        allowed_jts = set(JobTemplate.accessible_pk_qs(request.user, 'execute_role').values_list('id', flat=True))
-        allowed_inv_sources = set(InventorySource.objects.filter(inventory__in=Inventory.accessible_pk_qs(request.user, 'update_role')).values_list('id'))
-        allowed_ujts = allowed_jts | allowed_inv_sources
+        allowed_ujts = set(UnifiedJobTemplateAccess(request.user).filtered_use_queryset().filter(id__in=requested_ujts).values_list('id', flat=True))
 
         if requested_ujts - allowed_ujts:
             not_allowed = requested_ujts - allowed_ujts
@@ -4803,7 +4766,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             raise serializers.ValidationError(_(f"Credentials {not_allowed} not found or you don't have permissions to access it"))
 
     def check_label_permission(self, request, requested_use_labels):
-        accessible_use_labels = {tup.id for tup in Label.objects.filter(organization__in=Organization.accessible_pk_qs(request.user, 'read_role'))}
+        accessible_use_labels = set(LabelAccess(request.user).filtered_queryset().values_list('id', flat=True))
         if requested_use_labels - accessible_use_labels:
             not_allowed = requested_use_labels - accessible_use_labels
             raise serializers.ValidationError(_(f"Labels {not_allowed} not found or you don't have permissions to access it"))
@@ -4820,12 +4783,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             raise serializers.ValidationError(_(f"Instance Groups {requested_use_instance_groups} not found or you don't have permissions to access it"))
 
     def check_execution_environment_permission(self, request, requested_use_execution_environments):
-        accessible_execution_env = {
-            tup.id
-            for tup in ExecutionEnvironment.objects.filter(
-                Q(organization__in=Organization.accessible_pk_qs(request.user, 'read_role')) | Q(organization__isnull=True)
-            ).distinct()
-        }
+        accessible_execution_env = set(ExecutionEnvironmentAccess(request.user).filtered_queryset().values_list('id', flat=True))
         if requested_use_execution_environments - accessible_execution_env:
             not_allowed = requested_use_execution_environments - accessible_execution_env
             raise serializers.ValidationError(_(f"Execution Environments {not_allowed} not found or you don't have permissions to access it"))

@@ -1999,7 +1999,7 @@ class WorkflowJobNodeAccess(BaseAccess):
     def filtered_queryset(self):
         return self.model.objects.filter(
             Q(workflow_job__unified_job_template__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
-            | Q(workflow_job__organization__in=Organization.objects.filter(Q(admin_role__members=self.user)), workflow_job__is_bulk_job=True)
+            | Q(workflow_job__organization__in=Organization.objects.filter(Q(admin_role__members=self.user)))
         )
 
     def can_read(self, obj):
@@ -2461,6 +2461,14 @@ class UnifiedJobTemplateAccess(BaseAccess):
         return self.model.objects.filter(
             Q(pk__in=self.model.accessible_pk_qs(self.user, 'read_role'))
             | Q(inventorysource__inventory__id__in=Inventory._accessible_pk_qs(Inventory, self.user, 'read_role'))
+        )
+
+    def filtered_use_queryset(self):
+        return self.model.objects.filter(
+            Q(jobtemplate__in=JobTemplate.accessible_pk_qs(self.user, 'execute_role'))
+            | Q(workflowjobtemplate__in=WorkflowJobTemplate.accessible_pk_qs(self.user, 'execute_role'))
+            | Q(project__in=Project.accessible_pk_qs(self.user, 'update_role'))
+            | Q(inventorysource__inventory__in=Inventory._accessible_pk_qs(Inventory, self.user, 'update_role'))
         )
 
     def can_start(self, obj, validate_license=True):

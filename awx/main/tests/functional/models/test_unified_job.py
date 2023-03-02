@@ -11,10 +11,11 @@ from django.contrib.contenttypes.models import ContentType
 from awx.main.models import UnifiedJobTemplate, Job, JobTemplate, WorkflowJobTemplate, WorkflowApprovalTemplate, Project, WorkflowJob, Schedule, Credential
 from awx.api.versioning import reverse
 from awx.main.constants import JOB_VARIABLE_PREFIXES
+from awx.main.access import UnifiedJobTemplateAccess
 
 
 @pytest.mark.django_db
-def test_subclass_types(rando):
+def test_subclass_types():
     assert set(UnifiedJobTemplate._submodels_with_roles()) == set(
         [
             ContentType.objects.get_for_model(JobTemplate).id,
@@ -22,6 +23,35 @@ def test_subclass_types(rando):
             ContentType.objects.get_for_model(WorkflowJobTemplate).id,
             ContentType.objects.get_for_model(WorkflowApprovalTemplate).id,
         ]
+    )
+
+
+@pytest.mark.django_db
+def test_accessible_pk_qs(rando):
+    """
+    Clarify expected behavior for UnifiedJobTemplate.accessible_pk_qs.
+    Can only filter on one role at a time due to technical reasons.
+    So we can get the templates we have update_role for, or
+    the templates we have execute_role for, but only one role type at a time
+    """
+    projects = [Project.objects.create(name=f'proj-{i}') for i in range(3)]
+    projects[0].update_role.members.add(rando)
+    projects[1].admin_role.members.add(rando)
+    proj_ids = [p.id for p in projects]
+    jts = [JobTemplate.objects.create(name=f'jt-{i}') for i in range(3)]
+    jts[0].execute_role.members.add(rando)
+    jts[1].execute_role.members.add(rando)
+    jt_ids = [jt.id for jt in jts]
+    wfjts = [WorkflowJobTemplate.objects.create(name=f'wfjt-{i}') for i in range(3)]
+    wfjts[0].execute_role.members.add(rando)
+    wfjts[1].admin_role.members.add(rando)
+    wfjt_ids = [wfjt.id for wfjt in wfjts]
+
+    assert set(tpl[0] for tpl in UnifiedJobTemplate.accessible_pk_qs(rando, 'update_role')) == set(proj_ids[:2])
+    assert set(tpl[0] for tpl in UnifiedJobTemplate.accessible_pk_qs(rando, 'execute_role')) == set(jt_ids[:2]) | set(wfjt_ids[:2])
+
+    assert set(UnifiedJobTemplateAccess(rando).filtered_use_queryset().values_list('id', flat=True)) == (
+        set(proj_ids[:2]) | set(jt_ids[:2]) | set(wfjt_ids[:2])
     )
 
 
