@@ -4642,6 +4642,9 @@ class BulkJobLaunchSerializer(BaseSerializer):
         if requested_use_inventories or 'inventory' in attrs:
             self.check_inventory_permission(attrs, request, requested_use_inventories)
 
+        if requested_use_credentials:
+            self.check_credential_permission(request, requested_use_credentials)
+
         if requested_use_labels:
             self.check_label_permission(request, requested_use_labels)
 
@@ -4650,6 +4653,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
 
         if requested_use_execution_environments:
             self.check_instance_group_permission(request, requested_use_instance_groups)
+
 
         # all of the unified job templates and related items have now been checked, we can now grab the objects from the DB
         jobs_object = self.get_objectified_jobs(
