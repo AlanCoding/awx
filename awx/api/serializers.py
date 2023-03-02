@@ -1966,8 +1966,13 @@ class BulkHostCreateSerializer(serializers.Serializer):
     inventory = serializers.PrimaryKeyRelatedField(
         queryset=Inventory.objects.all(), required=True, write_only=True, help_text=_('Primary Key ID of inventory to add hosts to.')
     )
-    hosts_help_text = _('List of hosts to be created, JSON. e.g. [{"name": "example.com"}, {"name": "127.0.0.1"}]')
-    hosts = serializers.ListField(child=BulkHostSerializer(), allow_empty=False, max_length=100000, write_only=True, help_text=hosts_help_text)
+    hosts = serializers.ListField(
+        child=BulkHostSerializer(),
+        allow_empty=False,
+        max_length=100000,
+        write_only=True,
+        help_text=_('List of hosts to be created, JSON. e.g. [{"name": "example.com"}, {"name": "127.0.0.1"}]'),
+    )
 
     class Meta:
         model = Inventory
@@ -1994,7 +1999,7 @@ class BulkHostCreateSerializer(serializers.Serializer):
 
             # Don't check license if it is open license
         if validation_info.get('license_type', 'UNLICENSED') == 'open':
-            return True
+            return
 
         sys_free_instances = validation_info.get('free_instances', 0)
         system_net_new_host_count = Host.objects.exclude(name__in=new_hosts).count()
@@ -2006,24 +2011,17 @@ class BulkHostCreateSerializer(serializers.Serializer):
                 raise PermissionDenied(_("Host count exceeds available instances."))
             logger.warning(_("Number of hosts allowed by license has been exceeded."))
 
-        return True
-
     def validate(self, attrs):
         request = self.context.get('request', None)
         inv = attrs['inventory']
+        if inv.kind != '':
+            raise serializers.ValidationError(_('Hosts can only be created in manual inventories (not smart or constructed types).'))
         if len(attrs['hosts']) > settings.BULK_HOST_MAX_CREATE:
             raise serializers.ValidationError(_('Number of hosts exceeds system setting BULK_HOST_MAX_CREATE'))
         if request and not request.user.is_superuser:
-            if inv.organization:
-                is_org_admin = request.user in inv.organization.admin_role
-                is_org_inv_admin = request.user in inv.organization.inventory_admin_role
-            else:
-                is_org_admin = False
-                is_org_inv_admin = False
-            is_inventory_admin = request.user in inv.admin_role
-            if not any([is_inventory_admin, is_org_admin, is_org_inv_admin]):
+            if request.user not in inv.admin_role:
                 raise serializers.ValidationError(_(f'Inventory with id {inv.id} not found or lack permissions to add hosts.'))
-        current_hostnames = {h[0] for h in Host.objects.filter(inventory=inv).values_list('name').all()}
+        current_hostnames = set(inv.hosts.values_list('name', flat=True))
         new_names = [host['name'] for host in attrs['hosts']]
         duplicate_new_names = [n for n in new_names if n in current_hostnames or new_names.count(n) > 1]
         if duplicate_new_names:
@@ -4540,8 +4538,7 @@ class BulkJobNodeSerializer(serializers.Serializer):
     # We don't do a PrimaryKeyRelatedField for unified_job_template and inventory, because that increases the number
     # of database queries, rather we take them as integer and later convert them to objects in get_objectified_jobs
     unified_job_template = serializers.IntegerField(
-        required=True,
-        min_value=1,
+        required=True, min_value=1, help_text=_('Primary key of the template for this job, can be a job template or inventory source.')
     )
     inventory = serializers.IntegerField(required=False, min_value=1)
     credentials = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
@@ -4587,8 +4584,13 @@ class BulkJobNodeSerializer(serializers.Serializer):
 
 class BulkJobLaunchSerializer(BaseSerializer):
     name = serializers.CharField(default='Bulk Job Launch', max_length=512, write_only=True, required=False, allow_blank=True)  # limited by max name of jobs
-    job_node_help_text = _('List of jobs to be launched, JSON. e.g. [{"unified_job_template": 7}, {"unified_job_template": 10}]')
-    jobs = BulkJobNodeSerializer(many=True, allow_empty=False, write_only=True, max_length=100000, help_text=job_node_help_text)
+    jobs = BulkJobNodeSerializer(
+        many=True,
+        allow_empty=False,
+        write_only=True,
+        max_length=100000,
+        help_text=_('List of jobs to be launched, JSON. e.g. [{"unified_job_template": 7}, {"unified_job_template": 10}]'),
+    )
     description = serializers.CharField(write_only=True, required=False, allow_blank=False)
     extra_vars = serializers.JSONField(write_only=True, required=False)
     organization = serializers.PrimaryKeyRelatedField(
@@ -4653,7 +4655,6 @@ class BulkJobLaunchSerializer(BaseSerializer):
 
         if requested_use_execution_environments:
             self.check_execution_environment_permission(request, requested_use_instance_groups)
-
 
         # all of the unified job templates and related items have now been checked, we can now grab the objects from the DB
         jobs_object = self.get_objectified_jobs(
@@ -4777,12 +4778,9 @@ class BulkJobLaunchSerializer(BaseSerializer):
                         raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
     def check_unified_job_permission(self, request, requested_ujts):
-        allowed_ujts = set()
-        [allowed_ujts.add(tup[0]) for tup in UnifiedJobTemplate.accessible_pk_qs(request.user, 'execute_role').all()]
-        [allowed_ujts.add(tup[0]) for tup in UnifiedJobTemplate.accessible_pk_qs(request.user, 'admin_role').all()]
-        [allowed_ujts.add(tup[0]) for tup in UnifiedJobTemplate.accessible_pk_qs(request.user, 'update_role').all()]
-        accessible_inventories_qs = Inventory.accessible_pk_qs(request.user, 'update_role')
-        [allowed_ujts.add(tup[0]) for tup in InventorySource.objects.filter(inventory__in=accessible_inventories_qs).values_list('id')]
+        allowed_jts = set(JobTemplate.accessible_pk_qs(request.user, 'execute_role').values_list('id', flat=True))
+        allowed_inv_sources = set(InventorySource.objects.filter(inventory__in=Inventory.accessible_pk_qs(request.user, 'update_role')).values_list('id'))
+        allowed_ujts = allowed_jts | allowed_inv_sources
 
         if requested_ujts - allowed_ujts:
             not_allowed = requested_ujts - allowed_ujts
