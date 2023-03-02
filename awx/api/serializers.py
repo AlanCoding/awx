@@ -4652,7 +4652,7 @@ class BulkJobLaunchSerializer(BaseSerializer):
             self.check_instance_group_permission(request, requested_use_instance_groups)
 
         if requested_use_execution_environments:
-            self.check_instance_group_permission(request, requested_use_instance_groups)
+            self.check_execution_environment_permission(request, requested_use_instance_groups)
 
 
         # all of the unified job templates and related items have now been checked, we can now grab the objects from the DB
@@ -4818,6 +4818,8 @@ class BulkJobLaunchSerializer(BaseSerializer):
             if requested_use_instance_groups - accessible_use_instance_groups:
                 not_allowed = requested_use_instance_groups - accessible_use_instance_groups
                 raise serializers.ValidationError(_(f"Instance Groups {not_allowed} not found or you don't have permissions to access it"))
+        else:
+            raise serializers.ValidationError(_(f"Instance Groups {requested_use_instance_groups} not found or you don't have permissions to access it"))
 
     def check_execution_environment_permission(self, request, requested_use_execution_environments):
         accessible_execution_env = {
