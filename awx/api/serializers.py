@@ -4753,16 +4753,22 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         # validate Organization
         # - If the orgs is not set, set it to the org of the launching user
         # - If the user is part of multiple orgs, throw a validation error saying user is part of multiple orgs, please provide one
-        if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
-            org = Organization.accessible_objects(request.user, 'member_role').first()
-            if org:
-                attrs['organization'] = org
+        if not request.user.is_superuser:
+            if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
+                if Organization.accessible_pk_qs(request.user, 'read_role').count() == 1:
+                    for tup in Organization.accessible_pk_qs(request.user, 'read_role').all():
+                        attrs['organization'] = Organization.objects.filter(id__in=str(tup[0])).first()
+                elif Organization.accessible_pk_qs(request.user, 'read_role').count() > 1:
+                    raise serializers.ValidationError("User has permission to multiple Organizations, please set one of them in the request")
+                else:
+                    raise serializers.ValidationError("User not part of any organization, please assign an organization to assign to the bulk job")
             else:
-                raise serializers.ValidationError(_("User not part of any organization, please assign an organization to assign to the bulk job"))
-        else:
-            requested_org = attrs['organization']
-            if requested_org and (not request.user.can_access(Organization, 'read', requested_org)):
-                raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
+                allowed_orgs = set()
+                requested_org = attrs['organization']
+                if request and not request.user.is_superuser:
+                    [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
+                    if requested_org.id not in allowed_orgs:
+                        raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
     def get_objectified_jobs(self, attrs, key_to_obj_map):
         objectified_jobs = []
