@@ -44,7 +44,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from polymorphic.models import PolymorphicModel
 
 # AWX
-from awx.main.access import get_user_capabilities, UnifiedJobTemplateAccess, LabelAccess, ExecutionEnvironmentAccess
+from awx.main.access import get_user_capabilities
 from awx.main.constants import ACTIVE_STATES, CENSOR_VALUE
 from awx.main.models import (
     ActivityStream,
@@ -4601,40 +4601,50 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         requested_use_labels = set()
         requested_use_instance_groups = set()
         for job in attrs['jobs']:
-            if 'credentials' in job:
-                [requested_use_credentials.add(cred) for cred in job['credentials']]
-            if 'labels' in job:
-                [requested_use_labels.add(label) for label in job['labels']]
-            if 'instance_groups' in job:
-                [requested_use_instance_groups.add(instance_group) for instance_group in job['instance_groups']]
+            for cred in job.get('credentials', []):
+                requested_use_credentials.add(cred)
+            for label in job.get('labels', []):
+                requested_use_labels.add(label)
+            for instance_group in job.get('instance_groups', []):
+                requested_use_instance_groups.add(instance_group)
+
+        key_to_obj_map = {
+            "unified_job_template": {obj.id: obj for obj in UnifiedJobTemplate.objects.filter(id__in=requested_ujts)},
+            "inventory": {obj.id: obj for obj in Inventory.objects.filter(id__in=requested_use_inventories)},
+            "credentials": {obj.id: obj for obj in Credential.objects.filter(id__in=requested_use_credentials)},
+            "labels": {obj.id: obj for obj in Label.objects.filter(id__in=requested_use_labels)},
+            "instance_groups": {obj.id: obj for obj in InstanceGroup.objects.filter(id__in=requested_use_instance_groups)},
+            "execution_environment": {obj.id: obj for obj in ExecutionEnvironment.objects.filter(id__in=requested_use_execution_environments)},
+        }
+
+        ujts = {}
+        for ujt in key_to_obj_map['unified_job_template']:
+            ujts.setdefault(type(ujt), {})
+            ujts[type(ujt)].append(ujt)
+
+        unallowed_types = set(ujts.keys()) - set([JobTemplate, Project, InventorySource, WorkflowJobTemplate])
+        if unallowed_types:
+            type_names = ' '.join([cls._meta.verbose_name.title() for cls in unallowed_types])
+            raise serializers.ValidationError(_("Template types {type_names} not allowed in bulk jobs").format(type_names=type_names))
+
+        for model, id_list in key_to_obj_map.items():
+            role_field = 'execute_role' if isinstance(model, (JobTemplate, WorkflowJobTemplate)) else 'update_role'
+            self.check_list_permission(model, id_list, role_field)
 
         self.check_organization_permission(attrs, request)
         self.check_unified_job_permission(request, requested_ujts)
-        if requested_use_inventories or 'inventory' in attrs:
-            self.check_inventory_permission(attrs, request, requested_use_inventories)
 
-        if requested_use_credentials:
-            self.check_credential_permission(request, requested_use_credentials)
+        if 'inventory' in attrs:
+            requested_use_inventories.add(attrs['inventory'].id)
 
-        if requested_use_labels:
-            self.check_label_permission(request, requested_use_labels)
+        self.check_list_permission(Inventory, requested_use_inventories, 'use_role')
 
-        if requested_use_instance_groups:
-            self.check_instance_group_permission(request, requested_use_instance_groups)
+        self.check_list_permission(Credential, requested_use_credentials, 'use_role')
+        self.check_list_permission(Label, requested_use_labels)
+        self.check_list_permission(InstanceGroup, requested_use_instance_groups)  # TODO: change to use_role for conflict
+        self.check_list_permission(ExecutionEnvironment, requested_use_execution_environments)  # TODO: change if roles introduced
 
-        if requested_use_execution_environments:
-            self.check_execution_environment_permission(request, requested_use_instance_groups)
-
-        # all of the unified job templates and related items have now been checked, we can now grab the objects from the DB
-        jobs_object = self.get_objectified_jobs(
-            attrs,
-            requested_ujts,
-            requested_use_inventories,
-            requested_use_credentials,
-            requested_use_labels,
-            requested_use_instance_groups,
-            requested_use_execution_environments,
-        )
+        jobs_object = self.get_objectified_jobs(attrs, key_to_obj_map)
 
         attrs['jobs'] = jobs_object
         if 'extra_vars' in attrs:
@@ -4642,6 +4652,21 @@ class BulkJobLaunchSerializer(serializers.Serializer):
             attrs['extra_vars'] = json.dumps(extra_vars_dict)
         attrs = super().validate(attrs)
         return attrs
+
+    def check_list_permission(self, model, id_list, role_field=None):
+        if not id_list:
+            return
+        if role_field is None:
+            accessible_objects = self.request.user.get_queryset(model).filter(id__in=id_list)
+        else:
+            accessible_objects = model.accessible_pk_qs(self.request.user, role_field).filter(id__in=id_list)
+        not_allowed = accessible_objects - set(id_list)
+        if not_allowed:
+            raise serializers.ValidationError(
+                _("{model_name} {not_allowed} not found or you don't have permissions to access it").format(
+                    model_name=model._meta.verbose_name.title(), not_allowed=not_allowed
+                )
+            )
 
     def create(self, validated_data):
         request = self.context.get('request', None)
@@ -4735,78 +4760,12 @@ class BulkJobLaunchSerializer(serializers.Serializer):
             else:
                 raise serializers.ValidationError(_("User not part of any organization, please assign an organization to assign to the bulk job"))
         else:
-            allowed_orgs = set()
             requested_org = attrs['organization']
-            if request and not request.user.is_superuser:
-                [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
-                if requested_org.id not in allowed_orgs:
-                    raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
+            if requested_org and (not request.user.can_access(Organization, 'read', requested_org)):
+                raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
-    def check_unified_job_permission(self, request, requested_ujts):
-        allowed_ujts = set(UnifiedJobTemplateAccess(request.user).filtered_use_queryset().filter(id__in=requested_ujts).values_list('id', flat=True))
-
-        if requested_ujts - allowed_ujts:
-            not_allowed = requested_ujts - allowed_ujts
-            raise serializers.ValidationError(_(f"Unified Job Templates {not_allowed} not found or you don't have permissions to access it"))
-
-    def check_inventory_permission(self, attrs, request, requested_use_inventories):
-        accessible_use_inventories = {tup[0] for tup in Inventory.accessible_pk_qs(request.user, 'use_role')}
-        if requested_use_inventories - accessible_use_inventories:
-            not_allowed = requested_use_inventories - accessible_use_inventories
-            raise serializers.ValidationError(_(f"Inventories {not_allowed} not found or you don't have permissions to access it"))
-        if 'inventory' in attrs:
-            requested_workflow_inventory = attrs['inventory']
-            if requested_workflow_inventory.id not in accessible_use_inventories:
-                raise serializers.ValidationError(_(f"Inventories {requested_workflow_inventory.id} not found or you don't have permissions to access it"))
-
-    def check_credential_permission(self, request, requested_use_credentials):
-        accessible_use_credentials = {tup[0] for tup in Credential.accessible_pk_qs(request.user, 'use_role').all()}
-        if requested_use_credentials - accessible_use_credentials:
-            not_allowed = requested_use_credentials - accessible_use_credentials
-            raise serializers.ValidationError(_(f"Credentials {not_allowed} not found or you don't have permissions to access it"))
-
-    def check_label_permission(self, request, requested_use_labels):
-        accessible_use_labels = set(LabelAccess(request.user).filtered_queryset().values_list('id', flat=True))
-        if requested_use_labels - accessible_use_labels:
-            not_allowed = requested_use_labels - accessible_use_labels
-            raise serializers.ValidationError(_(f"Labels {not_allowed} not found or you don't have permissions to access it"))
-
-    def check_instance_group_permission(self, request, requested_use_instance_groups):
-        # only org admins are allowed to see instance groups
-        organization_admin_qs = Organization.accessible_pk_qs(request.user, 'admin_role').all()
-        if organization_admin_qs:
-            accessible_use_instance_groups = {tup.id for tup in InstanceGroup.objects.all()}
-            if requested_use_instance_groups - accessible_use_instance_groups:
-                not_allowed = requested_use_instance_groups - accessible_use_instance_groups
-                raise serializers.ValidationError(_(f"Instance Groups {not_allowed} not found or you don't have permissions to access it"))
-        else:
-            raise serializers.ValidationError(_(f"Instance Groups {requested_use_instance_groups} not found or you don't have permissions to access it"))
-
-    def check_execution_environment_permission(self, request, requested_use_execution_environments):
-        accessible_execution_env = set(ExecutionEnvironmentAccess(request.user).filtered_queryset().values_list('id', flat=True))
-        if requested_use_execution_environments - accessible_execution_env:
-            not_allowed = requested_use_execution_environments - accessible_execution_env
-            raise serializers.ValidationError(_(f"Execution Environments {not_allowed} not found or you don't have permissions to access it"))
-
-    def get_objectified_jobs(
-        self,
-        attrs,
-        requested_ujts,
-        requested_use_inventories,
-        requested_use_credentials,
-        requested_use_labels,
-        requested_use_instance_groups,
-        requested_use_execution_environments,
-    ):
+    def get_objectified_jobs(self, attrs, key_to_obj_map):
         objectified_jobs = []
-        key_to_obj_map = {
-            "unified_job_template": {obj.id: obj for obj in UnifiedJobTemplate.objects.filter(id__in=requested_ujts)},
-            "inventory": {obj.id: obj for obj in Inventory.objects.filter(id__in=requested_use_inventories)},
-            "credentials": {obj.id: obj for obj in Credential.objects.filter(id__in=requested_use_credentials)},
-            "labels": {obj.id: obj for obj in Label.objects.filter(id__in=requested_use_labels)},
-            "instance_groups": {obj.id: obj for obj in InstanceGroup.objects.filter(id__in=requested_use_instance_groups)},
-            "execution_environment": {obj.id: obj for obj in ExecutionEnvironment.objects.filter(id__in=requested_use_execution_environments)},
-        }
         # This loop is generalized so we should only have to add related items to the key_to_obj_map
         for job in attrs['jobs']:
             objectified_job = {}
