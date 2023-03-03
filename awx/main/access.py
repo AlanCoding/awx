@@ -2463,14 +2463,6 @@ class UnifiedJobTemplateAccess(BaseAccess):
             | Q(inventorysource__inventory__id__in=Inventory._accessible_pk_qs(Inventory, self.user, 'read_role'))
         )
 
-    def filtered_use_queryset(self):
-        return self.model.objects.filter(
-            Q(jobtemplate__in=JobTemplate.accessible_pk_qs(self.user, 'execute_role'))
-            | Q(workflowjobtemplate__in=WorkflowJobTemplate.accessible_pk_qs(self.user, 'execute_role'))
-            | Q(project__in=Project.accessible_pk_qs(self.user, 'update_role'))
-            | Q(inventorysource__inventory__in=Inventory._accessible_pk_qs(Inventory, self.user, 'update_role'))
-        )
-
     def can_start(self, obj, validate_license=True):
         access_class = access_registry[obj.__class__]
         access_instance = access_class(self.user)
