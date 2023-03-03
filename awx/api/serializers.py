@@ -4540,14 +4540,23 @@ class BulkJobNodeSerializer(WorkflowJobNodeSerializer):
         required=True, min_value=1, help_text=_('Primary key of the template for this job, can be a job template or inventory source.')
     )
     inventory = serializers.IntegerField(required=False, min_value=1)
+    execution_environment = serializers.IntegerField(required=False, min_value=1)
+    # many-to-many fields
     credentials = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     labels = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
     instance_groups = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
-    execution_environment = serializers.IntegerField(required=False, min_value=1)
 
     class Meta:
         model = WorkflowJobNode
         fields = ('*', 'credentials', 'labels', 'instance_groups')  # m2m fields are not canonical for WJ nodes
+
+    def validate(self, attrs):
+        return super(LaunchConfigurationBaseSerializer, self).validate(attrs)
+
+    def get_validation_exclusions(self, obj=None):
+        ret = super().get_validation_exclusions(obj)
+        ret.extend(['unified_job_template', 'inventory', 'execution_environment'])
+        return ret
 
 
 class BulkJobLaunchSerializer(serializers.Serializer):
@@ -4618,8 +4627,8 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         }
 
         ujts = {}
-        for ujt in key_to_obj_map['unified_job_template']:
-            ujts.setdefault(type(ujt), {})
+        for ujt in key_to_obj_map['unified_job_template'].values():
+            ujts.setdefault(type(ujt), [])
             ujts[type(ujt)].append(ujt)
 
         unallowed_types = set(ujts.keys()) - set([JobTemplate, Project, InventorySource, WorkflowJobTemplate])
@@ -4627,12 +4636,11 @@ class BulkJobLaunchSerializer(serializers.Serializer):
             type_names = ' '.join([cls._meta.verbose_name.title() for cls in unallowed_types])
             raise serializers.ValidationError(_("Template types {type_names} not allowed in bulk jobs").format(type_names=type_names))
 
-        for model, id_list in key_to_obj_map.items():
+        for model, obj_list in ujts.items():
             role_field = 'execute_role' if isinstance(model, (JobTemplate, WorkflowJobTemplate)) else 'update_role'
-            self.check_list_permission(model, id_list, role_field)
+            self.check_list_permission(model, set([obj.id for obj in obj_list]), role_field)
 
         self.check_organization_permission(attrs, request)
-        self.check_unified_job_permission(request, requested_ujts)
 
         if 'inventory' in attrs:
             requested_use_inventories.add(attrs['inventory'].id)
@@ -4656,15 +4664,17 @@ class BulkJobLaunchSerializer(serializers.Serializer):
     def check_list_permission(self, model, id_list, role_field=None):
         if not id_list:
             return
-        if role_field is None:
-            accessible_objects = self.request.user.get_queryset(model).filter(id__in=id_list)
+        user = self.context['request'].user
+        if role_field is None:  # implies "read" level permission is required
+            access_qs = user.get_queryset(model)
         else:
-            accessible_objects = model.accessible_pk_qs(self.request.user, role_field).filter(id__in=id_list)
-        not_allowed = accessible_objects - set(id_list)
+            access_qs = model.accessible_objects(user, role_field)
+
+        not_allowed = set(access_qs.filter(id__in=id_list).values_list('id', flat=True)) - set(id_list)
         if not_allowed:
             raise serializers.ValidationError(
                 _("{model_name} {not_allowed} not found or you don't have permissions to access it").format(
-                    model_name=model._meta.verbose_name.title(), not_allowed=not_allowed
+                    model_name=model._meta.verbose_name.title(), not_allowed=list(not_allowed)
                 )
             )
 
@@ -4779,9 +4789,7 @@ class BulkJobLaunchSerializer(serializers.Serializer):
                     if isinstance(value, int):
                         objectified_job[key] = key_to_obj_map[key][value]
                     elif isinstance(value, list):
-                        objectified_job[key] = []
-                        for item in value:
-                            objectified_job[key].append(key_to_obj_map[key][item])
+                        objectified_job[key] = [key_to_obj_map[key][item] for item in value]
                 else:
                     objectified_job[key] = value
             objectified_jobs.append(objectified_job)

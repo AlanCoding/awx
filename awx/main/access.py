@@ -1865,6 +1865,7 @@ class JobLaunchConfigAccess(UnifiedCredentialsMixin, BaseAccess):
 
     @check_superuser
     def can_add(self, data, template=None):
+        # WARNING: duplicated with BulkJobLaunchSerializer, check when changing permission levels
         # This is a special case, we don't check related many-to-many elsewhere
         # launch RBAC checks use this
         if 'reference_obj' in data:
