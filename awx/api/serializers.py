@@ -4754,21 +4754,20 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         # - If the orgs is not set, set it to the org of the launching user
         # - If the user is part of multiple orgs, throw a validation error saying user is part of multiple orgs, please provide one
         if not request.user.is_superuser:
+            read_org_qs = Organization.accessible_pk_qs(request.user, 'read_role')
             if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
-                if Organization.accessible_pk_qs(request.user, 'read_role').count() == 1:
-                    for tup in Organization.accessible_pk_qs(request.user, 'read_role').all():
-                        attrs['organization'] = Organization.objects.filter(id__in=str(tup[0])).first()
-                elif Organization.accessible_pk_qs(request.user, 'read_role').count() > 1:
+                read_org_ct = read_org_qs.count()
+                if read_org_ct == 1:
+                    attrs['organization'] = read_org_qs.first()
+                elif read_org_ct > 1:
                     raise serializers.ValidationError("User has permission to multiple Organizations, please set one of them in the request")
                 else:
                     raise serializers.ValidationError("User not part of any organization, please assign an organization to assign to the bulk job")
             else:
-                allowed_orgs = set()
+                allowed_orgs = set(read_org_qs.values_list('id', flat=True))
                 requested_org = attrs['organization']
-                if request and not request.user.is_superuser:
-                    [allowed_orgs.add(tup[0]) for tup in Organization.accessible_pk_qs(request.user, 'read_role').all()]
-                    if requested_org.id not in allowed_orgs:
-                        raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
+                if requested_org.id not in allowed_orgs:
+                    raise ValidationError(_(f"Organization {requested_org.id} not found or you don't have permissions to access it"))
 
     def get_objectified_jobs(self, attrs, key_to_obj_map):
         objectified_jobs = []
