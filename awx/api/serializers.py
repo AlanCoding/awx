@@ -4637,7 +4637,7 @@ class BulkJobLaunchSerializer(serializers.Serializer):
             raise serializers.ValidationError(_("Template types {type_names} not allowed in bulk jobs").format(type_names=type_names))
 
         for model, obj_list in ujts.items():
-            role_field = 'execute_role' if isinstance(model, (JobTemplate, WorkflowJobTemplate)) else 'update_role'
+            role_field = 'execute_role' if issubclass(model, (JobTemplate, WorkflowJobTemplate)) else 'update_role'
             self.check_list_permission(model, set([obj.id for obj in obj_list]), role_field)
 
         self.check_organization_permission(attrs, request)
@@ -4670,11 +4670,11 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         else:
             access_qs = model.accessible_objects(user, role_field)
 
-        not_allowed = set(access_qs.filter(id__in=id_list).values_list('id', flat=True)) - set(id_list)
+        not_allowed = set(id_list) - set(access_qs.filter(id__in=id_list).values_list('id', flat=True))
         if not_allowed:
             raise serializers.ValidationError(
                 _("{model_name} {not_allowed} not found or you don't have permissions to access it").format(
-                    model_name=model._meta.verbose_name.title(), not_allowed=list(not_allowed)
+                    model_name=model._meta.verbose_name_plural.title(), not_allowed=not_allowed
                 )
             )
 
@@ -4764,7 +4764,7 @@ class BulkJobLaunchSerializer(serializers.Serializer):
         # - If the orgs is not set, set it to the org of the launching user
         # - If the user is part of multiple orgs, throw a validation error saying user is part of multiple orgs, please provide one
         if not request.user.is_superuser:
-            read_org_qs = Organization.accessible_pk_qs(request.user, 'read_role')
+            read_org_qs = Organization.accessible_objects(request.user, 'read_role')
             if 'organization' not in attrs or attrs['organization'] == None or attrs['organization'] == '':
                 read_org_ct = read_org_qs.count()
                 if read_org_ct == 1:
