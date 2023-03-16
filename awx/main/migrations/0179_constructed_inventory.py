@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('main', '0174_ensure_org_ee_admin_roles'),
+        ('main', '0178_instance_group_admin_migration'),
     ]
 
     operations = [
