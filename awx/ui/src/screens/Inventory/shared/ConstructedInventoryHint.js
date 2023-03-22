@@ -35,12 +35,8 @@ function ConstructedInventoryHint() {
 
   const pluginSample = `plugin: constructed
 strict: true
-use_vars_plugins: true
 groups:
-  shutdown: resolved_state == "shutdown"
-  shutdown_in_product_dev: resolved_state == "shutdown" and account_alias == "product_dev"
-compose:
-  resolved_state: state | default("running")`;
+  shutdown_in_product_dev: state | default("running") == "shutdown" and account_alias == "product_dev"`;
 
   return (
     <Alert
@@ -56,12 +52,15 @@ compose:
           component="a"
           target="_blank"
         >
-          {t`View constructed plugin documentation here`}{' '}
+          {t`View constructed inventory documentation here`}{' '}
           <ExternalLinkAltIcon />
         </AlertActionLink>
       }
     >
-      <span>{t`WIP - More to come...`}</span>
+      <span>{t`This table gives a few useful parameters of the constructed
+               inventory plugin. For the full list of parameters `}<a
+                 href={t`https://docs.ansible.com/ansible/latest/collections/ansible/builtin/constructed_inventory.html`}
+               >{t`view the constructed inventory plugin docs here.`}</a></span>
       <br />
       <br />
       <TableComposable
@@ -82,7 +81,7 @@ compose:
               <p style={{ color: 'red' }}>{t`required`}</p>
             </Td>
             <Td dataLabel={t`description`}>
-              {t`Token that ensures this is a source file 
+              {t`Token that ensures this is a source file
               for the ‘constructed’ plugin.`}
             </Td>
           </Tr>
@@ -95,21 +94,9 @@ compose:
               {t`If yes make invalid entries a fatal error, otherwise skip and
               continue.`}{' '}
               <br />
-              {t`If users need feedback about the correctness 
-              of their constructed groups, it is highly recommended 
+              {t`If users need feedback about the correctness
+              of their constructed groups, it is highly recommended
               to use strict: true in the plugin configuration.`}
-            </Td>
-          </Tr>
-          <Tr key="use_vars_plugins">
-            <Td dataLabel={t`name`}>
-              <code>use_vars_plugins</code>
-              <p style={{ color: 'blue' }}>{t`string`}</p>
-            </Td>
-            <Td dataLabel={t`description`}>
-              {t`Normally, for performance reasons, vars plugins get 
-              executed after the inventory sources complete the 
-              base inventory, this option allows for getting vars 
-              related to hosts/groups from those plugins.`}
             </Td>
           </Tr>
           <Tr key="groups">
@@ -127,7 +114,10 @@ compose:
               <p style={{ color: 'blue' }}>{t`dictionary`}</p>
             </Td>
             <Td dataLabel={t`description`}>
-              {t`Create vars from jinja2 expressions.`}
+              {t`Create vars from jinja2 expressions. This can be useful
+              if the constructed groups you define do not contain the expected
+              hosts. This can be used to add hostvars from expressions so
+              that you know what the resultant values of those expressions are.`}
             </Td>
           </Tr>
         </Tbody>
