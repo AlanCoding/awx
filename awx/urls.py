@@ -3,6 +3,7 @@
 
 from django.conf import settings
 from django.urls import re_path, include
+from django.contrib import admin
 
 from awx.main.views import handle_400, handle_403, handle_404, handle_500, handle_csp_violation, handle_login_redirect
 
@@ -20,6 +21,8 @@ urlpatterns = [
     re_path(r'^csp-violation/', handle_csp_violation),
     re_path(r'^login/', handle_login_redirect),
 ]
+
+urlpatterns += [re_path(r"^admin/", admin.site.urls, name="admin")]
 
 if settings.SETTINGS_MODULE == 'awx.settings.development':
     try:

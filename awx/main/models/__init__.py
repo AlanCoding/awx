@@ -3,6 +3,7 @@
 
 # Django
 from django.conf import settings  # noqa
+from django.contrib import admin
 from django.db.models.signals import pre_delete  # noqa
 
 # AWX
@@ -232,6 +233,13 @@ activity_stream_registrar.connect(WorkflowApproval)
 activity_stream_registrar.connect(WorkflowApprovalTemplate)
 activity_stream_registrar.connect(OAuth2Application)
 activity_stream_registrar.connect(OAuth2AccessToken)
+
+import inspect
+
+for cls in list(locals().values()):
+    if inspect.isclass(cls) and issubclass(cls, BaseModel) and not cls._meta.abstract:
+        admin.site.register(cls)
+
 
 # prevent API filtering on certain Django-supplied sensitive fields
 prevent_search(User._meta.get_field('password'))
