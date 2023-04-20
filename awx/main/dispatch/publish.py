@@ -5,6 +5,7 @@ import time
 from uuid import uuid4
 
 from django_guid import get_guid
+from django.db import connection
 
 from . import pg_bus_conn
 from awx.main.utils import is_testing
@@ -74,6 +75,8 @@ class task:
 
             @classmethod
             def apply_async(cls, args=None, kwargs=None, queue=None, uuid=None, **kw):
+                if connection.vendor == 'sqlite':
+                    return
                 task_id = uuid or str(uuid4())
                 args = args or []
                 kwargs = kwargs or {}

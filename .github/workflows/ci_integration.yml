@@ -1,0 +1,23 @@
+---
+name: CI
+on:
+  pull_request:
+jobs:
+  tacas:
+    name: TACAS plus integration
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install test dependencies
+        run: pip install -r tools/test/test_requirements.txt
+
+      - name: Run integration checks
+        run: cd tools/test/integration && py.test test_tacacs.py -s
