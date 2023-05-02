@@ -8,8 +8,9 @@ env:
 on:
   pull_request:
 jobs:
-  tacas:
+  external_tests:
     name: External integration tests
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'external_tests') }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
