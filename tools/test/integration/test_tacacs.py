@@ -34,7 +34,7 @@ def test_confirm_tacacs_host_and_secret_required(v2):
     assert e.value.msg == {'__all__': ['TACACSPLUS_SECRET is required when TACACSPLUS_HOST is provided.']}
 
 
-def test_timeout_of_tacacs_server(request, v2, tacacs_settings):
+def test_timeout_of_tacacs(request, v2, tacacs_settings):
     user = v2.users.create(username='iosadmin', password='cisco', is_superuser=False)
     request.addfinalizer(user.silent_delete)
 

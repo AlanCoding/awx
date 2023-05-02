@@ -1,10 +1,15 @@
 ---
 name: CI
+env:
+  LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+  CI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  DEV_DOCKER_OWNER: ${{ github.repository_owner }}
+  COMPOSE_TAG: ${{ github.base_ref || 'devel' }}
 on:
   pull_request:
 jobs:
   tacas:
-    name: TACAS plus integration
+    name: External integration tests
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -13,11 +18,12 @@ jobs:
       - uses: actions/checkout@v2
 
       - uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+
+      - name: Build image for use in tests
+        run: make github_ci_setup
 
       - name: Install test dependencies
         run: pip install -r tools/test/test_requirements.txt
 
       - name: Run integration checks
-        run: cd tools/test/integration && py.test test_tacacs.py -s
+        run: cd tools/test/integration && py.test . -s

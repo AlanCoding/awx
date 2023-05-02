@@ -154,7 +154,7 @@ def is_testing(argv=None):
     argv = sys.argv if argv is None else argv
     if len(argv) >= 1 and ('py.test' in argv[0] or 'py/test.py' in argv[0]):
         return True
-    elif len(argv) >= 2 and argv[1] == 'test':
+    elif len(argv) >= 2 and argv[1] in ('test', 'runserver'):
         return True
     return False
 

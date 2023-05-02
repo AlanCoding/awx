@@ -10,12 +10,6 @@ from awxkit.api import get_registered_page
 from awxkit.api.client import Connection
 
 
-COMMON_CONTAINER_KWARGS = dict(
-    detach=True,
-    # remove=True,  # If container exits early, we still want to get logs
-)
-
-
 @pytest.fixture(scope='session')
 def docker_client():
     return from_env()
@@ -42,10 +36,12 @@ def container_factory(request, docker_client, base_path):
         except ImageNotFound:
             docker_client.images.pull(image_name)
 
+        # Need to run in detach mode because service needs to be persistent through tests
+        image_options['detach'] = True
         args = [image_name]
         if command is not None:
             args.append(command)
-        container = docker_client.containers.run(*args, **image_options, **COMMON_CONTAINER_KWARGS)
+        container = docker_client.containers.run(*args, **image_options)
 
         def kill_this_container():
             print('')
@@ -62,12 +58,22 @@ def container_factory(request, docker_client, base_path):
 
 @pytest.fixture(scope='session')
 def awx_server_no_wait(container_factory, base_path):
+    """
+    The container options used here mirror the Makefile docker-runner target
+    Additional customizations include:
+     - bootstrapping migrations, install, db, cache, etc. with custom settings and script
+     - networking so that server can be accessed, and container can talk to other local containers
+    """
+    org = os.getenv('DEV_DOCKER_OWNER', 'ansible').lower()
+    tag = os.getenv('COMPOSE_TAG', 'devel')
+    image_name = f'ghcr.io/{org}/awx_devel:{tag}'
+    print(f'Using AWX image {image_name}')
     return container_factory(
-        'ghcr.io/ansible/awx_devel:devel',
+        image_name,
         dict(
             user=os.getuid(),
             # ports={'8045/tcp': '8045'},  # need if you do not use host network_mode
-            environment=['AWX_LOGGING_MODE=stdout', 'DJANGO_SUPERUSER_PASSWORD=password'],
+            environment=['AWX_LOGGING_MODE=stdout'],  # superuser created in migration hack
             volumes={
                 base_path: {'bind': '/awx_devel', 'mode': 'rw'},
                 f'{base_path}/tools/test/minimal_settings.py': {'bind': '/etc/tower/conf.d/minimal_settings.py', 'mode': 'rw'},

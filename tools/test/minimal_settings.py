@@ -1,12 +1,12 @@
+from django.core.management.commands import migrate
+
+
 # Remove annoying things that require pre-loaded data which we do not want anyway
 MIDDLEWARE.remove('awx.main.middleware.MigrationRanCheckMiddleware')  # NOQA
 INSTALLED_APPS.remove('django.contrib.sites')  # NOQA
 
 
 # Monkey patch the migration command to our hack that migrates straight to current schema
-from django.core.management.commands import migrate
-
-
 # For background on where this method comes from, see Django testing setup
 # https://github.com/django/django/blob/c813fb327cb1b09542be89c5ceed367826236bc2/django/db/backends/base/creation.py#L32
 class MigrateToCurrent(migrate.Command):
@@ -20,8 +20,14 @@ class MigrateToCurrent(migrate.Command):
         options['run_syncdb'] = True
         super().handle(*args, **options)
 
+        # Preload certain data here which can be used by tests
+        from django.contrib.auth import get_user_model
         from awx.main.models.credential import CredentialType
 
+        User = get_user_model()
+
+        if not User.objects.filter(username='admin').exists():
+            User.objects.create_superuser('admin', 'admin@localhost', 'password')
         CredentialType.setup_tower_managed_defaults(apps)
 
 
