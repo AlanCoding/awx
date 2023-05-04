@@ -43,3 +43,6 @@ CACHES = {
 
 # Allow for database reuse
 SECRET_KEY = "pGT9A9U59ajcxkVlmUiVZPK6JcgX+M6VjVru5nPY0ws="
+
+# Make sure that we do not run Django debug toolbar by accident
+INTERNAL_IPS = ()
