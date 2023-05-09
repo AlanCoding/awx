@@ -347,6 +347,12 @@ class TestEnabledVar:
     def test_enabled_var_is_enabled_value(self, cmd):
         assert cmd._get_enabled({'foo': {'bar': 'barfoo'}}) is True
 
+    def test_enabled_key_with_dot_right_value(self, cmd):
+        assert cmd._get_enabled({'foo.bar': 'barfoo'}) is True
+
+    def test_enabled_key_with_dot_wrong_value(self, cmd):
+        assert cmd._get_enabled({'foo.bar': 'notright'}) is None
+
 
 def test_tower_version_compare():
     cmd = inventory_import.Command()

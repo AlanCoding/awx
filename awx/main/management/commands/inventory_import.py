@@ -238,6 +238,10 @@ class Command(BaseCommand):
         enabled = default
         if getattr(self, 'enabled_var', None):
             default = object()
+            # provide some level of support for dots in the keys themselves, top-level
+            if self.enabled_var in from_dict:
+                if from_dict[self.enabled_var] == self.enabled_value:
+                    return True
             for key in self.enabled_var.split('.'):
                 if not hasattr(from_dict, 'get'):
                     enabled = default
