@@ -2,6 +2,8 @@ import logging
 import json
 
 from django.core.management.base import BaseCommand
+from django.db import connection
+
 from awx.main.dispatch import pg_bus_conn
 from awx.main.dispatch.worker.task import TaskWorker
 
@@ -20,11 +22,13 @@ class Command(BaseCommand):
         try:
             with pg_bus_conn(new_connection=True) as conn:
                 conn.listen("tower_settings_change")
+                connection.close()
                 for e in conn.events(yield_timeouts=True):
                     if e is not None:
                         body = json.loads(e.payload)
                         logger.info(f"Cache clear request received. Clearing now, payload: {e.payload}")
                         TaskWorker.run_callable(body)
+                    connection.close()
 
         except Exception:
             # Log unanticipated exception in addition to writing to stderr to get timestamps and other metadata

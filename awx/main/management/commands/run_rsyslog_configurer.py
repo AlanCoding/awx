@@ -4,6 +4,7 @@ import json
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.core.cache import cache
+from django.db import connection
 from awx.main.dispatch import pg_bus_conn
 from awx.main.dispatch.worker.task import TaskWorker
 from awx.main.utils.external_logging import reconfigure_rsyslog
@@ -26,6 +27,7 @@ class Command(BaseCommand):
                 conn.listen("rsyslog_configurer")
                 # reconfigure rsyslog on start up
                 reconfigure_rsyslog()
+                connection.close()
                 for e in conn.events(yield_timeouts=True):
                     if e is not None:
                         logger.info("Change in logging settings found. Restarting rsyslogd")
@@ -35,6 +37,7 @@ class Command(BaseCommand):
                         settings._awx_conf_memoizedcache.clear()
                         body = json.loads(e.payload)
                         TaskWorker.run_callable(body)
+                    connection.close()
         except Exception:
             # Log unanticipated exception in addition to writing to stderr to get timestamps and other metadata
             logger.exception('Encountered unhandled error in rsyslog_configurer main loop')
