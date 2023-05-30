@@ -68,6 +68,7 @@ from awx.main.tasks.facts import start_fact_cache, finish_fact_cache
 from awx.main.exceptions import AwxTaskError, PostRunError, ReceptorNodeNotFound
 from awx.main.utils.ansible import read_ansible_config
 from awx.main.utils.execution_environments import CONTAINER_ROOT, to_container_path
+from awx.main.utils.encryption import decrypt_field
 from awx.main.utils.safe_yaml import safe_dump, sanitize_jinja
 from awx.main.utils.common import (
     update_scm_url,
@@ -453,13 +454,28 @@ class BaseTask(object):
     def should_use_fact_cache(self):
         return False
 
+    def get_launch_passwords(self):
+        needed_passwords = self.instance.get_passwords_needed_to_start()
+        try:
+            start_args = json.loads(decrypt_field(self, 'start_args'))
+        except Exception:
+            start_args = {}
+
+        if start_args in (None, ''):
+            start_args = {}
+
+        return dict([(field, start_args.get(field, '')) for field in needed_passwords])
+
     @with_path_cleanup
     @with_signal_handling
-    def run(self, pk, **kwargs):
+    def run(self, pk):
         """
         Run the job/task and capture its output.
         """
         self.instance = self.model.objects.get(pk=pk)
+
+        launch_passwords = self.get_launch_passwords()  # NOTE: has to be called before start_args is cleared
+
         if self.instance.status != 'canceled' and self.instance.cancel_flag:
             self.instance = self.update_model(self.instance.pk, start_args='', status='canceled')
         if self.instance.status not in ACTIVE_STATES:
@@ -506,7 +522,7 @@ class BaseTask(object):
 
             # May have to serialize the value
             private_data_files, ssh_key_data = self.build_private_data_files(self.instance, private_data_dir)
-            passwords = self.build_passwords(self.instance, kwargs)
+            passwords = self.build_passwords(self.instance, launch_passwords)
             self.build_extra_vars_file(self.instance, private_data_dir)
             args = self.build_args(self.instance, private_data_dir, passwords)
             env = self.build_env(self.instance, private_data_dir, private_data_files=private_data_files)

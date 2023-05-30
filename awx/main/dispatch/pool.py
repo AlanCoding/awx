@@ -344,10 +344,10 @@ class AutoscalePool(WorkerPool):
         self.scale_up_ct = 0
         self.worker_count_max = 0
 
-    def produce_subsystem_metrics(self, metrics_object):
-        metrics_object.set('dispatcher_pool_scale_up_events', self.scale_up_ct)
-        metrics_object.set('dispatcher_pool_active_task_count', sum(len(w.managed_tasks) for w in self.workers))
-        metrics_object.set('dispatcher_pool_max_worker_count', self.worker_count_max)
+    def produce_subsystem_metrics(self, metrics_object, name='dispatcher'):
+        metrics_object.set(f'{name}_pool_scale_up_events', self.scale_up_ct)
+        metrics_object.set(f'{name}_pool_active_task_count', sum(len(w.managed_tasks) for w in self.workers))
+        metrics_object.set(f'{name}_pool_max_worker_count', self.worker_count_max)
         self.worker_count_max = len(self.workers)
 
     @property
@@ -391,13 +391,7 @@ class AutoscalePool(WorkerPool):
                 #    send them to another worker
                 logger.error('worker pid:{} is gone (exit={})'.format(w.pid, w.exitcode))
                 if w.current_task:
-                    if w.current_task != 'QUIT':
-                        try:
-                            for j in UnifiedJob.objects.filter(celery_task_id=w.current_task['uuid']):
-                                reaper.reap_job(j, 'failed')
-                        except Exception:
-                            logger.exception('failed to reap job UUID {}'.format(w.current_task['uuid']))
-                    else:
+                    if w.current_task == 'QUIT':
                         logger.warning(f'Worker was told to quit but has not, pid={w.pid}')
                 orphaned.extend(w.orphaned_tasks)
                 self.workers.remove(w)

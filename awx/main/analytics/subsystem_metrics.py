@@ -172,8 +172,15 @@ class Metrics:
 
         # metric name, help_text
         METRICSLIST = [
+            # deprecated callback receiver metrics
             SetIntM('callback_receiver_events_queue_size_redis', 'Current number of events in redis queue'),
             IntM('callback_receiver_events_popped_redis', 'Number of events popped from redis'),
+            # new job monitor service metrics, same as dispatcher metrics
+            SetIntM('job_monitor_pool_scale_up_events', 'Number of times local job_monitor scaled up a worker since startup'),
+            SetIntM('job_monitor_pool_active_task_count', 'Number of active tasks in the worker pool when last task was submitted'),
+            SetIntM('job_monitor_pool_max_worker_count', 'Highest number of workers in worker pool in last collection interval, about 20s'),
+            SetFloatM('job_monitor_availability', 'Fraction of time (in last collection interval) job_monitor was able to receive messages'),
+            # callback receiver metrics that are still valid
             IntM('callback_receiver_events_in_memory', 'Current number of events in memory (in transfer from redis to db)'),
             IntM('callback_receiver_batch_events_errors', 'Number of times batch insertion failed'),
             FloatM('callback_receiver_events_insert_db_seconds', 'Total time spent saving events to database'),
@@ -183,6 +190,7 @@ class Metrics:
                 'callback_receiver_batch_events_insert_db', 'Number of events batch inserted into database', settings.SUBSYSTEM_METRICS_BATCH_INSERT_BUCKETS
             ),
             SetFloatM('callback_receiver_event_processing_avg_seconds', 'Average processing time per event per callback receiver batch'),
+            # begin meta metrics
             FloatM('subsystem_metrics_pipe_execute_seconds', 'Time spent saving metrics to redis'),
             IntM('subsystem_metrics_pipe_execute_calls', 'Number of calls to pipe_execute'),
             FloatM('subsystem_metrics_send_metrics_seconds', 'Time spent sending metrics to other nodes'),

@@ -36,42 +36,18 @@ class AWXJobMonitorPG(AWXConsumerPG):
                 return
         # Unlike base class, never run dispatch_task directly
 
-    # TODO: Adopt this reaper logic - reap jobs in running status not controlled by this
-    # # Run local reaper
-    # if worker_tasks is not None:
-    #     active_task_ids = []
-    #     for task_list in worker_tasks.values():
-    #         active_task_ids.extend(task_list)
-    #     reaper.reap(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
-    #     if max(len(task_list) for task_list in worker_tasks.values()) <= 1:
-    #         reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
-
     def start_new(self):
         for job in UnifiedJob.objects.filter(controller_node=settings.CLUSTER_HOST_ID, status='waiting'):
-            logger.info(f'starting task {job.id}')
-            job.status = 'running'
+            logger.debug(f'Job monitor dispatching job_id={job.id}')
             # from task manager start_task originally, body building from apply_async
             cls = job._get_task_class()
-            # from pre_start, TODO: refactor this into the BaseTask itself
-            from awx.main.utils.encryption import encrypt_dict, decrypt_field  # NOQA
-            import json
-            from awx.main.tasks.system import handle_work_error, handle_work_success
-
-            needed = job.get_passwords_needed_to_start()
-            try:
-                start_args = json.loads(decrypt_field(self, 'start_args'))
-            except Exception:
-                start_args = None
-
-            if start_args in (None, ''):
-                start_args = {}
-
-            opts = dict([(field, start_args.get(field, '')) for field in needed])
-
-            body = {'uuid': job.celery_task_id, 'args': [job.id], 'kwargs': opts, 'task': cls.name}
             task_actual = {'type': get_type_for_model(type(job)), 'id': job.id}
-            body['callbacks'] = [{'task': handle_work_success.name, 'kwargs': {'task_actual': task_actual}}]
-            body['errbacks'] = [{'task': handle_work_error.name, 'kwargs': {'task_actual': task_actual}}]
+            body = cls.get_async_body(
+                args=[job.id],
+                uuid=job.celery_task_id,
+                callbacks=[{'task': 'awx.main.tasks.system.handle_work_success', 'kwargs': {'task_actual': task_actual}}],
+                errbacks=[{'task': 'awx.main.tasks.system.handle_work_error', 'kwargs': {'task_actual': task_actual}}],
+            )
 
             self.dispatch_task(body)
 
@@ -85,6 +61,28 @@ class AWXJobMonitorPG(AWXConsumerPG):
                 logger.exception('Starting new tasks method encountered an error')
             return
         return super().control(body)
+
+    # TODO: Adopt this reaper logic - reap jobs in running status not controlled by this
+    # # Run local reaper
+    # if worker_tasks is not None:
+    #     active_task_ids = []
+    #     for task_list in worker_tasks.values():
+    #         active_task_ids.extend(task_list)
+    #     reaper.reap(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
+    #     if max(len(task_list) for task_list in worker_tasks.values()) <= 1:
+    #         reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
+
+    # TODO: Adopt this reaper logic - reap jobs when their controller process dies
+    # # this probably gets absorbed into a more general condition
+    # try:
+    #     for j in UnifiedJob.objects.filter(celery_task_id=w.current_task['uuid']):
+    #         reaper.reap_job(j, 'failed')
+    # except Exception:
+    #     logger.exception('failed to reap job UUID {}'.format(w.current_task['uuid']))
+
+    def run_periodic_tasks(self):
+        super().run_periodic_tasks()
+        # TODO: run reconciliation method (replaces the reaper logic)
 
 
 def job_stats_wrapup(job_identifier, event=None):
