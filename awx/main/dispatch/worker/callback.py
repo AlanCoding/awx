@@ -28,6 +28,10 @@ logger = logging.getLogger('awx.main.commands.run_callback_receiver')
 
 
 class AWXJobMonitorPG(AWXConsumerPG):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_reconciliation = time.time()
+
     def process_task(self, body):
         if 'control' in body:
             try:
@@ -50,6 +54,10 @@ class AWXJobMonitorPG(AWXConsumerPG):
                 errbacks=[{'task': 'awx.main.tasks.system.handle_work_error', 'kwargs': {'task_actual': task_actual}}],
             )
 
+            # NOTE: updating status and dispatching the task needs to be somewhat atomic
+            # but we could introduce retries in the future and it would not matter much anyway
+            job.status = 'running'
+            job.save(update_fields=['status'])
             self.dispatch_task(body)
 
     def control(self, body):
@@ -122,7 +130,10 @@ class AWXJobMonitorPG(AWXConsumerPG):
 
     def run_periodic_tasks(self):
         super().run_periodic_tasks()
-        self.run_reconciliation()
+
+        current_time = time.time()
+        if current_time - self.last_reconciliation > 60:
+            self.run_reconciliation()
 
 
 def job_stats_wrapup(job_identifier, event=None):
