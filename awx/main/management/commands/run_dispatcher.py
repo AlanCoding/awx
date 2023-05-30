@@ -12,7 +12,7 @@ from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.control import Control
 from awx.main.dispatch.pool import AutoscalePool
 from awx.main.dispatch.worker import AWXConsumerPG
-from awx.main.dispatch.worker.task import TaskWorker
+from awx.main.dispatch.worker.task import DispatcherTaskWorker
 from awx.main.dispatch import periodic
 
 logger = logging.getLogger('awx.main.dispatch')
@@ -78,7 +78,7 @@ class Command(BaseCommand):
 
         try:
             queues = ['tower_broadcast_all', 'tower_settings_change', get_task_queuename()]
-            consumer = AWXConsumerPG('dispatcher', TaskWorker(), queues, AutoscalePool(min_workers=4))
+            consumer = AWXConsumerPG('dispatcher', DispatcherTaskWorker(), queues, AutoscalePool(min_workers=4))
             consumer.run()
         except KeyboardInterrupt:
             logger.debug('Terminating Task Dispatcher')

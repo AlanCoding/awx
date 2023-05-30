@@ -109,8 +109,6 @@ def dispatch_startup():
     #
     apply_cluster_membership_policies()
     cluster_node_heartbeat()
-    reaper.startup_reaping()
-    reaper.reap_waiting(grace_period=0)
     m = Metrics()
     m.reset_values()
 
@@ -119,10 +117,6 @@ def inform_cluster_of_shutdown():
     try:
         this_inst = Instance.objects.get(hostname=settings.CLUSTER_HOST_ID)
         this_inst.mark_offline(update_last_seen=True, errors=_('Instance received normal shutdown signal'))
-        try:
-            reaper.reap_waiting(this_inst, grace_period=0)
-        except Exception:
-            logger.exception('failed to reap waiting jobs for {}'.format(this_inst.hostname))
         logger.warning('Normal shutdown signal for instance {}, removed self from capacity pool.'.format(this_inst.hostname))
     except Exception:
         logger.exception('Encountered problem with normal shutdown signal.')

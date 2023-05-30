@@ -137,6 +137,8 @@ class TaskWorker(BaseWorker):
             self.perform_work(callback)
         return result
 
+
+class DispatcherTaskWorker(TaskWorker):
     def on_start(self):
         dispatch_startup()
 

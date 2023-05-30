@@ -80,6 +80,15 @@ class AWXJobMonitorPG(AWXConsumerPG):
     # except Exception:
     #     logger.exception('failed to reap job UUID {}'.format(w.current_task['uuid']))
 
+    # # previously starup tasks
+    # reaper.startup_reaping()
+    # reaper.reap_waiting(grace_period=0)
+    # # previously shutdown tasks
+    # try:
+    #     reaper.reap_waiting(this_inst, grace_period=0)
+    # except Exception:
+    #     logger.exception('failed to reap waiting jobs for {}'.format(this_inst.hostname))
+
     def run_periodic_tasks(self):
         super().run_periodic_tasks()
         # TODO: run reconciliation method (replaces the reaper logic)
