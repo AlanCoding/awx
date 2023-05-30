@@ -9,7 +9,7 @@ from schedule import Scheduler
 from django_guid import set_guid
 from django_guid.utils import generate_guid
 
-from awx.main.dispatch.worker import TaskWorker
+from awx.main.dispatch.worker.task import TaskWorker
 from awx.main.utils.db import set_connection_name
 
 logger = logging.getLogger('awx.main.dispatch.periodic')

@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand
 from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.control import Control
 from awx.main.dispatch.pool import AutoscalePool
-from awx.main.dispatch.worker import TaskWorker
+from awx.main.dispatch.worker.task import TaskWorker
 from awx.main.dispatch.worker.callback import AWXJobMonitorPG
 
 
@@ -33,7 +33,7 @@ class Command(BaseCommand):
 
         try:
             queues = [get_task_queuename() + '_job']
-            consumer = AWXJobMonitorPG('dispatcher', TaskWorker(), queues, AutoscalePool(min_workers=2))
+            consumer = AWXJobMonitorPG('job_monitor', TaskWorker(), queues, AutoscalePool(min_workers=2))
             consumer.run()
         except KeyboardInterrupt:
             logger.debug('Terminating Job Monitor')

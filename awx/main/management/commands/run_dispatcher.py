@@ -11,7 +11,8 @@ from django.db import connection as django_connection
 from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.control import Control
 from awx.main.dispatch.pool import AutoscalePool
-from awx.main.dispatch.worker import AWXConsumerPG, TaskWorker
+from awx.main.dispatch.worker import AWXConsumerPG
+from awx.main.dispatch.worker.task import TaskWorker
 from awx.main.dispatch import periodic
 
 logger = logging.getLogger('awx.main.dispatch')

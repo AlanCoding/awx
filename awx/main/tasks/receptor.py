@@ -458,16 +458,17 @@ class AWXReceptorJob:
 
     @cleanup_new_process
     def processor(self, resultfile):
-        ret = AWXProcessor(
+        processor = AWXProcessor(
             quiet=True,
             _input=resultfile,
             event_handler=self.task.runner_callback.event_handler,
             finished_callback=self.task.runner_callback.finished_callback,
             status_handler=self.task.runner_callback.status_handler,
             **self.runner_params,
-        ).run()
+        )
+        processor.run()
         self.task.runner_callback.callback_worker.flush()
-        return ret
+        return processor
 
     @property
     def receptor_params(self):

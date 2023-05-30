@@ -113,8 +113,7 @@ class AWXProcessor(object):
             else:
                 self.event_callback(data)
 
-        if self.finished_callback is not None:
-            self.finished_callback(self)
+        self.finished_callback(self)
 
         return self.status, self.rc
 

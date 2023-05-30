@@ -10,7 +10,6 @@ from contextlib import redirect_stdout
 import shutil
 import time
 from distutils.version import LooseVersion as Version
-from datetime import datetime
 
 # Django
 from django.conf import settings
@@ -585,15 +584,6 @@ def cluster_node_heartbeat(dispatch_time=None, worker_tasks=None):
                 logger.debug('Another instance has marked {} as lost'.format(other_inst.hostname))
             else:
                 logger.exception('Error marking {} as lost'.format(other_inst.hostname))
-
-    # Run local reaper
-    if worker_tasks is not None:
-        active_task_ids = []
-        for task_list in worker_tasks.values():
-            active_task_ids.extend(task_list)
-        reaper.reap(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
-        if max(len(task_list) for task_list in worker_tasks.values()) <= 1:
-            reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
 
 
 @task(queue=get_task_queuename)

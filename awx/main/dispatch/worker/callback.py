@@ -21,7 +21,7 @@ from awx.main.models.events import emit_event_detail
 from awx.main.utils.profiling import AWXProfiler
 from awx.main.utils.common import get_type_for_model
 import awx.main.analytics.subsystem_metrics as s_metrics
-from .base import AWXConsumerPG
+from awx.main.dispatch.worker.base import AWXConsumerPG
 
 logger = logging.getLogger('awx.main.commands.run_callback_receiver')
 
@@ -36,8 +36,19 @@ class AWXJobMonitorPG(AWXConsumerPG):
                 return
         # Unlike base class, never run dispatch_task directly
 
+    # TODO: Adopt this reaper logic - reap jobs in running status not controlled by this
+    # # Run local reaper
+    # if worker_tasks is not None:
+    #     active_task_ids = []
+    #     for task_list in worker_tasks.values():
+    #         active_task_ids.extend(task_list)
+    #     reaper.reap(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
+    #     if max(len(task_list) for task_list in worker_tasks.values()) <= 1:
+    #         reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
+
     def start_new(self):
-        for job in UnifiedJob.objects.filter(controler_node=settings.CLUSTER_HOST_ID, status='waiting'):
+        for job in UnifiedJob.objects.filter(controller_node=settings.CLUSTER_HOST_ID, status='waiting'):
+            logger.info(f'starting task {job.id}')
             job.status = 'running'
             # from task manager start_task originally, body building from apply_async
             cls = job._get_task_class()
@@ -46,7 +57,7 @@ class AWXJobMonitorPG(AWXConsumerPG):
             import json
             from awx.main.tasks.system import handle_work_error, handle_work_success
 
-            needed = self.get_passwords_needed_to_start()
+            needed = job.get_passwords_needed_to_start()
             try:
                 start_args = json.loads(decrypt_field(self, 'start_args'))
             except Exception:
@@ -57,7 +68,7 @@ class AWXJobMonitorPG(AWXConsumerPG):
 
             opts = dict([(field, start_args.get(field, '')) for field in needed])
 
-            body = {'uuid': job.celery_task_id, 'args': job.id, 'kwargs': opts, 'task': cls.name}
+            body = {'uuid': job.celery_task_id, 'args': [job.id], 'kwargs': opts, 'task': cls.name}
             task_actual = {'type': get_type_for_model(type(job)), 'id': job.id}
             body['callbacks'] = [{'task': handle_work_success.name, 'kwargs': {'task_actual': task_actual}}]
             body['errbacks'] = [{'task': handle_work_error.name, 'kwargs': {'task_actual': task_actual}}]
@@ -67,7 +78,12 @@ class AWXJobMonitorPG(AWXConsumerPG):
     def control(self, body):
         control = body.get('control')
         if control == 'start':
-            self.start_new()
+            try:
+                logger.info('start new called')
+                self.start_new()
+            except Exception:
+                logger.exception('Starting new tasks method encountered an error')
+            return
         return super().control(body)
 
 

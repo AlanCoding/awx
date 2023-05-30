@@ -523,7 +523,6 @@ class TaskManager(TaskBase):
         if self.start_task_limit == 0:
             # schedule another run immediately after this task manager
             ScheduleTaskManager().schedule()
-        from awx.main.tasks.system import handle_work_error, handle_work_success
 
         task.status = 'waiting'
 
@@ -557,7 +556,7 @@ class TaskManager(TaskBase):
         # postgres will treat this as part of the transaction, which is what we want
         # TODO: de-duplicate, only send one for each controller_node
         if task.status != 'failed' and type(task) is not WorkflowJob:
-            Control('callback_receiver', host=task.controller_node).control('start')
+            Control('callback_receiver', host=task.controller_node).control({'control': 'start'})
 
         # In exception cases, like a job failing pre-start checks, we send the websocket status message
         # for jobs going into waiting, we omit this because of performance issues, as it should go to running quickly
