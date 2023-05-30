@@ -382,8 +382,9 @@ class AWXReceptorJob:
         # If a cancel happens, the main thread will encounter an exception, in which case
         # we yank the socket out from underneath the processor, which will cause it to exit.
         # The ThreadPoolExecutor context manager ensures we do not leave any threads laying around.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             processor_future = executor.submit(self.processor, resultfile)
+            executor.submit(self.save_events_to_database, resultfile)
 
             try:
                 signal_state.raise_exception = True
@@ -391,6 +392,7 @@ class AWXReceptorJob:
                 if signal_callback():
                     raise SignalExit()
                 res = processor_future.result()
+                self.task.runner_callback.callback_worker.flush()
             except SignalExit:
                 receptor_ctl.simple_command(f"work cancel {self.unit_id}")
                 resultsock.shutdown(socket.SHUT_RDWR)
@@ -467,8 +469,18 @@ class AWXReceptorJob:
             **self.runner_params,
         )
         processor.run()
-        self.task.runner_callback.callback_worker.flush()
         return processor
+
+    @cleanup_new_process
+    def save_events_to_database(self):
+        """
+        Replaces the main loop of the old run_callback_receiver workers
+        Previously it did a read from the redis callback_events queue w 1s timeout
+        So here we just do a flush every second, and the flush will exit if there is no work
+        """
+        while True:
+            time.sleep(1)
+            self.task.runner_callback.callback_worker.flush()
 
     @property
     def receptor_params(self):

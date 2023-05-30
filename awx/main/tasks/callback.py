@@ -265,8 +265,6 @@ class RunnerCallback:
 
         event_data.setdefault(self.event_data_key, self.instance.id)
         self.callback_worker.dispatch(event_data)
-        # TODO: flush at periodic intervals with another thread
-        self.callback_worker.flush()
         self.event_ct += 1
 
         '''
