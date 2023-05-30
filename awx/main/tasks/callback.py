@@ -37,8 +37,6 @@ class AWXProcessor(object):
     def __init__(self, _input, status_handler=None, event_handler=None, finished_callback=None, **kwargs):
         self._input = _input
 
-        self.quiet = kwargs.get('quiet')
-
         self.private_data_dir = kwargs.get('private_data_dir')
 
         self.config = MockConfig({})
@@ -74,9 +72,7 @@ class AWXProcessor(object):
             logger.warning(f'processor received malformed event {event_data}')
             return
 
-        if not self.quiet and 'stdout' in event_data:
-            print(event_data['stdout'])
-
+        # we always operate in quiet mode and never print to stdout like in runner
         self.event_handler(event_data)
 
     def artifacts_callback(self, artifacts_data):
@@ -84,10 +80,8 @@ class AWXProcessor(object):
         unstream_dir(self._input, length, self.artifact_dir)
 
     def run(self):
-        job_events_path = os.path.join(self.artifact_dir, 'job_events')
-        if not os.path.exists(job_events_path):
-            os.makedirs(job_events_path, 0o700, exist_ok=True)
-
+        # ansible-runner creates the job_events dir here, but we do not want to do that
+        # because the goal is to save events to database, not write things to disk
         while True:
             try:
                 line = self._input.readline()
