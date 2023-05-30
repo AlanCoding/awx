@@ -61,7 +61,7 @@ from awx.main.utils.common import (
 
 from awx.main.utils.reload import stop_local_services
 from awx.main.utils.pglock import advisory_lock
-from awx.main.tasks.receptor import get_receptor_ctl, worker_info, worker_cleanup, administrative_workunit_reaper, write_receptor_config
+from awx.main.tasks.receptor import get_receptor_ctl, worker_info, worker_cleanup, write_receptor_config
 from awx.main.consumers import emit_channel_notification
 from awx.main import analytics
 from awx.conf import settings_registry
@@ -499,8 +499,8 @@ def inspect_execution_nodes(instance_list):
                     execution_node_health_check.apply_async([hostname])
 
 
-@task(queue=get_task_queuename, bind_kwargs=['dispatch_time', 'worker_tasks'])
-def cluster_node_heartbeat(dispatch_time=None, worker_tasks=None):
+@task(queue=get_task_queuename)
+def cluster_node_heartbeat():
     logger.debug("Cluster node heartbeat task.")
     nowtime = now()
     instance_list = list(Instance.objects.filter(node_state__in=(Instance.States.READY, Instance.States.UNAVAILABLE, Instance.States.INSTALLED)))
@@ -578,42 +578,6 @@ def cluster_node_heartbeat(dispatch_time=None, worker_tasks=None):
                 logger.debug('Another instance has marked {} as lost'.format(other_inst.hostname))
             else:
                 logger.exception('Error marking {} as lost'.format(other_inst.hostname))
-
-
-@task(queue=get_task_queuename)
-def awx_receptor_workunit_reaper():
-    """
-    When an AWX job is launched via receptor, files such as status, stdin, and stdout are created
-    in a specific receptor directory. This directory on disk is a random 8 character string, e.g. qLL2JFNT
-    This is also called the work Unit ID in receptor, and is used in various receptor commands,
-    e.g. "work results qLL2JFNT"
-    After an AWX job executes, the receptor work unit directory is cleaned up by
-    issuing the work release command. In some cases the release process might fail, or
-    if AWX crashes during a job's execution, the work release command is never issued to begin with.
-    As such, this periodic task will obtain a list of all receptor work units, and find which ones
-    belong to AWX jobs that are in a completed state (status is canceled, error, or succeeded).
-    This task will call "work release" on each of these work units to clean up the files on disk.
-
-    Note that when we call "work release" on a work unit that actually represents remote work
-    both the local and remote work units are cleaned up.
-
-    Since we are cleaning up jobs that controller considers to be inactive, we take the added
-    precaution of calling "work cancel" in case the work unit is still active.
-    """
-    if not settings.RECEPTOR_RELEASE_WORK:
-        return
-    logger.debug("Checking for unreleased receptor work units")
-    receptor_ctl = get_receptor_ctl()
-    receptor_work_list = receptor_ctl.simple_command("work list")
-
-    unit_ids = [id for id in receptor_work_list]
-    jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids).exclude(status__in=ACTIVE_STATES)
-    for job in jobs_with_unreleased_receptor_units:
-        logger.debug(f"{job.log_format} is not active, reaping receptor work unit {job.work_unit_id}")
-        receptor_ctl.simple_command(f"work cancel {job.work_unit_id}")
-        receptor_ctl.simple_command(f"work release {job.work_unit_id}")
-
-    administrative_workunit_reaper(receptor_work_list)
 
 
 @task(queue=get_task_queuename)

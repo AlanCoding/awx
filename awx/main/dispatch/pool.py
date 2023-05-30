@@ -16,13 +16,10 @@ from queue import Full as QueueFull, Empty as QueueEmpty
 from django.conf import settings
 from django.db import connection as django_connection, connections
 from django.core.cache import cache as django_cache
-from django.utils.timezone import now as tz_now
 from django_guid import set_guid
 from jinja2 import Template
 import psutil
 
-from awx.main.models import UnifiedJob
-from awx.main.dispatch import reaper
 from awx.main.utils.common import convert_mem_str_to_bytes, get_mem_effective_capacity, log_excess_runtime
 
 if 'run_callback_receiver' in sys.argv:
@@ -429,18 +426,6 @@ class AutoscalePool(WorkerPool):
             idx = random.choice(range(len(self.workers)))
             self.write(idx, m)
 
-    def add_bind_kwargs(self, body):
-        bind_kwargs = body.pop('bind_kwargs', [])
-        body.setdefault('kwargs', {})
-        if 'dispatch_time' in bind_kwargs:
-            body['kwargs']['dispatch_time'] = tz_now().isoformat()
-        if 'worker_tasks' in bind_kwargs:
-            worker_tasks = {}
-            for worker in self.workers:
-                worker.calculate_managed_tasks()
-                worker_tasks[worker.pid] = list(worker.managed_tasks.keys())
-            body['kwargs']['worker_tasks'] = worker_tasks
-
     def up(self):
         if self.full:
             # if we can't spawn more workers, just toss this message into a
@@ -459,8 +444,6 @@ class AutoscalePool(WorkerPool):
         if 'guid' in body:
             set_guid(body['guid'])
         try:
-            if isinstance(body, dict) and body.get('bind_kwargs'):
-                self.add_bind_kwargs(body)
             if self.should_grow:
                 self.up()
             # we don't care about "preferred queue" round robin distribution, just

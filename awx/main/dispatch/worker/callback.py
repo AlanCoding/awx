@@ -22,6 +22,7 @@ from awx.main.utils.profiling import AWXProfiler
 from awx.main.utils.common import get_type_for_model
 import awx.main.analytics.subsystem_metrics as s_metrics
 from awx.main.dispatch.worker.base import AWXConsumerPG
+from awx.main.dispatch import reaper
 
 logger = logging.getLogger('awx.main.commands.run_callback_receiver')
 
@@ -62,36 +63,66 @@ class AWXJobMonitorPG(AWXConsumerPG):
             return
         return super().control(body)
 
-    # TODO: Adopt this reaper logic - reap jobs in running status not controlled by this
-    # # Run local reaper
-    # if worker_tasks is not None:
-    #     active_task_ids = []
-    #     for task_list in worker_tasks.values():
-    #         active_task_ids.extend(task_list)
-    #     reaper.reap(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
-    #     if max(len(task_list) for task_list in worker_tasks.values()) <= 1:
-    #         reaper.reap_waiting(instance=this_inst, excluded_uuids=active_task_ids, ref_time=datetime.fromisoformat(dispatch_time))
+    def stop(self, *args, **kwargs):
+        try:
+            reaper.reap_waiting(grace_period=0)
+        except Exception:
+            logger.exception(f'failed to reap waiting jobs for {settings.CLUSTER_HOST_ID}')
+        super().stop(*args, **kwargs)
 
-    # TODO: Adopt this reaper logic - reap jobs when their controller process dies
-    # # this probably gets absorbed into a more general condition
-    # try:
-    #     for j in UnifiedJob.objects.filter(celery_task_id=w.current_task['uuid']):
-    #         reaper.reap_job(j, 'failed')
-    # except Exception:
-    #     logger.exception('failed to reap job UUID {}'.format(w.current_task['uuid']))
+    def run_reconciliation(self):
+        """
+        When an AWX job is launched via receptor, files such as status, stdin, and stdout are created
+        in a subdir of /tmp/receptor/node_name/. This directory on disk is a random 8 character string, e.g. qLL2JFNT
+        This is also called the work Unit ID in receptor, and is used in various receptor commands,
+        e.g. "work results qLL2JFNT"
+        The receptor "work list" command will give this information.
 
-    # # previously starup tasks
-    # reaper.startup_reaping()
-    # reaper.reap_waiting(grace_period=0)
-    # # previously shutdown tasks
-    # try:
-    #     reaper.reap_waiting(this_inst, grace_period=0)
-    # except Exception:
-    #     logger.exception('failed to reap waiting jobs for {}'.format(this_inst.hostname))
+        This service manages a worker pool of job control processes.
+        These workers in the process pool run tasks with an associated uuid.
+
+        Jobs are tracked in the database with status, work_unit_id, and uuid
+        where those identifiers correspond to the other systems - worker pool and receptor
+        The job of this task is to compare all 3 systems and take appropriate action.
+
+        ---
+        If a work unit is present, finished, and the job complete normally, release the work unit.
+        If a job in the database has no active process reap it (but change this later)
+        """
+        logger.debug("Running periodic job reconciliation")
+
+        # clear out waiting jobs so that reaper logic does not have to deal with them
+        # TODO: instead of using a reference time, get queryset _before_ starting waiting
+        ref_time = tz_now()
+        self.start_new()
+
+        from awx.main.tasks.receptor import get_receptor_ctl, administrative_workunit_reaper
+
+        receptor_ctl = get_receptor_ctl()
+        receptor_work_list = receptor_ctl.simple_command("work list")
+
+        # Traditional reaping - active jobs without a corresponding control process
+        active_task_ids = []
+        for worker in self.pool.workers:
+            active_task_ids.extend(worker.managed_tasks.keys())
+        # TODO: If work unit exists, resume processing.
+        reaper.reap(excluded_uuids=active_task_ids, ref_time=ref_time, job_explanation='Job was marked as running but has no associated control process')
+
+        # work unit reaping
+        if not settings.RECEPTOR_RELEASE_WORK:
+            return
+        unit_ids = [id for id in receptor_work_list]
+        jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids).exclude(status__in=ACTIVE_STATES)
+        for job in jobs_with_unreleased_receptor_units:
+            logger.debug(f"{job.log_format} is not active, reaping receptor work unit {job.work_unit_id}")
+            receptor_ctl.simple_command(f"work release {job.work_unit_id}")
+
+        # piggyback on having the work list to do this efficiently
+        administrative_workunit_reaper(receptor_work_list)
 
     def run_periodic_tasks(self):
         super().run_periodic_tasks()
-        # TODO: run reconciliation method (replaces the reaper logic)
+        self.run_reconciliation()
 
 
 def job_stats_wrapup(job_identifier, event=None):
