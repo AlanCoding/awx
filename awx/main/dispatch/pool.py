@@ -223,7 +223,7 @@ class WorkerPool(object):
         self.name = settings.CLUSTER_HOST_ID
         self.pid = os.getpid()
         self.min_workers = min_workers or settings.JOB_EVENT_WORKERS
-        self.queue_size = queue_size or settings.JOB_EVENT_MAX_QUEUE_SIZE
+        self.queue_size = queue_size or settings.DISPATCHER_WORKER_MAX_QUEUE_SIZE
         self.workers = []
 
     def __len__(self):

@@ -58,7 +58,6 @@ ENV_BLOCKLIST = frozenset(
         'REST_API_URL',
         'REST_API_TOKEN',
         'MAX_EVENT_RES',
-        'CALLBACK_QUEUE',
         'CALLBACK_CONNECTION',
         'CACHE',
         'JOB_CALLBACK_DEBUG',

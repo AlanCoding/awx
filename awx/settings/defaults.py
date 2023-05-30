@@ -212,7 +212,7 @@ JOB_EVENT_BUFFER_SECONDS = 0.1
 JOB_EVENT_STATISTICS_INTERVAL = 5
 
 # The maximum size of the job event worker queue before requests are blocked
-JOB_EVENT_MAX_QUEUE_SIZE = 10000
+DISPATCHER_WORKER_MAX_QUEUE_SIZE = 10000
 
 # The number of job events to migrate per-transaction when moving from int -> bigint
 JOB_EVENT_MIGRATION_CHUNK_SIZE = 1000000
@@ -768,8 +768,6 @@ CONSTRUCTED_EXCLUDE_EMPTY_GROUPS = False
 # Note: These settings may be overridden by database settings.
 ACTIVITY_STREAM_ENABLED = True
 ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC = False
-
-CALLBACK_QUEUE = "callback_tasks"
 
 # Note: This setting may be overridden by database settings.
 ORG_ADMINS_CAN_SEE_ALL_USERS = True

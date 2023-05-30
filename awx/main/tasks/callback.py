@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import logging
 from collections import deque
@@ -9,13 +10,113 @@ from django_guid import get_guid
 from django.utils.functional import cached_property
 from django.db import connections
 
+# runner
+from ansible_runner.utils.streaming import unstream_dir
+
 # AWX
 from awx.main.redact import UriCleaner
 from awx.main.constants import MINIMAL_EVENTS, ANSIBLE_RUNNER_NEEDS_UPDATE_MESSAGE
 from awx.main.utils.update_model import update_model
 from awx.main.queue import CallbackQueueDispatcher
+from awx.main.dispatch.worker.callback import CallbackBrokerWorker
 
 logger = logging.getLogger('awx.main.tasks.callback')
+
+
+class MockConfig(object):
+    def __init__(self, settings):
+        self.settings = settings
+
+
+class AWXProcessor(object):
+    """
+    Forked from ansible-runner class, e2e89b0cac13e83f08d0a76a7d31939c742deff6
+    modified to fit local use case since then
+    """
+
+    def __init__(self, _input, status_handler=None, event_handler=None, finished_callback=None, **kwargs):
+        self._input = _input
+
+        self.quiet = kwargs.get('quiet')
+
+        self.private_data_dir = kwargs.get('private_data_dir')
+
+        self.config = MockConfig({})
+
+        # artifact_dir not customized in our use
+        project_artifacts = os.path.abspath(os.path.join(self.private_data_dir, 'artifacts'))
+        # ident is always passed and is always the job id
+        self.artifact_dir = os.path.join(project_artifacts, "{}".format(kwargs.get('ident')))
+
+        self.status_handler = status_handler
+        self.event_handler = event_handler
+        self.finished_callback = finished_callback
+
+        self.status = "unstarted"
+        self.rc = None
+
+    def status_callback(self, status_data):
+        self.status = status_data['status']
+        if self.status == 'starting':
+            self.config.command = status_data.get('command')
+            self.config.env = status_data.get('env')
+            self.config.cwd = status_data.get('cwd')
+
+        # we do not have any plugins by ansible-runner docs definition
+        self.status_handler(status_data, runner_config=self.config)
+
+    def event_callback(self, event_data):
+        # FIXME: this needs to be more defensive to not blow up on "malformed" events or new values it doesn't recognize
+        counter = event_data.get('counter')
+        uuid = event_data.get('uuid')
+
+        if not counter or not uuid:
+            logger.warning(f'processor received malformed event {event_data}')
+            return
+
+        if not self.quiet and 'stdout' in event_data:
+            print(event_data['stdout'])
+
+        self.event_handler(event_data)
+
+    def artifacts_callback(self, artifacts_data):
+        length = artifacts_data['zipfile']
+        unstream_dir(self._input, length, self.artifact_dir)
+
+    def run(self):
+        job_events_path = os.path.join(self.artifact_dir, 'job_events')
+        if not os.path.exists(job_events_path):
+            os.makedirs(job_events_path, 0o700, exist_ok=True)
+
+        while True:
+            try:
+                line = self._input.readline()
+                data = json.loads(line)
+            except (json.decoder.JSONDecodeError, IOError) as exc:
+                self.status_callback(
+                    {
+                        'status': 'error',
+                        'job_explanation': (f'Failed to JSON parse a line from worker stream. Error: {exc} Line with invalid JSON data: {line[:1000]}'),
+                    }
+                )
+                break
+
+            if 'status' in data:
+                self.status_callback(data)
+            elif 'zipfile' in data:
+                self.artifacts_callback(data)
+            elif 'eof' in data:
+                break
+            elif data.get('event') == 'keepalive':
+                # just ignore keepalives
+                continue
+            else:
+                self.event_callback(data)
+
+        if self.finished_callback is not None:
+            self.finished_callback(self)
+
+        return self.status, self.rc
 
 
 class RunnerCallback:
@@ -32,6 +133,7 @@ class RunnerCallback:
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
         self.wrapup_event_dispatched = False
         self.extra_update_fields = {}
+        self.callback_worker = CallbackBrokerWorker()
 
     def update_model(self, pk, _attempt=0, **updates):
         return update_model(self.model, pk, _attempt=0, _max_attempts=self.update_attempts, **updates)
@@ -163,7 +265,9 @@ class RunnerCallback:
             self.wrapup_event_dispatched = True
 
         event_data.setdefault(self.event_data_key, self.instance.id)
-        self.dispatcher.dispatch(event_data)
+        self.callback_worker.dispatch(event_data)
+        # TODO: flush at periodic intervals with another thread
+        self.callback_worker.flush()
         self.event_ct += 1
 
         '''
@@ -172,7 +276,7 @@ class RunnerCallback:
         if event_data.get('event_data', {}).get('artifact_data', {}):
             self.delay_update(artifacts=event_data['event_data']['artifact_data'])
 
-        return False
+        return False  # do not write event file, we processed it here
 
     def finished_callback(self, runner_obj):
         """

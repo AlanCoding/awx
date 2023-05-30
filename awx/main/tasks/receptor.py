@@ -27,6 +27,7 @@ from awx.main.utils.common import (
 )
 from awx.main.constants import MAX_ISOLATED_PATH_COLON_DELIMITER
 from awx.main.tasks.signals import signal_state, signal_callback, SignalExit
+from awx.main.tasks.callback import AWXProcessor
 from awx.main.models import Instance, InstanceLink, UnifiedJob
 from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.publish import task
@@ -457,15 +458,16 @@ class AWXReceptorJob:
 
     @cleanup_new_process
     def processor(self, resultfile):
-        return ansible_runner.interface.run(
-            streamer='process',
+        ret = AWXProcessor(
             quiet=True,
             _input=resultfile,
             event_handler=self.task.runner_callback.event_handler,
             finished_callback=self.task.runner_callback.finished_callback,
             status_handler=self.task.runner_callback.status_handler,
             **self.runner_params,
-        )
+        ).run()
+        self.task.runner_callback.callback_worker.flush()
+        return ret
 
     @property
     def receptor_params(self):

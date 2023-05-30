@@ -93,16 +93,10 @@ class AWXConsumerBase(object):
         else:
             logger.error('unrecognized control message: {}'.format(control))
 
-    def process_task(self, body):
+    def dispatch_task(self, body):
         if isinstance(body, dict):
             body['time_ack'] = time.time()
 
-        if 'control' in body:
-            try:
-                return self.control(body)
-            except Exception:
-                logger.exception(f"Exception handling control message: {body}")
-                return
         if len(self.pool):
             if "uuid" in body and body['uuid']:
                 try:
@@ -115,6 +109,15 @@ class AWXConsumerBase(object):
             queue = 0
         self.pool.write(queue, body)
         self.total_messages += 1
+
+    def process_task(self, body):
+        if 'control' in body:
+            try:
+                return self.control(body)
+            except Exception:
+                logger.exception(f"Exception handling control message: {body}")
+                return
+        return self.dispatch_task(body)
 
     @log_excess_runtime(logger)
     def record_statistics(self):
@@ -137,16 +140,6 @@ class AWXConsumerBase(object):
         logger.warning('received {}, stopping'.format(signame(signum)))
         self.worker.on_stop()
         raise SystemExit()
-
-
-class AWXConsumerRedis(AWXConsumerBase):
-    def run(self, *args, **kwargs):
-        super(AWXConsumerRedis, self).run(*args, **kwargs)
-        self.worker.on_start()
-
-        while True:
-            logger.debug(f'{os.getpid()} is alive')
-            time.sleep(60)
 
 
 class AWXConsumerPG(AWXConsumerBase):

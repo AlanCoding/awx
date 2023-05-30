@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import signal
@@ -20,10 +19,56 @@ from awx.main.models import JobEvent, AdHocCommandEvent, ProjectUpdateEvent, Inv
 from awx.main.constants import ACTIVE_STATES
 from awx.main.models.events import emit_event_detail
 from awx.main.utils.profiling import AWXProfiler
+from awx.main.utils.common import get_type_for_model
 import awx.main.analytics.subsystem_metrics as s_metrics
-from .base import BaseWorker
+from .base import AWXConsumerPG
 
 logger = logging.getLogger('awx.main.commands.run_callback_receiver')
+
+
+class AWXJobMonitorPG(AWXConsumerPG):
+    def process_task(self, body):
+        if 'control' in body:
+            try:
+                return self.control(body)
+            except Exception:
+                logger.exception(f"Exception handling control message: {body}")
+                return
+        # Unlike base class, never run dispatch_task directly
+
+    def start_new(self):
+        for job in UnifiedJob.objects.filter(controler_node=settings.CLUSTER_HOST_ID, status='waiting'):
+            job.status = 'running'
+            # from task manager start_task originally, body building from apply_async
+            cls = job._get_task_class()
+            # from pre_start, TODO: refactor this into the BaseTask itself
+            from awx.main.utils.encryption import encrypt_dict, decrypt_field  # NOQA
+            import json
+            from awx.main.tasks.system import handle_work_error, handle_work_success
+
+            needed = self.get_passwords_needed_to_start()
+            try:
+                start_args = json.loads(decrypt_field(self, 'start_args'))
+            except Exception:
+                start_args = None
+
+            if start_args in (None, ''):
+                start_args = {}
+
+            opts = dict([(field, start_args.get(field, '')) for field in needed])
+
+            body = {'uuid': job.celery_task_id, 'args': job.id, 'kwargs': opts, 'task': cls.name}
+            task_actual = {'type': get_type_for_model(type(job)), 'id': job.id}
+            body['callbacks'] = [{'task': handle_work_success.name, 'kwargs': {'task_actual': task_actual}}]
+            body['errbacks'] = [{'task': handle_work_error.name, 'kwargs': {'task_actual': task_actual}}]
+
+            self.dispatch_task(body)
+
+    def control(self, body):
+        control = body.get('control')
+        if control == 'start':
+            self.start_new()
+        return super().control(body)
 
 
 def job_stats_wrapup(job_identifier, event=None):
@@ -52,7 +97,7 @@ def job_stats_wrapup(job_identifier, event=None):
         logger.exception('Worker failed to save stats or emit notifications: Job {}'.format(job_identifier))
 
 
-class CallbackBrokerWorker(BaseWorker):
+class CallbackBrokerWorker:
     """
     A worker implementation that deserializes callback event data and persists
     it into the database.
@@ -63,19 +108,19 @@ class CallbackBrokerWorker(BaseWorker):
 
     MAX_RETRIES = 2
     INDIVIDUAL_EVENT_RETRIES = 3
-    last_stats = time.time()
-    last_flush = time.time()
     total = 0
     last_event = ''
     prof = None
 
     def __init__(self):
         self.buff = {}
-        self.redis = redis.Redis.from_url(settings.BROKER_URL)
+        self.last_stats = time.time()
+        self.last_flush = time.time()
         self.subsystem_metrics = s_metrics.Metrics(auto_pipe_execute=False)
         self.queue_pop = 0
-        self.queue_name = settings.CALLBACK_QUEUE
         self.prof = AWXProfiler("CallbackBrokerWorker")
+        # TODO: move this into some kind of caller method
+        self.redis = redis.Redis.from_url(settings.BROKER_URL)
         for key in self.redis.keys('awx_callback_receiver_statistics_*'):
             self.redis.delete(key)
 
@@ -84,33 +129,22 @@ class CallbackBrokerWorker(BaseWorker):
         """This needs to be obtained after forking, or else it will give the parent process"""
         return os.getpid()
 
-    def read(self, queue):
-        try:
-            res = self.redis.blpop(self.queue_name, timeout=1)
-            if res is None:
-                return {'event': 'FLUSH'}
-            self.total += 1
-            self.queue_pop += 1
-            self.subsystem_metrics.inc('callback_receiver_events_popped_redis', 1)
-            self.subsystem_metrics.inc('callback_receiver_events_in_memory', 1)
-            return json.loads(res[1])
-        except redis.exceptions.RedisError:
-            logger.exception("encountered an error communicating with redis")
-            time.sleep(1)
-        except (json.JSONDecodeError, KeyError):
-            logger.exception("failed to decode JSON message from redis")
-        finally:
-            self.record_statistics()
-            self.record_read_metrics()
+    # TODO: still need to call out to these after every 1 second of idleness
+    # self.record_statistics()
+    # self.record_read_metrics()
 
-        return {'event': 'FLUSH'}
+    def dispatch(self, event_data):
+        """Minimal wrapper around perform_work to preserve logic of old read method"""
+        self.total += 1
+        self.queue_pop += 1
+        self.subsystem_metrics.inc('callback_receiver_events_popped_redis', 1)
+        self.subsystem_metrics.inc('callback_receiver_events_in_memory', 1)
+        self.perform_work(event_data)
 
     def record_read_metrics(self):
         if self.queue_pop == 0:
             return
         if self.subsystem_metrics.should_pipe_execute() is True:
-            queue_size = self.redis.llen(self.queue_name)
-            self.subsystem_metrics.set('callback_receiver_events_queue_size_redis', queue_size)
             self.subsystem_metrics.pipe_execute()
             self.queue_pop = 0
 

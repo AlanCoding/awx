@@ -22,6 +22,8 @@ class Control(object):
             raise RuntimeError('{} must be in {}'.format(service, self.services))
         self.service = service
         self.queuename = host or get_task_queuename()
+        if self.service == 'callback_receiver':
+            self.queuename += '_job'
 
     def status(self, *args, **kwargs):
         r = redis.Redis.from_url(settings.BROKER_URL)

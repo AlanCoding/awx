@@ -44,6 +44,7 @@ from awx.main.signals import disable_activity_stream
 from awx.main.constants import ACTIVE_STATES
 from awx.main.scheduler.dependency_graph import DependencyGraph
 from awx.main.scheduler.task_manager_models import TaskManagerModels
+from awx.main.dispatch.control import Control
 import awx.main.analytics.subsystem_metrics as s_metrics
 from awx.main.utils import decrypt_field
 
@@ -554,17 +555,9 @@ class TaskManager(TaskBase):
 
         # apply_async does a NOTIFY to the channel dispatcher is listening to
         # postgres will treat this as part of the transaction, which is what we want
+        # TODO: de-duplicate, only send one for each controller_node
         if task.status != 'failed' and type(task) is not WorkflowJob:
-            task_actual = {'type': get_type_for_model(type(task)), 'id': task.id}
-            task_cls = task._get_task_class()
-            task_cls.apply_async(
-                [task.pk],
-                opts,
-                queue=task.get_queue_name(),
-                uuid=task.celery_task_id,
-                callbacks=[{'task': handle_work_success.name, 'kwargs': {'task_actual': task_actual}}],
-                errbacks=[{'task': handle_work_error.name, 'kwargs': {'task_actual': task_actual}}],
-            )
+            Control('callback_receiver', host=task.controller_node).control('start')
 
         # In exception cases, like a job failing pre-start checks, we send the websocket status message
         # for jobs going into waiting, we omit this because of performance issues, as it should go to running quickly

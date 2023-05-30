@@ -1567,7 +1567,7 @@ class UnifiedJob(
         return r
 
     def get_queue_name(self):
-        return self.controller_node or self.execution_node or get_task_queuename()
+        return (self.controller_node or self.execution_node or get_task_queuename()) + '_job'
 
     @property
     def is_container_group_task(self):
