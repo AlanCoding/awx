@@ -93,16 +93,11 @@ class AWXConsumerBase(object):
         else:
             logger.error('unrecognized control message: {}'.format(control))
 
-    def process_task(self, body):
+    def dispatch_task(self, body):
+        """This will place the given body into a worker queue"""
         if isinstance(body, dict):
             body['time_ack'] = time.time()
 
-        if 'control' in body:
-            try:
-                return self.control(body)
-            except Exception:
-                logger.exception(f"Exception handling control message: {body}")
-                return
         if len(self.pool):
             if "uuid" in body and body['uuid']:
                 try:
@@ -115,6 +110,16 @@ class AWXConsumerBase(object):
             queue = 0
         self.pool.write(queue, body)
         self.total_messages += 1
+
+    def process_task(self, body):
+        """Routes the task details in body as either a control task or a task-task"""
+        if 'control' in body:
+            try:
+                return self.control(body)
+            except Exception:
+                logger.exception(f"Exception handling control message: {body}")
+                return
+        self.dispatch_task(body)
 
     @log_excess_runtime(logger)
     def record_statistics(self):
@@ -163,6 +168,12 @@ class AWXConsumerPG(AWXConsumerBase):
         self.listen_cumulative_time = 0.0
 
     def run_periodic_tasks(self):
+        """
+        Run general periodic logic, and return maximum time in seconds before
+        the next requested run
+        This may be called more often than that when events are consumed
+        so this should be very efficient in that
+        """
         self.record_statistics()  # maintains time buffer in method
 
         current_time = time.time()
@@ -183,6 +194,11 @@ class AWXConsumerPG(AWXConsumerBase):
             self.listen_cumulative_time = 0.0
             self.last_metrics_gather = current_time
 
+        self.pg_is_down = False
+        self.listen_start = time.time()
+
+        return 5
+
     def run(self, *args, **kwargs):
         super(AWXConsumerPG, self).run(*args, **kwargs)
 
@@ -197,14 +213,12 @@ class AWXConsumerPG(AWXConsumerBase):
                     if init is False:
                         self.worker.on_start()
                         init = True
-                    self.listen_start = time.time()
-                    for e in conn.events(yield_timeouts=True):
+                    timeout = self.run_periodic_tasks()
+                    for e in conn.events(select_timeout=timeout, yield_timeouts=True):
                         self.listen_cumulative_time += time.time() - self.listen_start
                         if e is not None:
                             self.process_task(json.loads(e.payload))
-                        self.run_periodic_tasks()
-                        self.pg_is_down = False
-                        self.listen_start = time.time()
+                        timeout = self.run_periodic_tasks()
                     if self.should_stop:
                         return
             except psycopg.InterfaceError:
