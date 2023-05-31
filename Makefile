@@ -301,6 +301,7 @@ check: black
 api-lint:
 	BLACK_ARGS="--check" $(MAKE) black
 	flake8 awx
+	isort awx/main -c
 	yamllint -s .
 
 ## Run egg_info_dev to generate awx.egg-info for development.
