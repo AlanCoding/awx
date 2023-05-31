@@ -480,6 +480,9 @@ class AWXReceptorJob:
         while True:
             time.sleep(1)
             self.task.runner_callback.callback_worker.flush()
+            # Record metrics
+            self.task.runner_callback.callback_worker.record_statistics()
+            self.task.runner_callback.callback_worker.record_read_metrics()
 
     @property
     def receptor_params(self):

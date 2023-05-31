@@ -194,15 +194,10 @@ class CallbackBrokerWorker:
         """This needs to be obtained after forking, or else it will give the parent process"""
         return os.getpid()
 
-    # TODO: still need to call out to these after every 1 second of idleness
-    # self.record_statistics()
-    # self.record_read_metrics()
-
     def dispatch(self, event_data):
         """Minimal wrapper around perform_work to preserve logic of old read method"""
         self.total += 1
         self.queue_pop += 1
-        self.subsystem_metrics.inc('callback_receiver_events_popped_redis', 1)
         self.subsystem_metrics.inc('callback_receiver_events_in_memory', 1)
         self.perform_work(event_data)
 
