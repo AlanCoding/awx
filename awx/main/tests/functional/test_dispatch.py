@@ -13,6 +13,7 @@ from awx.main.dispatch import reaper
 from awx.main.dispatch.pool import StatefulPoolWorker, WorkerPool, AutoscalePool
 from awx.main.dispatch.publish import task
 from awx.main.dispatch.worker import BaseWorker, TaskWorker
+from awx.main.dispatch.periodic import Scheduler
 
 
 '''
@@ -439,3 +440,28 @@ class TestJobReaper(object):
         assert job.started > ref_time
         assert job.status == 'running'
         assert job.job_explanation == ''
+
+
+@pytest.mark.django_db
+class TestScheduler:
+    def test_too_many_schedules_freak_out(self):
+        with pytest.raises(RuntimeError):
+            Scheduler({'job1': {'schedule': datetime.timedelta(seconds=1)}, 'job2': {'schedule': datetime.timedelta(seconds=1)}})
+
+    def test_spread_out(self):
+        scheduler = Scheduler(
+            {
+                'job1': {'schedule': datetime.timedelta(seconds=16)},
+                'job2': {'schedule': datetime.timedelta(seconds=16)},
+                'job3': {'schedule': datetime.timedelta(seconds=16)},
+                'job4': {'schedule': datetime.timedelta(seconds=16)},
+            }
+        )
+        assert [job.offset for job in scheduler.jobs] == [0, 4, 8, 12]
+
+    def test_missed_schedule(self, mocker):
+        scheduler = Scheduler({'job1': {'schedule': datetime.timedelta(seconds=10)}})
+        assert scheduler.jobs[0].missed_runs == 0
+        mocker.patch('awx.main.dispatch.periodic.time.time', return_value=scheduler.global_start + 50)
+        scheduler.get_and_mark_pending()
+        assert scheduler.jobs[0].missed_runs > 1

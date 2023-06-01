@@ -26,7 +26,7 @@ class Job:
         new_index = int((relative_time - self.offset) / self.interval)
         if new_index > self.index + 1:
             logger.warning(f'Missed {new_index - self.index} schedules of {self.name}')
-            self.missed_runs += 1
+            self.missed_runs += new_index - self.index
         self.index = new_index
 
 
@@ -35,7 +35,7 @@ class Scheduler:
         """
         Expects a schedule in the form of a dictionary like
         {
-            'job1': {'interval': timedelta(seconds=50), 'other': 'stuff'}
+            'job1': {'schedule': timedelta(seconds=50), 'other': 'stuff'}
         }
         This can give pending jobs at a given time and time until the next job.
         Only the inverval from the values are used for scheduling,
