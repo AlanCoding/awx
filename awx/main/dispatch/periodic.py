@@ -1,57 +1,72 @@
 import logging
-import os
 import time
-from multiprocessing import Process
 
-from django.conf import settings
-from django.db import connections
-from schedule import Scheduler
-from django_guid import set_guid
-from django_guid.utils import generate_guid
-
-from awx.main.dispatch.worker import TaskWorker
-from awx.main.utils.db import set_connection_name
 
 logger = logging.getLogger('awx.main.dispatch.periodic')
 
 
-class Scheduler(Scheduler):
-    def run_continuously(self):
-        idle_seconds = max(1, min(self.jobs).period.total_seconds() / 2)
+class Job:
+    def __init__(self, name: str, data: dict):
+        self.name = name
+        self.data = data
+        self.interval = int(data['schedule'].total_seconds())
+        self.offset = None
+        self.index = 0
+        self.missed_runs = 0
 
-        def run():
-            ppid = os.getppid()
-            logger.warning('periodic beat started')
+    @property
+    def next_run(self):
+        """
+        Gives the time until the next run with t=0 being the global_start
+        of the scheduler class
+        """
+        return (self.index + 1) * self.interval + self.offset
 
-            set_connection_name('periodic')  # set application_name to distinguish from other dispatcher processes
-
-            while True:
-                if os.getppid() != ppid:
-                    # if the parent PID changes, this process has been orphaned
-                    # via e.g., segfault or sigkill, we should exit too
-                    pid = os.getpid()
-                    logger.warning(f'periodic beat exiting gracefully pid:{pid}')
-                    raise SystemExit()
-                try:
-                    for conn in connections.all():
-                        # If the database connection has a hiccup, re-establish a new
-                        # connection
-                        conn.close_if_unusable_or_obsolete()
-                    set_guid(generate_guid())
-                    self.run_pending()
-                except Exception:
-                    logger.exception('encountered an error while scheduling periodic tasks')
-                time.sleep(idle_seconds)
-
-        process = Process(target=run)
-        process.daemon = True
-        process.start()
+    def mark_run(self, relative_time):
+        new_index = (relative_time - self.offset) // self.interval
+        if new_index > self.index + 1:
+            logger.warning(f'Missed {new_index - self.index} schedules of {self.name}')
+            self.missed_runs += 1
+        self.index = new_index
 
 
-def run_continuously():
-    scheduler = Scheduler()
-    for task in settings.CELERYBEAT_SCHEDULE.values():
-        apply_async = TaskWorker.resolve_callable(task['task']).apply_async
-        total_seconds = task['schedule'].total_seconds()
-        scheduler.every(total_seconds).seconds.do(apply_async)
-    scheduler.run_continuously()
+class Scheduler:
+    def __init__(self, schedule):
+        """
+        Expects a schedule in the form of a dictionary like
+        {'job1': {'task': 'foo.bar', 'interval': timedelta(seconds=50)}}
+        The goal is to return pending tasks at a given time and time until
+        the next job to be run.
+        The keys are ignored, only the inverval from the values are used.
+        """
+        self.jobs = [Job(name, data) for name, data in schedule.items()]
+        min_interval = min(job.interval for job in self.jobs)
+        num_jobs = len(self.jobs)
+
+        # even space out jobs over the base interval
+        for i, job in enumerate(self.jobs):
+            job.offset = (i * min_interval) // num_jobs
+
+        # internally times are all referenced relative to startup time, add grace period
+        self.global_start = int(time.time() + 2)
+
+    def get_and_mark_pending(self):
+        relative_time = time.time() - self.global_start
+        to_run = []
+        for job in self.jobs:
+            if job.next_run <= relative_time:
+                to_run.append(job)
+                logger.debug(f'scheduler found {job.name} to run, {relative_time - job.next_run} seconds after target')
+            job.mark_run(relative_time)
+        return to_run
+
+    def time_until_next_run(self):
+        relative_time = time.time() - self.global_start
+        next_job = min(self.jobs, key=lambda j: j.next_run)
+        delta = next_job.next_run - relative_time
+        if delta <= 0.1:
+            # careful not to give 0 or negative values to the select timeout, which has unclear interpretation
+            logger.warning(f'Scheduler next run of {next_job.name} is {-delta} seconds in the past')
+            return 0.1
+        logger.debug(f'Scheduler next run is {next_job.name} in {delta} seconds')
+        return delta

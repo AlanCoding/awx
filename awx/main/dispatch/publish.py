@@ -80,6 +80,7 @@ class task:
                 If a task is submitted to a multiprocessing pool, skipping pg_notify, this might be used directly
                 """
                 task_id = uuid or str(uuid4())
+                args = args or []
                 kwargs = kwargs or {}
                 obj = {'uuid': task_id, 'args': args, 'kwargs': kwargs, 'task': cls.name, 'time_pub': time.time()}
                 guid = get_guid()
@@ -92,7 +93,6 @@ class task:
 
             @classmethod
             def apply_async(cls, args=None, kwargs=None, queue=None, uuid=None, **kw):
-                args = args or []
                 queue = queue or getattr(cls.queue, 'im_func', cls.queue)
                 if not queue:
                     msg = f'{cls.name}: Queue value required and may not be None'
@@ -126,4 +126,5 @@ class task:
         setattr(fn, 'name', cls.name)
         setattr(fn, 'apply_async', cls.apply_async)
         setattr(fn, 'delay', cls.delay)
+        setattr(fn, 'get_async_body', cls.get_async_body)
         return fn

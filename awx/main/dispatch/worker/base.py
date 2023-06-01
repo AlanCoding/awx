@@ -11,11 +11,13 @@ import psycopg
 import time
 from uuid import UUID
 from queue import Empty as QueueEmpty
+from datetime import timedelta
 
 from django import db
 from django.conf import settings
 
 from awx.main.dispatch.pool import WorkerPool
+from awx.main.dispatch.periodic import Scheduler
 from awx.main.dispatch import pg_bus_conn
 from awx.main.utils.common import log_excess_runtime
 from awx.main.utils.db import set_connection_name
@@ -155,7 +157,7 @@ class AWXConsumerRedis(AWXConsumerBase):
 
 
 class AWXConsumerPG(AWXConsumerBase):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, schedule=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.pg_max_wait = settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE
         # if no successful loops have ran since startup, then we should fail right away
@@ -165,6 +167,24 @@ class AWXConsumerPG(AWXConsumerBase):
         self.last_cleanup = init_time
         self.subsystem_metrics = s_metrics.Metrics(auto_pipe_execute=False)
         self.last_metrics_gather = init_time
+        self.listen_cumulative_time = 0.0
+        if schedule:
+            schedule = schedule.copy()
+        else:
+            schedule = {}
+        # add control tasks to be ran at regular schedules
+        # NOTE: if we run out of database connections, it is important to still run cleanup
+        # so that we scale down workers and free up connections
+        schedule['pool_cleanup'] = {'control': self.pool.cleanup, 'schedule': timedelta(seconds=60)}
+        # record subsystem metrics for the dispatcher
+        schedule['metrics_gather'] = {'control': self.record_metrics, 'schedule': timedelta(seconds=20)}
+        self.scheduler = Scheduler(schedule)
+
+    def record_metrics(self):
+        current_time = time.time()
+        self.pool.produce_subsystem_metrics(self.subsystem_metrics)
+        self.subsystem_metrics.set('dispatcher_availability', self.listen_cumulative_time / (current_time - self.last_metrics_gather))
+        self.subsystem_metrics.pipe_execute()
         self.listen_cumulative_time = 0.0
 
     def run_periodic_tasks(self):
@@ -176,28 +196,21 @@ class AWXConsumerPG(AWXConsumerBase):
         """
         self.record_statistics()  # maintains time buffer in method
 
-        current_time = time.time()
-        if current_time - self.last_cleanup > 60:  # same as cluster_node_heartbeat
-            # NOTE: if we run out of database connections, it is important to still run cleanup
-            # so that we scale down workers and free up connections
-            self.pool.cleanup()
-            self.last_cleanup = current_time
-
-        # record subsystem metrics for the dispatcher
-        if current_time - self.last_metrics_gather > 20:
-            try:
-                self.pool.produce_subsystem_metrics(self.subsystem_metrics)
-                self.subsystem_metrics.set('dispatcher_availability', self.listen_cumulative_time / (current_time - self.last_metrics_gather))
-                self.subsystem_metrics.pipe_execute()
-            except Exception:
-                logger.exception(f"encountered an error trying to store {self.name} metrics")
-            self.listen_cumulative_time = 0.0
-            self.last_metrics_gather = current_time
+        for job in self.scheduler.get_and_mark_pending():
+            if 'control' in job.data:
+                try:
+                    job.data['control']()
+                except Exception:
+                    logger.exception(f'encountered an error trying to run control task {job.name}')
+            elif 'task' in job.data:
+                body = self.worker.resolve_callable(job.data['task']).get_async_body()
+                # bypasses pg_notify for scheduled tasks
+                self.dispatch_task(body)
 
         self.pg_is_down = False
         self.listen_start = time.time()
 
-        return 5
+        return self.scheduler.time_until_next_run()
 
     def run(self, *args, **kwargs):
         super(AWXConsumerPG, self).run(*args, **kwargs)
@@ -213,12 +226,12 @@ class AWXConsumerPG(AWXConsumerBase):
                     if init is False:
                         self.worker.on_start()
                         init = True
-                    timeout = self.run_periodic_tasks()
-                    for e in conn.events(select_timeout=timeout, yield_timeouts=True):
+                    conn.select_timeout = self.run_periodic_tasks()
+                    for e in conn.events(yield_timeouts=True):
                         self.listen_cumulative_time += time.time() - self.listen_start
                         if e is not None:
                             self.process_task(json.loads(e.payload))
-                        timeout = self.run_periodic_tasks()
+                        conn.select_timeout = self.run_periodic_tasks()
                     if self.should_stop:
                         return
             except psycopg.InterfaceError:
