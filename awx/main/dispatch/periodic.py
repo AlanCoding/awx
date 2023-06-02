@@ -12,7 +12,13 @@ class Job:
     Class representing schedules, very loosely modeled after python schedule library
     the idea of this class is to:
      - only deal in relative times (time since the scheduler global start)
-     - only deal in integers for target runtimes, but float for current relative time
+     - only deal in integer math for target runtimes, but float for current relative time
+
+    Missed schedule policy:
+    Invariant target times are maintained, meaning that if interval=10s offset=0
+    and it runs at t=7s, then it calls for next run in 3s.
+    However, if a complete interval has passed, that is counted as a missed run,
+    and missed runs are abandoned (no catch-up runs).
     """
 
     def __init__(self, name: str, data: dict):

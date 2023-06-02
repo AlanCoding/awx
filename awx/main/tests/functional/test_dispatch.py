@@ -501,10 +501,11 @@ class TestScheduler:
                 'jobd': {'schedule': datetime.timedelta(seconds=20)},
             }
         )
-        current_time = scheduler.global_start + 105.3
+        rel_time = 119.9  # slightly under the 6th 20-second bin, to avoid offset problems
+        current_time = scheduler.global_start + rel_time
         mocker.patch('awx.main.dispatch.periodic.time.time', return_value=current_time - 1.0e-8)
-        self.get_job(scheduler, 'jobb').mark_run(105.3)
-        self.get_job(scheduler, 'jobd').mark_run(105.3 - 20.0)
+        self.get_job(scheduler, 'jobb').mark_run(rel_time)
+        self.get_job(scheduler, 'jobd').mark_run(rel_time - 20.0)
 
         output = scheduler.debug()
         data = yaml.safe_load(output)
@@ -512,4 +513,4 @@ class TestScheduler:
         assert data['schedule_list']['joba']['missed_runs'] == 4
         assert data['schedule_list']['jobd']['missed_runs'] == 3
         assert data['schedule_list']['jobd']['completed_runs'] == 1
-        assert data['schedule_list']['jobb']['next_run_in_seconds'] > 49.0
+        assert data['schedule_list']['jobb']['next_run_in_seconds'] > 25.0
