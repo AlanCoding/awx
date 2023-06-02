@@ -16,21 +16,24 @@ class Job:
     """
 
     def __init__(self, name: str, data: dict):
-        self.name = name
-        self.data = data
+        # parameters need for schedule computation
         self.interval = int(data['schedule'].total_seconds())
         self.offset = 0  # offset relative to start time this schedule begins
-        self.completed_runs = 0  # number of times schedule is known to run
         self.index = 0  # number of periods of the schedule that has passed
-        self.last_run = None  # time of last run
+
+        # parameters that do not affect scheduling logic
+        self.last_run = None  # time of last run, only used for debug
+        self.completed_runs = 0  # number of times schedule is known to run
+        self.name = name
+        self.data = data  # used by caller to know what to run
 
     @property
     def next_run(self):
-        """
-        Gives the time until the next run with t=0 being the global_start
-        of the scheduler class
-        """
+        "Time until the next run with t=0 being the global_start of the scheduler class"
         return (self.index + 1) * self.interval + self.offset
+
+    def due_to_run(self, relative_time):
+        return bool(self.next_run <= relative_time)
 
     def expected_runs(self, relative_time):
         return int((relative_time - self.offset) / self.interval)
@@ -44,12 +47,10 @@ class Job:
         self.index = new_index
 
     def missed_runs(self, relative_time):
-        "number of times job was supposed to ran but failed to, only used for debug"
+        "Number of times job was supposed to ran but failed to, only used for debug"
         missed_ct = self.expected_runs(relative_time) - self.completed_runs
-        if missed_ct == 0:
-            return 0
         # if this is currently due to run do not count that as a missed run
-        if (not self.last_run) or (relative_time - self.last_run >= self.interval):
+        if missed_ct and self.due_to_run(relative_time):
             missed_ct -= 1
         return missed_ct
 
@@ -57,12 +58,11 @@ class Job:
 class Scheduler:
     def __init__(self, schedule):
         """
-        Expects a schedule in the form of a dictionary like
+        Expects schedule in the form of a dictionary like
         {
             'job1': {'schedule': timedelta(seconds=50), 'other': 'stuff'}
         }
-        This can give pending jobs at a given time and time until the next job.
-        Only the inverval from the values are used for scheduling,
+        Only the schedule nearest-second value is used for scheduling,
         the rest of the data is for use by the caller to know what to run.
         """
         self.jobs = [Job(name, data) for name, data in schedule.items()]
@@ -86,7 +86,7 @@ class Scheduler:
         relative_time = time.time() - self.global_start
         to_run = []
         for job in self.jobs:
-            if job.next_run <= relative_time:
+            if job.due_to_run(relative_time):
                 to_run.append(job)
                 logger.debug(f'scheduler found {job.name} to run, {relative_time - job.next_run} seconds after target')
                 job.mark_run(relative_time)
@@ -112,7 +112,7 @@ class Scheduler:
         relative_time = time.time() - self.global_start
         data['started_time'] = start_time
         data['current_time'] = now
-        data['current_time_relative'] = relative_time
+        data['current_time_relative'] = round(relative_time, 3)
         data['total_schedules'] = len(self.jobs)
 
         data['schedule_list'] = dict(
@@ -120,8 +120,8 @@ class Scheduler:
                 (
                     job.name,
                     dict(
-                        last_run_seconds_ago=relative_time - job.last_run if job.last_run else None,
-                        next_run_in_seconds=job.next_run - relative_time,
+                        last_run_seconds_ago=round(relative_time - job.last_run, 3) if job.last_run else None,
+                        next_run_in_seconds=round(job.next_run - relative_time, 3),
                         offset_in_seconds=job.offset,
                         completed_runs=job.completed_runs,
                         missed_runs=job.missed_runs(relative_time),
@@ -131,18 +131,3 @@ class Scheduler:
             ]
         )
         return yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
-
-        # tmpl = Template(
-        #     'Scheduler status\n'
-        #     'started: {{ start_time }}\n'
-        #     'current: {{ dt }}, relative_time={{ "%.4f"|format(relative_time) }}s \n'
-        #     'total of {{ jobs | length }} schedules\n'
-        #     '{% for job in jobs %}'
-        #     '  {{ job.name }}: '
-        #     '{% if not job.last_run %}never ran{% else %}last ran {{ "%.6f"|format(relative_time - job.last_run) }}s ago{% endif %}, '
-        #     '{% if job.next_run > relative_time %}will run in {{ "%.6f"|format(job.next_run - relative_time) }}s'
-        #     '{% else %}should run now, past target by {{ "%.4f"|format(relative_time - job.next_run) }}s{% endif %}\n'
-        #     '    - every={{ job.interval }}s offset={{ job.offset }}s finished={{ job.completed_runs }} missed={{ job.missed_runs(relative_time) }}\n'
-        #     '{% endfor %}'
-        # )
-        # return tmpl.render(jobs=sorted(self.jobs, key=lambda job: job.interval), dt=now, relative_time=relative_time, start_time=start_time)
