@@ -40,6 +40,9 @@ class Control(object):
     def cancel(self, task_ids, *args, **kwargs):
         return self.control_with_reply('cancel', *args, extra_data={'task_ids': task_ids}, **kwargs)
 
+    def schedule(self, *args, **kwargs):
+        return self.control_with_reply('schedule', *args, **kwargs)
+
     @classmethod
     def generate_reply_queue_name(cls):
         return f"reply_to_{str(uuid.uuid4()).replace('-','_')}"

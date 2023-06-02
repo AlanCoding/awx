@@ -66,10 +66,12 @@ class AWXConsumerBase(object):
     def control(self, body):
         logger.warning(f'Received control signal:\n{body}')
         control = body.get('control')
-        if control in ('status', 'running', 'cancel'):
+        if control in ('status', 'schedule', 'running', 'cancel'):
             reply_queue = body['reply_to']
             if control == 'status':
                 msg = '\n'.join([self.listening_on, self.pool.debug()])
+            if control == 'schedule':
+                msg = self.scheduler.debug()
             elif control == 'running':
                 msg = []
                 for worker in self.pool.workers:

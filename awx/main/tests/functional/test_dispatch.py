@@ -3,6 +3,7 @@ import multiprocessing
 import random
 import signal
 import time
+import yaml
 from unittest import mock
 
 from django.utils.timezone import now as tz_now
@@ -461,7 +462,54 @@ class TestScheduler:
 
     def test_missed_schedule(self, mocker):
         scheduler = Scheduler({'job1': {'schedule': datetime.timedelta(seconds=10)}})
-        assert scheduler.jobs[0].missed_runs == 0
+        assert scheduler.jobs[0].missed_runs(time.time() - scheduler.global_start) == 0
         mocker.patch('awx.main.dispatch.periodic.time.time', return_value=scheduler.global_start + 50)
         scheduler.get_and_mark_pending()
-        assert scheduler.jobs[0].missed_runs > 1
+        assert scheduler.jobs[0].missed_runs(50) > 1
+
+    def test_advance_schedule(self, mocker):
+        scheduler = Scheduler(
+            {
+                'job1': {'schedule': datetime.timedelta(seconds=30)},
+                'joba': {'schedule': datetime.timedelta(seconds=20)},
+                'jobb': {'schedule': datetime.timedelta(seconds=20)},
+            }
+        )
+        for job in scheduler.jobs:
+            # HACK: the offsets automatically added make this a hard test to write... so remove offsets
+            job.offset = 0.0
+        mocker.patch('awx.main.dispatch.periodic.time.time', return_value=scheduler.global_start + 29)
+        to_run = scheduler.get_and_mark_pending()
+        assert set(job.name for job in to_run) == set(['joba', 'jobb'])
+        mocker.patch('awx.main.dispatch.periodic.time.time', return_value=scheduler.global_start + 39)
+        to_run = scheduler.get_and_mark_pending()
+        assert len(to_run) == 1
+        assert to_run[0].name == 'job1'
+
+    @staticmethod
+    def get_job(scheduler, name):
+        for job in scheduler.jobs:
+            if job.name == name:
+                return job
+
+    def test_scheduler_debug(self, mocker):
+        scheduler = Scheduler(
+            {
+                'joba': {'schedule': datetime.timedelta(seconds=20)},
+                'jobb': {'schedule': datetime.timedelta(seconds=50)},
+                'jobc': {'schedule': datetime.timedelta(seconds=500)},
+                'jobd': {'schedule': datetime.timedelta(seconds=20)},
+            }
+        )
+        current_time = scheduler.global_start + 105.3
+        mocker.patch('awx.main.dispatch.periodic.time.time', return_value=current_time - 1.0e-8)
+        self.get_job(scheduler, 'jobb').mark_run(105.3)
+        self.get_job(scheduler, 'jobd').mark_run(105.3 - 20.0)
+
+        output = scheduler.debug()
+        data = yaml.safe_load(output)
+        assert data['schedule_list']['jobc']['last_run_seconds_ago'] is None
+        assert data['schedule_list']['joba']['missed_runs'] == 4
+        assert data['schedule_list']['jobd']['missed_runs'] == 3
+        assert data['schedule_list']['jobd']['completed_runs'] == 1
+        assert data['schedule_list']['jobb']['next_run_in_seconds'] > 49.0
