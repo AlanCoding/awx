@@ -7,9 +7,9 @@ from datetime import datetime
 logger = logging.getLogger('awx.main.dispatch.periodic')
 
 
-class Job:
+class ScheduledTask:
     """
-    Class representing schedules, very loosely modeled after python schedule library
+    Class representing schedules, very loosely modeled after python schedule library Job
     the idea of this class is to:
      - only deal in relative times (time since the scheduler global start)
      - only deal in integer math for target runtimes, but float for current relative time
@@ -71,7 +71,7 @@ class Scheduler:
         Only the schedule nearest-second value is used for scheduling,
         the rest of the data is for use by the caller to know what to run.
         """
-        self.jobs = [Job(name, data) for name, data in schedule.items()]
+        self.jobs = [ScheduledTask(name, data) for name, data in schedule.items()]
         min_interval = min(job.interval for job in self.jobs)
         num_jobs = len(self.jobs)
 

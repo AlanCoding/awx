@@ -98,7 +98,7 @@ class AWXConsumerBase(object):
             logger.error('unrecognized control message: {}'.format(control))
 
     def dispatch_task(self, body):
-        """This will place the given body into a worker queue"""
+        """This will place the given body into a worker queue to run method decorated as a task"""
         if isinstance(body, dict):
             body['time_ack'] = time.time()
 
@@ -228,9 +228,12 @@ class AWXConsumerPG(AWXConsumerBase):
                     if init is False:
                         self.worker.on_start()
                         init = True
+                    # run_periodic_tasks run scheduled actions and gives time until next scheduled action
+                    # this is saved to the conn (PubSub) object in order to modify read timeout in-loop
                     conn.select_timeout = self.run_periodic_tasks()
+                    # this is the main operational loop for awx-manage run_dispatcher
                     for e in conn.events(yield_timeouts=True):
-                        self.listen_cumulative_time += time.time() - self.listen_start
+                        self.listen_cumulative_time += time.time() - self.listen_start  # for metrics
                         if e is not None:
                             self.process_task(json.loads(e.payload))
                         conn.select_timeout = self.run_periodic_tasks()
