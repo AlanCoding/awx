@@ -113,6 +113,7 @@ django==4.2
     #   django-solo
     #   django-taggit
     #   djangorestframework
+    #   jsonfield
 django-auth-ldap==4.1.0
     # via -r /awx_devel/requirements/requirements.in
 django-cors-headers==3.13.0
@@ -212,6 +213,8 @@ jaraco-text==3.11.0
 jinja2==3.1.2
     # via -r /awx_devel/requirements/requirements.in
 json-log-formatter==0.5.1
+    # via -r /awx_devel/requirements/requirements.in
+jsonfield==3.1.0
     # via -r /awx_devel/requirements/requirements.in
 jsonschema==4.17.3
     # via -r /awx_devel/requirements/requirements.in
@@ -434,7 +437,7 @@ txaio==22.2.1
 typing-extensions==4.4.0
     # via
     #   azure-core
-    #   pydantic
+    #   psycopg
     #   setuptools-rust
     #   setuptools-scm
     #   twisted

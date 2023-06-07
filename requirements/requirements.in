@@ -32,6 +32,7 @@ irc
 jinja2
 JSON-log-formatter
 jsonschema
+jsonfield
 Markdown  # used for formatting API help
 openshift
 pexpect==4.7.0 # see library notes

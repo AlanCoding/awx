@@ -28,7 +28,7 @@ from django.db.models.fields.related_descriptors import (
     create_forward_many_to_many_manager,
 )
 from django.utils.encoding import smart_str
-from django.db.models import JSONField
+from jsonfield import JSONField
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 
@@ -73,40 +73,13 @@ logger = logging.getLogger('awx.main.fields')
 
 
 class JSONBlob(JSONField):
-    # Cringe... a JSONField that is back ended with a TextField.
-    # This field was a legacy custom field type that tl;dr; was a TextField
-    # Over the years, with Django upgrades, we were able to go to a JSONField instead of the custom field
-    # However, we didn't want to have large customers with millions of events to update from text to json during an upgrade
-    # So we keep this field type as backended with TextField.
-    def get_internal_type(self):
-        return "TextField"
-
-    # postgres uses a Jsonb field as the default backend
-    # with psycopg2 it was using a psycopg2._json.Json class internally
-    # with psycopg3 it uses a psycopg.types.json.Jsonb class internally
-    # The binary class was not compatible with a text field, so we are going to override these next two methods and ensure we are using a string
-
-    def from_db_value(self, value, expression, connection):
-        if value is None:
-            return value
-
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except Exception as e:
-                logger.error(f"Failed to load JSONField {self.name}: {e}")
-
-        return value
-
-    def get_db_prep_value(self, value, connection, prepared=False):
-        if not prepared:
-            value = self.get_prep_value(value)
-        try:
-            value = json.dumps(value)
-        except Exception as e:
-            logger.error(f"Failed to dump JSONField {self.name}: {e}")
-
-        return value
+    pass
+    # Cringe... this field was once a custom Field model (through an external library)
+    # Then Django supported JSONField so we switched to that but we kept JSONBlob with a backend type of TextField
+    # This allowed us to get the benefit of JSONField but not need a DB migration which would be expensive for customers with millions of events
+    # But then we upgraded from psycopg2 to psycopg3 and this bit us
+    # So in order to reduce complexity we moved this back to handling it with a custom library django-jsonfield
+    # This library gives us what we want, a JSONFeild but backed with a TextField instead of a JsonB
 
 
 # Based on AutoOneToOneField from django-annoying:
