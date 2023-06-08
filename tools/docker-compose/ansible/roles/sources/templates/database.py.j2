@@ -14,3 +14,12 @@ DATABASES = {
 {% endif %}
     }
 }
+
+{% if enable_pgbouncer|bool %}
+UNPOOLED_DATABASES = {
+    'default': {
+        'HOST': "{{ pg_hostname | default('postgres') }}",
+        'PORT': "{{ pg_port }}",
+    }
+}
+{% endif %}

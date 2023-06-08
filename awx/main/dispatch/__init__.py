@@ -89,6 +89,10 @@ def pg_bus_conn(new_connection=False):
         conf['OPTIONS'] = conf.get('OPTIONS', {}).copy()
         # Modify the application name to distinguish from other connections the process might use
         conf['OPTIONS']['application_name'] = get_application_name(settings.CLUSTER_HOST_ID, function='listener')
+        # Use special settings to bypass pgbouncer if being used
+        unpooled_conf = getattr(settings, 'UNPOOLED_DATABASES', {}).copy()
+        for key, value in unpooled_conf.get('default', {}).items():
+            conf[key] = value
         conn = psycopg2.connect(dbname=conf['NAME'], host=conf['HOST'], user=conf['USER'], password=conf['PASSWORD'], port=conf['PORT'], **conf['OPTIONS'])
         # Django connection.cursor().connection doesn't have autocommit=True on by default
         conn.set_session(autocommit=True)
