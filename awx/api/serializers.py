@@ -325,7 +325,15 @@ class BaseSerializerMetaclass(serializers.SerializerMetaclass):
         return super(BaseSerializerMetaclass, cls).__new__(cls, name, bases, attrs)
 
 
+from awx.main.fields import JSONBlob
+
+awx_field_mapping = serializers.ModelSerializer.serializer_field_mapping.copy()
+awx_field_mapping[JSONBlob] = serializers.JSONField
+
+
 class BaseSerializer(serializers.ModelSerializer, metaclass=BaseSerializerMetaclass):
+    serializer_field_mapping = awx_field_mapping
+
     class Meta:
         fields = ('id', 'type', 'url', 'related', 'summary_fields', 'created', 'modified', 'name', 'description')
         summary_fields = ()
@@ -5148,6 +5156,9 @@ class NotificationTemplateSerializer(BaseSerializer):
         # Otherwise, the encrypted password will be exposed.
         for field in password_fields_to_forward:
             attrs['notification_configuration'][field] = object_actual.notification_configuration[field]
+        print('end')
+        print(type(attrs['notification_configuration']))
+        print(attrs['notification_configuration'])
         return super(NotificationTemplateSerializer, self).validate(attrs)
 
 
