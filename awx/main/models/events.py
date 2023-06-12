@@ -274,7 +274,7 @@ class BasePlaybookEvent(CreatedModifiedModel):
     modified = models.DateTimeField(
         default=None,
         editable=False,
-        db_index=True,
+        db_index=False,
     )
 
     @property
@@ -486,6 +486,8 @@ class JobEvent(BasePlaybookEvent):
             models.Index(fields=['job', 'job_created', 'uuid']),
             models.Index(fields=['job', 'job_created', 'parent_uuid']),
             models.Index(fields=['job', 'job_created', 'counter']),
+            models.Index(fields=['job', 'job_created', 'host_id']),
+            models.Index(fields=['job', 'job_created', 'modified']),
         ]
 
     id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
@@ -509,6 +511,7 @@ class JobEvent(BasePlaybookEvent):
         on_delete=models.DO_NOTHING,
         editable=False,
         db_constraint=False,
+        db_index=False,
     )
     host_name = models.CharField(
         max_length=1024,
@@ -647,6 +650,7 @@ class ProjectUpdateEvent(BasePlaybookEvent):
             models.Index(fields=['project_update', 'job_created', 'event']),
             models.Index(fields=['project_update', 'job_created', 'uuid']),
             models.Index(fields=['project_update', 'job_created', 'counter']),
+            models.Index(fields=['project_update', 'job_created', 'modified']),
         ]
 
     id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
@@ -717,7 +721,7 @@ class BaseCommandEvent(CreatedModifiedModel):
     modified = models.DateTimeField(
         default=None,
         editable=False,
-        db_index=True,
+        db_index=False,
     )
 
     def __str__(self):
@@ -784,6 +788,7 @@ class AdHocCommandEvent(BaseCommandEvent):
         indexes = [
             models.Index(fields=['ad_hoc_command', 'job_created', 'event']),
             models.Index(fields=['ad_hoc_command', 'job_created', 'uuid']),
+            models.Index(fields=['ad_hoc_command', 'job_created', 'host_id']),
             models.Index(fields=['ad_hoc_command', 'job_created', 'counter']),
         ]
 
@@ -840,13 +845,7 @@ class AdHocCommandEvent(BaseCommandEvent):
     #   removed the nulling of the field in case of a host going away before an event is saved
     #   so this needs to stay SET_NULL on the ORM level
     host = models.ForeignKey(
-        'Host',
-        related_name='ad_hoc_command_events',
-        null=True,
-        default=None,
-        on_delete=models.SET_NULL,
-        editable=False,
-        db_constraint=False,
+        'Host', related_name='ad_hoc_command_events', null=True, default=None, on_delete=models.SET_NULL, editable=False, db_constraint=False, db_index=False
     )
     host_name = models.CharField(
         max_length=1024,
@@ -889,6 +888,7 @@ class InventoryUpdateEvent(BaseCommandEvent):
         indexes = [
             models.Index(fields=['inventory_update', 'job_created', 'uuid']),
             models.Index(fields=['inventory_update', 'job_created', 'counter']),
+            models.Index(fields=['inventory_update', 'job_created', 'modified']),
         ]
 
     id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
@@ -934,6 +934,7 @@ class SystemJobEvent(BaseCommandEvent):
         indexes = [
             models.Index(fields=['system_job', 'job_created', 'uuid']),
             models.Index(fields=['system_job', 'job_created', 'counter']),
+            models.Index(fields=['system_job', 'job_created', 'modified']),
         ]
 
     id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
