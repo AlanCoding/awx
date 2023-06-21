@@ -375,7 +375,7 @@ class AWXReceptorJob:
 
         resultsock, resultfile = receptor_ctl.get_work_results(self.unit_id, return_socket=True, return_sockfile=True)
 
-        connections.close_all()
+        # connections.close_all()
 
         # "processor" and the main thread will be separate threads.
         # If a cancel happens, the main thread will encounter an exception, in which case

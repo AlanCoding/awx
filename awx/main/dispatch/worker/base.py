@@ -254,10 +254,10 @@ class BaseWorker(object):
                 logger.error("Exception on worker {}, restarting: ".format(idx) + str(e))
                 continue
             try:
-                for conn in db.connections.all():
-                    # If the database connection has a hiccup during the prior message, close it
-                    # so we can establish a new connection
-                    conn.close_if_unusable_or_obsolete()
+                # for conn in db.connections.all():
+                #     # If the database connection has a hiccup during the prior message, close it
+                #     # so we can establish a new connection
+                #     conn.close_if_unusable_or_obsolete()
                 self.perform_work(body, *args)
             except Exception:
                 logger.exception(f'Unhandled exception in perform_work in worker pid={os.getpid()}')
