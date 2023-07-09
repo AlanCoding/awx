@@ -106,6 +106,9 @@ class Scheduler:
             # careful not to give 0 or negative values to the select timeout, which has unclear interpretation
             logger.warning(f'Scheduler next run of {next_job.name} is {-delta} seconds in the past')
             return 0.1
+        elif delta > 20.0:
+            logger.warning(f'Scheduler next run unexpectedly over 20 seconds in future: {delta}')
+            return 20.0
         logger.debug(f'Scheduler next run is {next_job.name} in {delta} seconds')
         return delta
 
