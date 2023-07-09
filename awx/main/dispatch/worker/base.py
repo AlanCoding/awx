@@ -203,7 +203,7 @@ class AWXConsumerPG(AWXConsumerBase):
                 try:
                     job.data['control']()
                 except Exception:
-                    logger.exception(f'encountered an error trying to run control task {job.name}')
+                    logger.exception(f'Error running control task {job.data}')
             elif 'task' in job.data:
                 body = self.worker.resolve_callable(job.data['task']).get_async_body()
                 # bypasses pg_notify for scheduled tasks
