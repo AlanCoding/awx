@@ -196,7 +196,10 @@ class AWXConsumerPG(AWXConsumerBase):
         This may be called more often than that when events are consumed
         so this should be very efficient in that
         """
-        self.record_statistics()  # maintains time buffer in method
+        try:
+            self.record_statistics()  # maintains time buffer in method
+        except Exception as exc:
+            logger.warning(f'Failed to save dispatcher statistics {exc}')
 
         for job in self.scheduler.get_and_mark_pending():
             if 'control' in job.data:
