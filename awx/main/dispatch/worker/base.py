@@ -250,8 +250,8 @@ class BaseWorker(object):
                     break
             except QueueEmpty:
                 continue
-            except Exception as e:
-                logger.error("Exception on worker {}, restarting: ".format(idx) + str(e))
+            except Exception:
+                logger.exception("Exception on worker {}, restarting: ".format(idx))
                 continue
             try:
                 for conn in db.connections.all():
