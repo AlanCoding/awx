@@ -188,6 +188,7 @@ class AWXConsumerPG(AWXConsumerBase):
         self.subsystem_metrics.set('dispatcher_availability', self.listen_cumulative_time / (current_time - self.last_metrics_gather))
         self.subsystem_metrics.pipe_execute()
         self.listen_cumulative_time = 0.0
+        self.last_metrics_gather = current_time
 
     def run_periodic_tasks(self):
         """
