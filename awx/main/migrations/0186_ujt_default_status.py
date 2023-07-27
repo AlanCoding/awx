@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('main', '0182_constructed_inventory'),
+        ('main', '0185_move_JSONBlob_to_JSONField'),
     ]
 
     operations = [
