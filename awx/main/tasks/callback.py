@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import os
 from collections import deque
 
 # Django
@@ -14,6 +15,7 @@ from awx.main.redact import UriCleaner
 from awx.main.constants import MINIMAL_EVENTS, ANSIBLE_RUNNER_NEEDS_UPDATE_MESSAGE
 from awx.main.utils.update_model import update_model
 from awx.main.queue import CallbackQueueDispatcher
+from awx.main.tasks.facts import finish_fact_cache
 
 logger = logging.getLogger('awx.main.tasks.callback')
 
@@ -31,8 +33,8 @@ class RunnerCallback:
         self.model = model
         self.update_attempts = int(settings.DISPATCHER_DB_DOWNTOWN_TOLLERANCE / 5)
         self.wrapup_event_dispatched = False
-        self.artifacts_processed = False
         self.extra_update_fields = {}
+        self.facts_write_time = None
 
     def update_model(self, pk, _attempt=0, **updates):
         return update_model(self.model, pk, _attempt=0, _max_attempts=self.update_attempts, **updates)
@@ -212,24 +214,48 @@ class RunnerCallback:
             if result_traceback:
                 self.delay_update(result_traceback=result_traceback)
 
+    def initialize_facts(self, write_time):
+        self.facts_write_time = write_time
+
     def artifacts_handler(self, artifact_dir):
-        self.artifacts_processed = True
+        self.instance.refresh_from_db(fields=['job_env'])
+        private_data_dir = self.instance.job_env.get('AWX_PRIVATE_DATA_DIR')
+        if not private_data_dir:
+            # If there's no private data dir, that means we didn't get into the
+            # actual `run()` call; this _usually_ means something failed in
+            # the pre_run_hook method
+            return
+
+        artifact_dir = os.path.join(private_data_dir, 'artifacts', str(self.instance.id))
+        collections_info = os.path.join(artifact_dir, 'collections.json')
+        ansible_version_file = os.path.join(artifact_dir, 'ansible_version.txt')
+
+        if os.path.exists(collections_info):
+            with open(collections_info) as ee_json_info:
+                ee_collections_info = json.loads(ee_json_info.read())
+                self.delay_update(installed_collections=ee_collections_info)
+        if os.path.exists(ansible_version_file):
+            with open(ansible_version_file) as ee_ansible_info:
+                ansible_version_info = ee_ansible_info.readline()
+                self.delay_update(ansible_version=ansible_version_info)
+
+        if self.facts_write_time is not None:
+            self.instance.log_lifecycle("finish_job_fact_cache")
+            finish_fact_cache(
+                self.instance.get_hosts_for_fact_cache(),
+                os.path.join(private_data_dir, 'artifacts', str(self.instance.id), 'fact_cache'),
+                facts_write_time=self.facts_write_time,
+                job_id=self.instance.id,
+                inventory_id=self.instance.inventory_id,
+            )
 
 
 class RunnerCallbackForProjectUpdate(RunnerCallback):
-    def __init__(self, *args, **kwargs):
-        super(RunnerCallbackForProjectUpdate, self).__init__(*args, **kwargs)
-        self.playbook_new_revision = None
-        self.host_map = {}
-
-    def event_handler(self, event_data):
-        super_return_value = super(RunnerCallbackForProjectUpdate, self).event_handler(event_data)
-        returned_data = event_data.get('event_data', {})
-        if returned_data.get('task_action', '') in ('set_fact', 'ansible.builtin.set_fact'):
-            returned_facts = returned_data.get('res', {}).get('ansible_facts', {})
-            if 'scm_version' in returned_facts:
-                self.playbook_new_revision = returned_facts['scm_version']
-        return super_return_value
+    def delay_update(self, **kwargs):
+        super().delay_update(**kwargs)
+        if 'artifacts' in kwargs:
+            if 'scm_version' in kwargs['artifacts']:
+                super().delay_update(scm_revision=kwargs['artifacts']['scm_version'])
 
 
 class RunnerCallbackForInventoryUpdate(RunnerCallback):
@@ -244,9 +270,7 @@ class RunnerCallbackForInventoryUpdate(RunnerCallback):
 
 
 class RunnerCallbackForAdHocCommand(RunnerCallback):
-    def __init__(self, *args, **kwargs):
-        super(RunnerCallbackForAdHocCommand, self).__init__(*args, **kwargs)
-        self.host_map = {}
+    pass
 
 
 class RunnerCallbackForSystemJob(RunnerCallback):

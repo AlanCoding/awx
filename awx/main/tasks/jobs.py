@@ -64,7 +64,7 @@ from awx.main.tasks.callback import (
 )
 from awx.main.tasks.signals import with_signal_handling, signal_callback
 from awx.main.tasks.receptor import AWXReceptorJob
-from awx.main.tasks.facts import start_fact_cache, finish_fact_cache
+from awx.main.tasks.facts import start_fact_cache
 from awx.main.exceptions import AwxTaskError, PostRunError, ReceptorNodeNotFound
 from awx.main.utils.ansible import read_ansible_config
 from awx.main.utils.execution_environments import CONTAINER_ROOT, to_container_path
@@ -435,20 +435,6 @@ class BaseTask(object):
         Hook for any steps to run after job/task is marked as complete.
         """
         instance.log_lifecycle("finalize_run")
-        artifact_dir = os.path.join(private_data_dir, 'artifacts', str(self.instance.id))
-        collections_info = os.path.join(artifact_dir, 'collections.json')
-        ansible_version_file = os.path.join(artifact_dir, 'ansible_version.txt')
-
-        if os.path.exists(collections_info):
-            with open(collections_info) as ee_json_info:
-                ee_collections_info = json.loads(ee_json_info.read())
-                instance.installed_collections = ee_collections_info
-                instance.save(update_fields=['installed_collections'])
-        if os.path.exists(ansible_version_file):
-            with open(ansible_version_file) as ee_ansible_info:
-                ansible_version_info = ee_ansible_info.readline()
-                instance.ansible_version = ansible_version_info
-                instance.save(update_fields=['ansible_version'])
 
     def should_use_fact_cache(self):
         return False
@@ -1078,31 +1064,13 @@ class RunJob(SourceControlMixin, BaseTask):
         # where ansible expects to find it
         if self.should_use_fact_cache():
             job.log_lifecycle("start_job_fact_cache")
-            self.facts_write_time = start_fact_cache(
+            facts_write_time = start_fact_cache(
                 job.get_hosts_for_fact_cache(), os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'), inventory_id=job.inventory_id
             )
+            self.runner_callback.initialize_facts(facts_write_time)
 
     def build_project_dir(self, job, private_data_dir):
         self.sync_and_copy(job.project, private_data_dir, scm_branch=job.scm_branch)
-
-    def post_run_hook(self, job, status):
-        super(RunJob, self).post_run_hook(job, status)
-        job.refresh_from_db(fields=['job_env'])
-        private_data_dir = job.job_env.get('AWX_PRIVATE_DATA_DIR')
-        if (not private_data_dir) or (not hasattr(self, 'facts_write_time')):
-            # If there's no private data dir, that means we didn't get into the
-            # actual `run()` call; this _usually_ means something failed in
-            # the pre_run_hook method
-            return
-        if self.should_use_fact_cache() and self.runner_callback.artifacts_processed:
-            job.log_lifecycle("finish_job_fact_cache")
-            finish_fact_cache(
-                job.get_hosts_for_fact_cache(),
-                os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'),
-                facts_write_time=self.facts_write_time,
-                job_id=job.id,
-                inventory_id=job.inventory_id,
-            )
 
     def final_run_hook(self, job, status, private_data_dir):
         super(RunJob, self).final_run_hook(job, status, private_data_dir)
@@ -1380,10 +1348,6 @@ class RunProjectUpdate(BaseTask):
         super(RunProjectUpdate, self).post_run_hook(instance, status)
         # To avoid hangs, very important to release lock even if errors happen here
         try:
-            if self.runner_callback.playbook_new_revision:
-                instance.scm_revision = self.runner_callback.playbook_new_revision
-                instance.save(update_fields=['scm_revision'])
-
             # Roles and collection folders copy to durable cache
             base_path = instance.get_cache_path()
             stage_path = os.path.join(base_path, 'stage')
@@ -1411,8 +1375,8 @@ class RunProjectUpdate(BaseTask):
 
         p = instance.project
         if instance.job_type == 'check' and status not in ('failed', 'canceled'):
-            if self.runner_callback.playbook_new_revision:
-                p.scm_revision = self.runner_callback.playbook_new_revision
+            if 'scm_revision' in self.runner_callback.extra_update_fields:
+                p.scm_revision = self.runner_callback.extra_update_fields['scm_revision']
             else:
                 if status == 'successful':
                     logger.error("{} Could not find scm revision in check".format(instance.log_format))

@@ -50,8 +50,9 @@
           register: git_result
 
         - name: Set the git repository version
-          ansible.builtin.set_fact:
-            scm_version: "{{ git_result['after'] }}"
+          ansible.builtin.set_stats:
+            data:
+              scm_version: "{{ git_result['after'] }}"
           when: "'after' in git_result"
 
     - name: Update project using svn
@@ -73,13 +74,15 @@
           register: svn_result
 
         - name: Set the svn repository version
-          ansible.builtin.set_fact:
-            scm_version: "{{ svn_result['after'] }}"
+          ansible.builtin.set_stats:
+            data:
+              scm_version: "{{ svn_result['after'] }}"
           when: "'after' in svn_result"
 
         - name: Parse subversion version string properly
-          ansible.builtin.set_fact:
-            scm_version: "{{ scm_version | regex_replace('^.*Revision: ([0-9]+).*$', '\\1') }}"
+          ansible.builtin.set_stats:
+            data:
+              scm_version: "{{ scm_version | regex_replace('^.*Revision: ([0-9]+).*$', '\\1') }}"
 
 
     - name: Project update for Insights
@@ -103,8 +106,9 @@
           register: results
 
         - name: Save Insights Version
-          ansible.builtin.set_fact:
-            scm_version: "{{ results.version }}"
+          ansible.builtin.set_stats:
+            data:
+              scm_version: "{{ results.version }}"
           when: results is defined
 
 
@@ -152,8 +156,9 @@
           when: previous_archive.files | default([])
 
         - name: Set scm_version to archive sha1 checksum
-          ansible.builtin.set_fact:
-            scm_version: "{{ get_archive.checksum_src }}"
+          ansible.builtin.set_stats:
+            data:
+              scm_version: "{{ get_archive.checksum_src }}"
 
     - name: Repository Version
       ansible.builtin.debug:
