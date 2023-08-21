@@ -637,3 +637,87 @@ class TestSAMLUserFlags:
         }
 
         assert expected == _check_flag(user, 'superuser', attributes, user_flags_settings)
+
+
+@pytest.mark.django_db
+def test__update_user_orgs_org_map_and_saml_attr():
+    """
+    This combines the action of two other tests where an org membership is defined both by
+    the ORGANIZATION_MAP and the SOCIAL_AUTH_SAML_ORGANIZATION_ATTR at the same time
+    """
+    class BackendClass:
+        s = {
+            'ORGANIZATION_MAP': {
+                'Default': {
+                    'remove': True,
+                    'admins': 'foobar',
+                    'remove_admins': True,
+                    'users': 'foo',
+                    'remove_users': True,
+                    'organization_alias': '',
+                }
+            },
+            'TEAM_MAP': {
+                'Blue': {'organization': 'Default', 'remove': True, 'users': ''},
+                'Red': {'organization': 'Default', 'remove': True, 'users': ''}
+            },
+        }
+
+        def setting(self, key):
+            return self.s[key]
+
+    backend = BackendClass()
+
+    setting = {
+        'saml_attr': 'memberOf',
+        'saml_admin_attr': 'admins',
+        'saml_auditor_attr': 'auditors',
+        'remove': True,
+        'remove_admins': True,
+    }
+
+    kwargs = {
+        'username': u'cmeyers@redhat.com',
+        'uid': 'idp:cmeyers@redhat.com',
+        'request': {u'SAMLResponse': [], u'RelayState': [u'idp']},
+        'is_new': False,
+        'response': {
+            'session_index': '_0728f0e0-b766-0135-75fa-02842b07c044',
+            'idp_name': u'idp',
+            'attributes': {
+                'memberOf': ['Default1', 'Default2'],
+                'admins': ['Default3'],
+                'auditors': ['Default4'],
+                'groups': ['Blue', 'Red'],
+                'User.email': ['cmeyers@redhat.com'],
+                'User.LastName': ['Meyers'],
+                'name_id': 'cmeyers@redhat.com',
+                'User.FirstName': ['Chris'],
+                'PersonImmutableID': [],
+            },
+        },
+        'social': None,
+        'strategy': None,
+        'new_association': False,
+    }
+
+    # Create a random organization in the database for testing
+    Organization.objects.create(name='Rando1')
+
+    with override_settings(SOCIAL_AUTH_SAML_ORGANIZATION_ATTR=setting):
+        desired_org_state = {}
+        orgs_to_create = []
+        _update_user_orgs_by_saml_attr(backend, desired_org_state, orgs_to_create, **kwargs)
+        assert desired_org_state == {
+            'Default2': {'member_role': True},
+            'Default3': {'admin_role': True},
+            'Default4': {'auditor_role': True},
+            'o1_alias': {'member_role': True},
+            'Rando1': {'admin_role': False, 'auditor_role': False, 'member_role': False},
+        }
+        assert orgs_to_create == [
+            'o1_alias',
+            'Default2',
+            'Default3',
+            'Default4',
+        ]
