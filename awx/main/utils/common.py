@@ -751,17 +751,14 @@ def convert_cpu_str_to_decimal_cpu(cpu_str):
     return max(0.1, round(cpu, 1))
 
 
-def get_corrected_cpu(cpu_count, node_type=None):  # formerlly get_cpu_capacity
+def get_corrected_cpu(cpu_count):  # formerlly get_cpu_capacity
     """Some environments will do a correction to the reported CPU number
     because the given OpenShift value is a lie
     """
     from django.conf import settings
-    from awx.main.models.ha import Instance
 
     settings_abscpu = getattr(settings, 'SYSTEM_TASK_ABS_CPU', None)
     env_abscpu = os.getenv('SYSTEM_TASK_ABS_CPU', None)
-    if node_type == Instance.Types.EXECUTION:
-        return cpu_count
     if env_abscpu is not None:
         return convert_cpu_str_to_decimal_cpu(env_abscpu)
     elif settings_abscpu is not None:
@@ -770,10 +767,11 @@ def get_corrected_cpu(cpu_count, node_type=None):  # formerlly get_cpu_capacity
     return cpu_count  # no correction
 
 
-def get_cpu_effective_capacity(cpu_count, node_type=None):
+def get_cpu_effective_capacity(cpu_count, is_control_plane=False):
     from django.conf import settings
 
-    cpu_count = get_corrected_cpu(cpu_count, node_type)
+    if is_control_plane:
+        cpu_count = get_corrected_cpu(cpu_count)
 
     settings_forkcpu = getattr(settings, 'SYSTEM_TASK_FORKS_CPU', None)
     env_forkcpu = os.getenv('SYSTEM_TASK_FORKS_CPU', None)
@@ -828,18 +826,14 @@ def convert_mem_str_to_bytes(mem_str):
     return max(1, conversions[mem_unit](mem))
 
 
-def get_corrected_memory(memory, node_type=None):
+def get_corrected_memory(memory):
     from django.conf import settings
-    from awx.main.models.ha import Instance
 
     settings_absmem = getattr(settings, 'SYSTEM_TASK_ABS_MEM', None)
     env_absmem = os.getenv('SYSTEM_TASK_ABS_MEM', None)
 
     # Runner returns memory in bytes
     # so we convert memory from settings to bytes as well.
-
-    if node_type == Instance.Types.EXECUTION:
-        return memory
     if env_absmem is not None:
         return convert_mem_str_to_bytes(env_absmem)
     elif settings_absmem is not None:
@@ -848,10 +842,11 @@ def get_corrected_memory(memory, node_type=None):
     return memory
 
 
-def get_mem_effective_capacity(mem_bytes, node_type=None):
+def get_mem_effective_capacity(mem_bytes, is_control_plane=False):
     from django.conf import settings
 
-    mem_bytes = get_corrected_memory(mem_bytes, node_type)
+    if is_control_plane:
+        mem_bytes = get_corrected_memory(mem_bytes)
 
     settings_mem_mb_per_fork = getattr(settings, 'SYSTEM_TASK_FORKS_MEM', None)
     env_mem_mb_per_fork = os.getenv('SYSTEM_TASK_FORKS_MEM', None)
