@@ -645,22 +645,19 @@ def test__update_user_orgs_org_map_and_saml_attr():
     This combines the action of two other tests where an org membership is defined both by
     the ORGANIZATION_MAP and the SOCIAL_AUTH_SAML_ORGANIZATION_ATTR at the same time
     """
+
+    # This data will make the user a member
     class BackendClass:
         s = {
             'ORGANIZATION_MAP': {
-                'Default': {
+                'Default1': {
                     'remove': True,
-                    'admins': 'foobar',
                     'remove_admins': True,
-                    'users': 'foo',
+                    'users': 'foobar',
                     'remove_users': True,
-                    'organization_alias': '',
+                    'organization_alias': 'o1_alias',
                 }
-            },
-            'TEAM_MAP': {
-                'Blue': {'organization': 'Default', 'remove': True, 'users': ''},
-                'Red': {'organization': 'Default', 'remove': True, 'users': ''}
-            },
+            }
         }
 
         def setting(self, key):
@@ -676,8 +673,9 @@ def test__update_user_orgs_org_map_and_saml_attr():
         'remove_admins': True,
     }
 
+    # This data from the server will make the user an admin of the organization
     kwargs = {
-        'username': u'cmeyers@redhat.com',
+        'username': 'foobar',
         'uid': 'idp:cmeyers@redhat.com',
         'request': {u'SAMLResponse': [], u'RelayState': [u'idp']},
         'is_new': False,
@@ -685,15 +683,7 @@ def test__update_user_orgs_org_map_and_saml_attr():
             'session_index': '_0728f0e0-b766-0135-75fa-02842b07c044',
             'idp_name': u'idp',
             'attributes': {
-                'memberOf': ['Default1', 'Default2'],
-                'admins': ['Default3'],
-                'auditors': ['Default4'],
-                'groups': ['Blue', 'Red'],
-                'User.email': ['cmeyers@redhat.com'],
-                'User.LastName': ['Meyers'],
-                'name_id': 'cmeyers@redhat.com',
-                'User.FirstName': ['Chris'],
-                'PersonImmutableID': [],
+                'admins': ['Default1'],
             },
         },
         'social': None,
@@ -701,23 +691,21 @@ def test__update_user_orgs_org_map_and_saml_attr():
         'new_association': False,
     }
 
-    # Create a random organization in the database for testing
-    Organization.objects.create(name='Rando1')
+    this_user = User.objects.create(username='foobar')
 
     with override_settings(SOCIAL_AUTH_SAML_ORGANIZATION_ATTR=setting):
         desired_org_state = {}
         orgs_to_create = []
+
+        # this should add user as an admin of the org
         _update_user_orgs_by_saml_attr(backend, desired_org_state, orgs_to_create, **kwargs)
-        assert desired_org_state == {
-            'Default2': {'member_role': True},
-            'Default3': {'admin_role': True},
-            'Default4': {'auditor_role': True},
-            'o1_alias': {'member_role': True},
-            'Rando1': {'admin_role': False, 'auditor_role': False, 'member_role': False},
-        }
-        assert orgs_to_create == [
-            'o1_alias',
-            'Default2',
-            'Default3',
-            'Default4',
-        ]
+        assert desired_org_state['o1_alias']['admin_role'] is True
+
+        assert set(orgs_to_create) == set(['o1_alias'])
+
+        # this should add user as a member of the org without reverting the admin status
+        _update_user_orgs(backend, desired_org_state, orgs_to_create, this_user)
+        assert desired_org_state['o1_alias']['member_role'] is True
+        assert desired_org_state['o1_alias']['admin_role'] is True
+
+        assert set(orgs_to_create) == set(['o1_alias'])
