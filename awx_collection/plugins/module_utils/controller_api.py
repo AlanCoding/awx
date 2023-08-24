@@ -504,54 +504,50 @@ class ControllerAPIModule(ControllerModule):
 
         try:
             response = self.session.open(
-                method, url.geturl(),
-                headers=headers,
-                timeout=self.request_timeout,
-                validate_certs=self.verify_ssl,
-                follow_redirects=True,
-                data=data
+                method, url.geturl(), headers=headers, timeout=self.request_timeout, validate_certs=self.verify_ssl, follow_redirects=True, data=data
             )
-        except (SSLValidationError) as ssl_err:
+        except SSLValidationError as ssl_err:
             self.fail_json(msg="Could not establish a secure connection to your host ({1}): {0}.".format(url.netloc, ssl_err))
-        except (ConnectionError) as con_err:
+        except ConnectionError as con_err:
             self.fail_json(msg="There was a network error of some kind trying to connect to your host ({1}): {0}.".format(url.netloc, con_err))
-        except (HTTPError) as he:
+        except HTTPError as he:
+            page_data = he.read()
+            try:
+                exit_data = {'status_code': he.code, 'json': loads(page_data)}
+            except ValueError:  # JSONDecodeError only available on Python 3.5+
+                exit_data = {'status_code': he.code, 'text': page_data}
+
             # Sanity check: Did the server send back some kind of internal error?
             if he.code >= 500:
-                self.fail_json(msg='The host sent back a server error ({1}): {0}. Please check the logs and try again later'.format(url.path, he))
+                self.fail_json(msg='The host sent back a server error ({0}). Please check the logs and try again later'.format(url.path), **exit_data)
             # Sanity check: Did we fail to authenticate properly?  If so, fail out now; this is always a failure.
             elif he.code == 401:
-                self.fail_json(msg='Invalid authentication credentials for {0} (HTTP 401).'.format(url.path))
+                self.fail_json(msg='Invalid authentication credentials for {0} (HTTP 401).'.format(url.path), **exit_data)
             # Sanity check: Did we get a forbidden response, which means that the user isn't allowed to do this? Report that.
             elif he.code == 403:
-                self.fail_json(msg="You don't have permission to {1} to {0} (HTTP 403).".format(url.path, method))
+                self.fail_json(msg="You don't have permission to {1} to {0} (HTTP 403).".format(url.path, method), **exit_data)
             # Sanity check: Did we get a 404 response?
             # Requests with primary keys will return a 404 if there is no response, and we want to consistently trap these.
             elif he.code == 404:
                 if kwargs.get('return_none_on_404', False):
                     return None
-                self.fail_json(msg='The requested object could not be found at {0}.'.format(url.path))
+                self.fail_json(msg='The requested object could not be found at {0}.'.format(url.path), **exit_data)
             # Sanity check: Did we get a 405 response?
             # A 405 means we used a method that isn't allowed. Usually this is a bad request, but it requires special treatment because the
             # API sends it as a logic error in a few situations (e.g. trying to cancel a job that isn't running).
             elif he.code == 405:
-                self.fail_json(msg="Cannot make a request with the {0} method to this endpoint {1}".format(method, url.path))
+                self.fail_json(msg="Cannot make a request with the {0} method to this endpoint {1}".format(method, url.path), **exit_data)
             # Sanity check: Did we get some other kind of error?  If so, write an appropriate error message.
             elif he.code >= 400:
                 # We are going to return a 400 so the module can decide what to do with it
-                page_data = he.read()
-                try:
-                    return {'status_code': he.code, 'json': loads(page_data)}
-                # JSONDecodeError only available on Python 3.5+
-                except ValueError:
-                    return {'status_code': he.code, 'text': page_data}
+                return exit_data
             elif he.code == 204 and method == 'DELETE':
                 # A 204 is a normal response for a delete function
                 pass
             else:
-                self.fail_json(msg="Unexpected return code when calling {0}: {1}".format(url.geturl(), he))
-        except (Exception) as e:
-            self.fail_json(msg="There was an unknown error when trying to connect to {2}: {0} {1}".format(type(e).__name__, e, url.geturl()))
+                self.fail_json(msg="Unexpected return code when calling {0}: {1}".format(url.geturl(), he), **exit_data)
+        except Exception as e:
+            self.fail_json(msg="There was an unknown error when trying to connect to {2}: {0} {1}".format(type(e).__name__, e, url.geturl()), **exit_data)
 
         if not self.version_checked:
             # In PY2 we get back an HTTPResponse object but PY2 is returning an addinfourl
@@ -587,14 +583,14 @@ class ControllerAPIModule(ControllerModule):
         response_body = ''
         try:
             response_body = response.read()
-        except (Exception) as e:
+        except Exception as e:
             self.fail_json(msg="Failed to read response body: {0}".format(e))
 
         response_json = {}
         if response_body and response_body != '':
             try:
                 response_json = loads(response_body)
-            except (Exception) as e:
+            except Exception as e:
                 self.fail_json(msg="Failed to parse the response json: {0}".format(e))
 
         if PY2:
@@ -636,7 +632,7 @@ class ControllerAPIModule(ControllerModule):
                 except Exception as e:
                     resp = 'unknown {0}'.format(e)
                 self.fail_json(msg='Failed to get token: {0}'.format(he), response=resp)
-            except (Exception) as e:
+            except Exception as e:
                 # Sanity check: Did the server send back some kind of internal error?
                 self.fail_json(msg='Failed to get token: {0}'.format(e))
 
@@ -646,7 +642,7 @@ class ControllerAPIModule(ControllerModule):
                 response_json = loads(token_response)
                 self.oauth_token_id = response_json['id']
                 self.oauth_token = response_json['token']
-            except (Exception) as e:
+            except Exception as e:
                 self.fail_json(msg="Failed to extract token information from login response: {0}".format(e), **{'response': token_response})
 
         # If we have neither of these, then we can try un-authenticated access
@@ -735,7 +731,6 @@ class ControllerAPIModule(ControllerModule):
                 self.fail_json(msg="Failed to associate item {0}".format(response['json'].get('detail', response['json'])))
 
     def copy_item(self, existing_item, copy_from_name_or_id, new_item_name, endpoint=None, item_type='unknown', copy_lookup_data=None):
-
         if existing_item is not None:
             self.warn("A {0} with the name {1} already exists.".format(item_type, new_item_name))
             self.json_output['changed'] = False
@@ -784,7 +779,6 @@ class ControllerAPIModule(ControllerModule):
         return new_existing_item
 
     def create_if_needed(self, existing_item, new_item, endpoint, on_create=None, auto_exit=True, item_type='unknown', associations=None):
-
         # This will exit from the module on its own
         # If the method successfully creates an item and on_create param is defined,
         #    the on_create parameter will be called as a method pasing in this object and the json from the response
@@ -917,7 +911,6 @@ class ControllerAPIModule(ControllerModule):
         # Note: common error codes from the AWX API can cause the module to fail
         response = None
         if existing_item:
-
             # If we have an item, we can see if it needs an update
             try:
                 item_url = existing_item['url']
@@ -1013,7 +1006,7 @@ class ControllerAPIModule(ControllerModule):
                 except Exception as e:
                     resp = 'unknown {0}'.format(e)
                 self.warn('Failed to release token: {0}, response: {1}'.format(he, resp))
-            except (Exception) as e:
+            except Exception as e:
                 # Sanity check: Did the server send back some kind of internal error?
                 self.warn('Failed to release token {0}: {1}'.format(self.oauth_token_id, e))
 
