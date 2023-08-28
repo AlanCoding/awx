@@ -274,50 +274,81 @@ class Instance(HasPolicyEditsMixin, BaseModel):
             grace_period += settings.RECEPTOR_SERVICE_ADVERTISEMENT_PERIOD
         return self.last_seen < ref_time - timedelta(seconds=grace_period)
 
-    def mark_offline(self, update_last_seen=False, perform_save=True, errors=''):
+    def log_health_data(self, update_fields):
+        update_fields = list(update_fields)
+        for dynamic_field in ('last_health_check', 'last_seen'):
+            if dynamic_field in update_fields:
+                update_fields.remove(dynamic_field)
+        if not update_fields:
+            return
+        data = '\n'.join([f'{field_name}: {getattr(self, field_name)}' for field_name in update_fields])
+        logger.info(f'Health data for instance {self.hostname} has changed:\n{data}')
+
+    def mark_offline(self, update_last_seen=False, perform_save=True, errors='', update_fields=None):
         if self.node_state not in (Instance.States.READY, Instance.States.UNAVAILABLE, Instance.States.INSTALLED):
-            return []
+            return
         if self.node_state == Instance.States.UNAVAILABLE and self.errors == errors and (not update_last_seen):
-            return []
+            return
         self.node_state = Instance.States.UNAVAILABLE
         self.cpu_capacity = self.mem_capacity = self.capacity = 0
         self.errors = errors
+
+        if not update_fields:
+            update_fields = []
+
+        update_fields.extend(['node_state', 'capacity', 'cpu_capacity', 'mem_capacity', 'errors'])
+
         if update_last_seen:
             self.last_seen = now()
-
-        update_fields = ['node_state', 'capacity', 'cpu_capacity', 'mem_capacity', 'errors']
-        if update_last_seen:
             update_fields += ['last_seen']
+
         if perform_save:
             from awx.main.signals import disable_activity_stream
 
             with disable_activity_stream():
                 self.save(update_fields=update_fields)
-        return update_fields
+                self.log_health_data(update_fields)
+        return
 
-    def set_capacity_value(self):
-        old_val = self.capacity
+    def set_capacity_value(self, update_fields=None):
         """Sets capacity according to capacity adjustment rule (no save)"""
+        if not update_fields:
+            update_fields = []
+
         if self.enabled and self.node_type != 'hop':
             lower_cap = min(self.mem_capacity, self.cpu_capacity)
             higher_cap = max(self.mem_capacity, self.cpu_capacity)
-            self.capacity = lower_cap + (higher_cap - lower_cap) * self.capacity_adjustment
+            capacity = lower_cap + (higher_cap - lower_cap) * self.capacity_adjustment
         else:
-            self.capacity = 0
-        return int(self.capacity) != int(old_val)  # return True if value changed
+            capacity = 0
 
-    def refresh_capacity_fields(self):
+        if capacity != self.capacity:
+            self.capacity = capacity
+            update_fields.append('capacity')
+
+    def refresh_capacity_fields(self, update_fields=None):
         """Update derived capacity fields from cpu and memory (no save)"""
+        if not update_fields:
+            update_fields = []
+
         if self.node_type == 'hop':
-            self.cpu_capacity = 0
-            self.mem_capacity = 0  # formula has a non-zero offset, so we make sure it is 0 for hop nodes
+            cpu_capacity = 0
+            mem_capacity = 0  # formula has a non-zero offset, so we make sure it is 0 for hop nodes
         else:
-            self.cpu_capacity = get_cpu_effective_capacity(self.cpu)
-            self.mem_capacity = get_mem_effective_capacity(self.memory)
-        self.set_capacity_value()
+            cpu_capacity = get_cpu_effective_capacity(self.cpu)
+            mem_capacity = get_mem_effective_capacity(self.memory)
+
+        if cpu_capacity != self.cpu_capacity:
+            self.cpu_capacity = cpu_capacity
+            update_fields.append('cpu_capacity')
+        if mem_capacity != self.mem_capacity:
+            self.mem_capacity = mem_capacity
+            update_fields.append('mem_capacity')
+
+        self.set_capacity_value(update_fields=update_fields)
 
     def save_health_data(self, version=None, cpu=0, memory=0, uuid=None, update_last_seen=False, errors=''):
-        update_fields = ['errors']
+        update_fields = []
         if self.node_type != 'hop':
             self.last_health_check = now()
             update_fields.append('last_health_check')
@@ -347,21 +378,22 @@ class Instance(HasPolicyEditsMixin, BaseModel):
             update_fields.append('memory')
 
         if not errors:
-            self.refresh_capacity_fields()
-            self.errors = ''
+            self.refresh_capacity_fields(update_fields=update_fields)
+            if self.errors != '':
+                self.errors = ''
+                update_fields.append('errors')
             if self.node_state in (Instance.States.UNAVAILABLE, Instance.States.INSTALLED):
                 self.node_state = Instance.States.READY
                 update_fields.append('node_state')
         else:
-            fields_to_update = self.mark_offline(perform_save=False, errors=errors)
-            update_fields.extend(fields_to_update)
-        update_fields.extend(['cpu_capacity', 'mem_capacity', 'capacity'])
+            self.mark_offline(perform_save=False, errors=errors, update_fields=update_fields)
 
         # disabling activity stream will avoid extra queries, which is important for heatbeat actions
         from awx.main.signals import disable_activity_stream
 
         with disable_activity_stream():
             self.save(update_fields=update_fields)
+            self.log_health_data(update_fields)
 
     def local_health_check(self):
         """Only call this method on the instance that this record represents"""

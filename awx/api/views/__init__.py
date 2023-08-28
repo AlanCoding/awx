@@ -350,9 +350,10 @@ class InstanceDetail(RetrieveUpdateAPIView):
         r = super(InstanceDetail, self).update(request, *args, **kwargs)
         if status.is_success(r.status_code):
             obj = self.get_object()
-            capacity_changed = obj.set_capacity_value()
-            if capacity_changed:
-                obj.save(update_fields=['capacity'])
+            update_fields = []
+            obj.set_capacity_value(update_fields=update_fields)
+            if update_fields:
+                obj.save(update_fields=update_fields)
             r.data = serializers.InstanceSerializer(obj, context=self.get_serializer_context()).to_representation(obj)
         return r
 
