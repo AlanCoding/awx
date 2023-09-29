@@ -1628,66 +1628,11 @@ class JobTemplateAccess(NotificationAttachMixin, UnifiedCredentialsMixin, BaseAc
         if data is None:
             return True
 
-        data = dict(data)
-
-        if self.changes_are_non_sensitive(obj, data):
-            return True
-
-        if not self.check_related('execution_environment', ExecutionEnvironment, data, obj=obj, role_field='read_role'):
-            return False
-
-        for required_field, cls in (('inventory', Inventory), ('project', Project)):
-            is_mandatory = True
-            if not getattr(obj, '{}_id'.format(required_field)):
-                is_mandatory = False
-            if not self.check_related(required_field, cls, data, obj=obj, role_field='use_role', mandatory=is_mandatory):
-                return False
-        return True
-
-    def changes_are_non_sensitive(self, obj, data):
-        """
-        Return true if the changes being made are considered nonsensitive, and
-        thus can be made by a job template administrator which may not have access
-        to the any inventory, project, or credentials associated with the template.
-        """
-        allowed_fields = [
-            'name',
-            'description',
-            'forks',
-            'limit',
-            'verbosity',
-            'extra_vars',
-            'job_tags',
-            'force_handlers',
-            'skip_tags',
-            'ask_variables_on_launch',
-            'ask_tags_on_launch',
-            'ask_job_type_on_launch',
-            'ask_skip_tags_on_launch',
-            'ask_inventory_on_launch',
-            'ask_credential_on_launch',
-            'survey_enabled',
-            'custom_virtualenv',
-            'diff_mode',
-            'timeout',
-            'job_slice_count',
-            # These fields are ignored, but it is convenient for QA to allow clients to post them
-            'last_job_run',
-            'created',
-            'modified',
-        ]
-
-        for k, v in data.items():
-            if k not in [x.name for x in obj._meta.concrete_fields]:
-                continue
-            if hasattr(obj, k) and getattr(obj, k) != v:
-                if (
-                    k not in allowed_fields
-                    and v != getattr(obj, '%s_id' % k, None)
-                    and not (hasattr(obj, '%s_id' % k) and getattr(obj, '%s_id' % k) is None and v == '')
-                ):  # Equate '' to None in the case of foreign keys
-                    return False
-        return True
+        return bool(
+            self.check_related('execution_environment', ExecutionEnvironment, data, obj=obj, role_field='read_role')
+            and self.check_related('inventory', Inventory, data, obj=obj, role_field='use_role')
+            and self.check_related('project', Project, data, obj=obj, role_field='use_role')
+        )
 
     def can_delete(self, obj):
         return self.user.is_superuser or self.user in obj.admin_role
