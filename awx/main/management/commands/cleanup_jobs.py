@@ -127,7 +127,7 @@ class DeleteMeta:
 
             if not self.dry_run:
                 with connection.cursor() as cursor:
-                    cursor.execute(f"DROP TABLE {parts_to_drop_str}")
+                    cursor.execute(f"DROP TABLE {parts_to_drop_str};")
         else:
             self.logger.debug("No event partitions to drop")
 
@@ -195,26 +195,35 @@ class Command(BaseCommand):
         delete_meta.delete_jobs()
         return (delete_meta.jobs_no_delete_count, delete_meta.jobs_to_delete_count)
 
-    def _handle_unpartitioned_events(self, model, pk_list):
-        """
-        If unpartitioned job events remain, it will cascade those from jobs in pk_list
-        if the unpartitioned table is no longer necessary, it will drop the table
-        """
+    def _unpartitioned_table_exists(self, model):
         tblname = unified_job_class_to_event_table_name(model)
-        rel_name = model().event_parent_key
         with connection.cursor() as cursor:
             cursor.execute(f"SELECT 1 FROM pg_tables WHERE tablename = '_unpartitioned_{tblname}';")
             row = cursor.fetchone()
             if row is None:
-                self.logger.debug(f'Unpartitioned table for {rel_name} does not exist, you are fully migrated')
-                return
+                self.logger.debug(f'Unpartitioned table for {tblname} does not exist, you are fully migrated')
+                return False
+        return True
+
+    def _handle_unpartitioned_events(self, model, pk_list):
+        "If unpartitioned job events remain, it will cascade those from jobs in pk_list"
+        tblname = unified_job_class_to_event_table_name(model)
+        rel_name = model().event_parent_key
+        if not self._unpartitioned_table_exists(model):
+            return
         if pk_list:
             with connection.cursor() as cursor:
                 pk_list_csv = ','.join(map(str, pk_list))
-                cursor.execute(f"DELETE FROM _unpartitioned_{tblname} WHERE {rel_name} IN ({pk_list_csv})")
+                cursor.execute(f"DELETE FROM _unpartitioned_{tblname} WHERE {rel_name} IN ({pk_list_csv});")
+
+    def _handle_unpartitioned_table(self, model):
+        "If the unpartitioned table is no longer necessary, it will drop the table"
+        if not self._unpartitioned_table_exists(model):
+            return True
+        tblname = unified_job_class_to_event_table_name(model)
         with connection.cursor() as cursor:
             # same as UnpartitionedJobEvent.objects.aggregate(Max('created'))
-            cursor.execute(f'SELECT MAX("_unpartitioned_{tblname}"."created") FROM "_unpartitioned_{tblname}"')
+            cursor.execute(f'SELECT MAX("_unpartitioned_{tblname}"."created") FROM "_unpartitioned_{tblname}";')
             row = cursor.fetchone()
             last_created = row[0]
             if last_created:
@@ -223,7 +232,9 @@ class Command(BaseCommand):
                 self.logger.info(f'Table _unpartitioned_{tblname} has no events in it')
             if (last_created is None) or (last_created < self.cutoff):
                 self.logger.warning(f'Dropping table _unpartitioned_{tblname} since no records are newer than {self.cutoff}')
-                cursor.execute(f'DROP TABLE _unpartitioned_{tblname}')
+                cursor.execute(f'DROP TABLE _unpartitioned_{tblname};')
+                return True
+        return False  # could not drop
 
     def cleanup_jobs(self):
         batch_size = 100000
@@ -241,6 +252,9 @@ class Command(BaseCommand):
 
         deleted = 0
         info = qs.aggregate(min=Min('id'), max=Max('id'))
+
+        unpartitioned_gone = self._handle_unpartitioned_table(Job)
+
         if info['min'] is not None:
             for start in range(info['min'], info['max'] + 1, batch_size):
                 qs_batch = qs.filter(id__gte=start, id__lte=start + batch_size)
@@ -248,7 +262,8 @@ class Command(BaseCommand):
 
                 _, results = qs_batch.delete()
                 deleted += results['main.Job']
-                self._handle_unpartitioned_events(Job, pk_list)
+                if not unpartitioned_gone:
+                    self._handle_unpartitioned_events(Job, pk_list)
 
         return skipped, deleted
 
@@ -272,6 +287,7 @@ class Command(BaseCommand):
 
         if not self.dry_run:
             self._handle_unpartitioned_events(AdHocCommand, pk_list)
+            self._handle_unpartitioned_table(AdHocCommand)
 
         skipped += AdHocCommand.objects.filter(created__gte=self.cutoff).count()
         return skipped, deleted
@@ -300,6 +316,7 @@ class Command(BaseCommand):
 
         if not self.dry_run:
             self._handle_unpartitioned_events(ProjectUpdate, pk_list)
+            self._handle_unpartitioned_table(ProjectUpdate)
 
         skipped += ProjectUpdate.objects.filter(created__gte=self.cutoff).count()
         return skipped, deleted
@@ -328,6 +345,7 @@ class Command(BaseCommand):
 
         if not self.dry_run:
             self._handle_unpartitioned_events(InventoryUpdate, pk_list)
+            self._handle_unpartitioned_table(InventoryUpdate)
 
         skipped += InventoryUpdate.objects.filter(created__gte=self.cutoff).count()
         return skipped, deleted
@@ -352,6 +370,7 @@ class Command(BaseCommand):
 
         if not self.dry_run:
             self._handle_unpartitioned_events(SystemJob, pk_list)
+            self._handle_unpartitioned_table(SystemJob)
 
         skipped += SystemJob.objects.filter(created__gte=self.cutoff).count()
         return skipped, deleted
