@@ -1445,8 +1445,6 @@ class UnifiedJob(
             canceled = ControlDispatcher('dispatcher', self.controller_node).cancel([self.celery_task_id])
         except socket.timeout:
             logger.error(f'could not reach dispatcher on {self.controller_node} within {timeout}s')
-        except Exception:
-            logger.exception("error encountered when checking task status")
         return bool(self.celery_task_id in canceled)  # True or False, whether confirmation was obtained
 
     def cancel(self, job_explanation=None, is_chain=False):
