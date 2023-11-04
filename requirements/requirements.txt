@@ -124,8 +124,7 @@ django-extensions==3.2.1
     # via -r /awx_devel/requirements/requirements.in
 django-guid==3.2.1
     # via -r /awx_devel/requirements/requirements.in
-django-oauth-toolkit==1.7.1
-    # via -r /awx_devel/requirements/requirements.in
+    # via -r /awx_devel/requirements/requirements_git.txt
 django-pglocks==1.0.4
     # via -r /awx_devel/requirements/requirements.in
 django-polymorphic==3.1.0
@@ -135,8 +134,7 @@ django-solo==2.0.0
     # via -r /awx_devel/requirements/requirements.in
 django-split-settings==1.0.0
     # via -r /awx_devel/requirements/requirements.in
-djangorestframework==3.14.0
-    # via -r /awx_devel/requirements/requirements.in
+    # via -r /awx_devel/requirements/requirements_git.txt
 djangorestframework-yaml==2.0.0
     # via -r /awx_devel/requirements/requirements.in
 docutils==0.19
