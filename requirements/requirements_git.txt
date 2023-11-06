@@ -7,3 +7,4 @@ git+https://github.com/ansible/django-radius.git@develop#egg=django-radius
 git+https://github.com/ansible/python3-saml.git@devel#egg=python3-saml
 git+https://github.com/AlanCoding/django-rest-framework.git@prefork_zen#egg=djangorestframework
 git+https://github.com/AlanCoding/django-oauth-toolkit.git@prefork_zen#egg=django-oauth-toolkit
+git+https://github.com/AlanCoding/django.git@prefork_zen#egg=django
