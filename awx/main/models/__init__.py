@@ -6,6 +6,8 @@ from django.conf import settings  # noqa
 from django.db import connection
 from django.db.models.signals import pre_delete  # noqa
 
+# django-ansible-base
+from ansible_base.rbac import permission_registry
 from ansible_base.utils.models import prevent_search
 
 # AWX
@@ -194,7 +196,7 @@ User.add_to_class('created', created)
 def user_is_system_auditor(user):
     if not hasattr(user, '_is_system_auditor'):
         if user.pk:
-            user._is_system_auditor = user.roles.filter(singleton_name='system_auditor', role_field='system_auditor').exists()
+            user._is_system_auditor = user.profile.is_system_auditor
         else:
             # Odd case where user is unsaved, this should never be relied on
             return False
@@ -208,17 +210,10 @@ def user_is_system_auditor(user, tf):
         # time they've logged in, and we've just created the new User in this
         # request), we need one to set up the system auditor role
         user.save()
-    if tf:
-        role = Role.singleton('system_auditor')
-        # must check if member to not duplicate activity stream
-        if user not in role.members.all():
-            role.members.add(user)
-        user._is_system_auditor = True
-    else:
-        role = Role.singleton('system_auditor')
-        if user in role.members.all():
-            role.members.remove(user)
-        user._is_system_auditor = False
+    if user.profile.is_system_auditor != bool(tf):
+        user.profile.is_system_auditor = bool(tf)
+        user.profile.save(update_fields=['is_system_auditor'])
+        user._is_system_auditor = user.profile.is_system_auditor
 
 
 User.add_to_class('is_system_auditor', user_is_system_auditor)
@@ -285,6 +280,10 @@ activity_stream_registrar.connect(WorkflowApproval)
 activity_stream_registrar.connect(WorkflowApprovalTemplate)
 activity_stream_registrar.connect(OAuth2Application)
 activity_stream_registrar.connect(OAuth2AccessToken)
+
+# Register models
+permission_registry.register(Project, Team, WorkflowJobTemplate, JobTemplate, Inventory, Organization, Credential, NotificationTemplate, ExecutionEnvironment)
+permission_registry.register(InstanceGroup, parent_field_name=None)  # Not part of an organization
 
 # prevent API filtering on certain Django-supplied sensitive fields
 prevent_search(User._meta.get_field('password'))

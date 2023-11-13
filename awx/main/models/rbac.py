@@ -12,9 +12,16 @@ from django.db import models, transaction, connection
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils.translation import gettext_lazy as _
+from django.apps import apps
+from django.conf import settings
 
 # AWX
 from awx.api.versioning import reverse
+
+# Ansible_base app
+from ansible_base.models.rbac import RoleDefinition
+from awx.main.migrations._new_rbac import build_role_map, get_permissions_for_role
+from awx.main.constants import to_permissions, org_role_to_permission
 
 __all__ = [
     'Role',
@@ -169,6 +176,27 @@ class Role(models.Model):
 
     def __contains__(self, accessor):
         if accessor._meta.model_name == 'user':
+            if accessor.is_superuser:
+                return True
+            if self.role_field == 'system_administrator':
+                return accessor.is_superuser
+            elif self.role_field == 'system_auditor':
+                return accessor.is_system_auditor
+            elif self.role_field in ('read_role', 'auditor_role') and accessor.is_system_auditor:
+                return True
+
+            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+                if self.role_field not in to_permissions and self.content_object and self.content_object._meta.model_name == 'organization':
+                    # valid alternative for narrow exceptions with org roles
+                    if self.role_field not in org_role_to_permission:
+                        raise Exception(f'org {self.role_field} evaluated but not a translatable permission')
+                    codename = org_role_to_permission[self.role_field]
+
+                    return accessor.has_obj_perm(self.content_object, codename)
+
+                if self.role_field not in to_permissions:
+                    raise Exception(f'{self.role_field} evaluated but not a translatable permission')
+                return accessor.has_obj_perm(self.content_object, to_permissions[self.role_field])
             return self.ancestors.filter(members=accessor).exists()
         else:
             raise RuntimeError(f'Role evaluations only valid for users, received {accessor}')
@@ -279,6 +307,9 @@ class Role(models.Model):
         #   updated, and so we can terminate our loop.
         #
         #
+
+        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            return
 
         if len(additions) == 0 and len(removals) == 0:
             return
@@ -412,6 +443,12 @@ class Role(models.Model):
         in their organization, but some of those roles descend from
         organization admin_role, but not auditor_role.
         """
+        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            from ansible_base.models.rbac import RoleEvaluation
+
+            q = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
+            return roles_qs.extra(where=[f'(object_id,content_type_id) in ({q})'])
+
         return roles_qs.filter(
             id__in=RoleAncestorEntry.objects.filter(
                 descendent__in=RoleAncestorEntry.objects.filter(ancestor_id__in=list(user.roles.values_list('id', flat=True))).values_list(
@@ -434,6 +471,13 @@ class Role(models.Model):
         return self.singleton_name in [ROLE_SINGLETON_SYSTEM_ADMINISTRATOR, ROLE_SINGLETON_SYSTEM_AUDITOR]
 
 
+class AncestorManager(models.Manager):
+    def get_queryset(self):
+        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            raise RuntimeError('The old RBAC system has been disabled, this should never be called')
+        return super(AncestorManager, self).get_queryset()
+
+
 class RoleAncestorEntry(models.Model):
     class Meta:
         app_label = 'main'
@@ -450,6 +494,8 @@ class RoleAncestorEntry(models.Model):
     role_field = models.TextField(null=False)
     content_type_id = models.PositiveIntegerField(null=False)
     object_id = models.PositiveIntegerField(null=False)
+
+    objects = AncestorManager()
 
 
 def role_summary_fields_generator(content_object, role_field):
@@ -479,3 +525,41 @@ def role_summary_fields_generator(content_object, role_field):
     summary['name'] = role_names[role_field]
     summary['id'] = getattr(content_object, '{}_id'.format(role_field))
     return summary
+
+
+# ----------------- Custom Role Compatibility -------------------------
+# The following are methods to connect this (old) RBAC system to the new
+# system which allows custom roles
+# this follows the ORM interface layer documented in docs/rbac.md
+def get_role_codenames(role):
+    obj = role.content_object
+    if obj is None:
+        return
+    f = obj._meta.get_field(role.role_field)
+    parents, children = build_role_map(apps)
+    return [perm.codename for perm in get_permissions_for_role(f, children, apps)]
+
+
+def get_role_definition(role):
+    """Given a role, this gives a role definition in the new RBAC system for it"""
+    obj = role.content_object
+    if obj is None:
+        return
+    f = obj._meta.get_field(role.role_field)
+    action_name = f.name.rsplit("_", 1)[0].replace('_', '-')
+    rd_name = f'{obj._meta.model_name}-{action_name}-compat'
+    perm_list = get_role_codenames(role)
+    rd, created = RoleDefinition.objects.get_or_create(name=rd_name, permissions=perm_list)
+    return rd
+
+
+def give_or_remove_permission(role, user, giving=True):
+    obj = role.content_object
+    if obj is None:
+        return
+    rd = get_role_definition(role)
+    rd.give_or_remove_permission(user, obj, giving=giving)
+
+
+def give_creator_permissions(user, obj):
+    RoleDefinition.objects.give_creator_permissions(user, obj)

@@ -60,6 +60,9 @@ from oauth2_provider.models import get_access_token_model
 import pytz
 from wsgiref.util import FileWrapper
 
+# django-ansible-base
+from ansible_base.models.rbac import RoleEvaluation
+
 # AWX
 from awx.main.tasks.system import send_notifications, update_inventory_computed_fields
 from awx.main.access import get_user_queryset
@@ -87,6 +90,7 @@ from awx.api.generics import (
 from awx.api.views.labels import LabelSubListCreateAttachDetachView
 from awx.api.versioning import reverse
 from awx.main import models
+from awx.main.models.rbac import give_or_remove_permission, give_creator_permissions
 from awx.main.utils import (
     camelcase_to_underscore,
     extract_ansible_vars,
@@ -699,7 +703,9 @@ class TeamRolesList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant credential access to a team when the Organization field isn't set, or belongs to a different organization"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        return super(TeamRolesList, self).post(request, *args, **kwargs)
+        r = super(TeamRolesList, self).post(request, *args, **kwargs)
+        give_or_remove_permission(role, team, giving=bool(not request.data.get('disassociate', False)))
+        return r
 
 
 class TeamObjectRolesList(SubListAPIView):
@@ -740,10 +746,23 @@ class TeamActivityStreamList(SubListAPIView):
         self.check_parent_access(parent)
 
         qs = self.request.user.get_queryset(self.model)
+
         return qs.filter(
             Q(team=parent)
-            | Q(project__in=models.Project.accessible_objects(parent.member_role, 'read_role'))
-            | Q(credential__in=models.Credential.accessible_objects(parent.member_role, 'read_role'))
+            | Q(
+                project__in=RoleEvaluation.objects.filter(
+                    role__in=parent.has_roles.all(), content_type_id=ContentType.objects.get_for_model(models.Project).id, codename='view_project'
+                )
+                .values_list('object_id')
+                .distinct()
+            )
+            | Q(
+                credential__in=RoleEvaluation.objects.filter(
+                    role__in=parent.has_roles.all(), content_type_id=ContentType.objects.get_for_model(models.Credential).id, codename='view_credential'
+                )
+                .values_list('object_id')
+                .distinct()
+            )
         )
 
 
@@ -1190,7 +1209,9 @@ class UserRolesList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant private credential access to another user"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        return super(UserRolesList, self).post(request, *args, **kwargs)
+        r = super(UserRolesList, self).post(request, *args, **kwargs)
+        give_or_remove_permission(role, user, giving=bool(not request.data.get('disassociate', False)))
+        return r
 
     def check_parent_access(self, parent=None):
         # We hide roles that shouldn't be seen in our queryset
@@ -2225,6 +2246,7 @@ class JobTemplateList(ListCreateAPIView):
         if ret.status_code == 201:
             job_template = models.JobTemplate.objects.get(id=ret.data['id'])
             job_template.admin_role.members.add(request.user)
+            give_creator_permissions(request.user, job_template)
         return ret
 
 
@@ -4212,7 +4234,9 @@ class RoleUsersList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant private credential access to another user"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        return super(RoleUsersList, self).post(request, *args, **kwargs)
+        r = super(RoleUsersList, self).post(request, *args, **kwargs)
+        give_or_remove_permission(role, user, giving=bool(not request.data.get('disassociate', False)))
+        return r
 
 
 class RoleTeamsList(SubListAttachDetachAPIView):
@@ -4260,7 +4284,10 @@ class RoleTeamsList(SubListAttachDetachAPIView):
             team.member_role.children.remove(role)
         else:
             team.member_role.children.add(role)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        r = Response(status=status.HTTP_204_NO_CONTENT)
+        give_or_remove_permission(role, team, giving=bool(not request.data.get('disassociate', False)))
+        return r
 
 
 class RoleParentsList(SubListAPIView):
