@@ -570,8 +570,6 @@ def give_creator_permissions(user, obj):
 def sync_members_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs):
     if action.startswith('pre_'):
         return
-    if reverse:
-        raise RuntimeError('Removal of permssions through reverse relationship not supported')
 
     if action == 'post_add':
         is_giving = True
@@ -580,13 +578,20 @@ def sync_members_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
     elif action == 'post_clear':
         raise RuntimeError('Clearing of role members not supported')
 
-    for user_id in pk_set:
-        user = get_user_model().objects.get(pk=user_id)
-        give_or_remove_permission(instance, user, giving=is_giving)
+    if reverse:
+        user = instance
+    else:
+        role = instance
+
+    for user_or_role_id in pk_set:
+        if reverse:
+            role = Role.objects.get(pk=user_or_role_id)
+        else:
+            user = get_user_model().objects.get(pk=user_or_role_id)
+        give_or_remove_permission(role, user, giving=is_giving)
 
 
 def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs):
-    logger.warning((instance, action, model, pk_set, reverse, kwargs))
     if action.startswith('pre_'):
         return
 
