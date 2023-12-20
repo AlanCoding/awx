@@ -90,7 +90,7 @@ from awx.api.generics import (
 from awx.api.views.labels import LabelSubListCreateAttachDetachView
 from awx.api.versioning import reverse
 from awx.main import models
-from awx.main.models.rbac import give_or_remove_permission, give_creator_permissions
+from awx.main.models.rbac import give_creator_permissions
 from awx.main.utils import (
     camelcase_to_underscore,
     extract_ansible_vars,
@@ -703,9 +703,7 @@ class TeamRolesList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant credential access to a team when the Organization field isn't set, or belongs to a different organization"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        r = super(TeamRolesList, self).post(request, *args, **kwargs)
-        give_or_remove_permission(role, team, giving=bool(not request.data.get('disassociate', False)))
-        return r
+        return super(TeamRolesList, self).post(request, *args, **kwargs)
 
 
 class TeamObjectRolesList(SubListAPIView):
@@ -1209,9 +1207,7 @@ class UserRolesList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant private credential access to another user"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        r = super(UserRolesList, self).post(request, *args, **kwargs)
-        give_or_remove_permission(role, user, giving=bool(not request.data.get('disassociate', False)))
-        return r
+        return super(UserRolesList, self).post(request, *args, **kwargs)
 
     def check_parent_access(self, parent=None):
         # We hide roles that shouldn't be seen in our queryset
@@ -4234,9 +4230,7 @@ class RoleUsersList(SubListAttachDetachAPIView):
                 data = dict(msg=_("You cannot grant private credential access to another user"))
                 return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-        r = super(RoleUsersList, self).post(request, *args, **kwargs)
-        give_or_remove_permission(role, user, giving=bool(not request.data.get('disassociate', False)))
-        return r
+        return super(RoleUsersList, self).post(request, *args, **kwargs)
 
 
 class RoleTeamsList(SubListAttachDetachAPIView):
@@ -4285,9 +4279,7 @@ class RoleTeamsList(SubListAttachDetachAPIView):
         else:
             team.member_role.children.add(role)
 
-        r = Response(status=status.HTTP_204_NO_CONTENT)
-        give_or_remove_permission(role, team, giving=bool(not request.data.get('disassociate', False)))
-        return r
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class RoleParentsList(SubListAPIView):

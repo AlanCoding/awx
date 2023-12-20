@@ -37,7 +37,7 @@ from ansible_base.utils.models import get_all_field_names
 
 # AWX
 from awx.main.models import UnifiedJob, UnifiedJobTemplate, User, Role, Credential, WorkflowJobTemplateNode, WorkflowApprovalTemplate
-from awx.main.models.rbac import give_or_remove_permission, give_creator_permissions
+from awx.main.models.rbac import give_creator_permissions
 from awx.main.access import optimize_queryset
 from awx.main.utils import camelcase_to_underscore, get_search_fields, getattrd, get_object_or_400, decrypt_field, get_awx_version
 from awx.main.utils.licensing import server_product_name
@@ -999,15 +999,7 @@ class GenericCancelView(RetrieveAPIView):
 
 class BaseUsersList(SubListCreateAttachDetachAPIView):
     def post(self, request, *args, **kwargs):
-        sub_id = request.data.get('id', None)
         ret = super(BaseUsersList, self).post(request, *args, **kwargs)
-        # Sometimes this view constitutes a role assignment, so apply in the new system
-        if ret.status_code in (204, 201):
-            user = self.model.objects.filter(pk=sub_id).first()
-            if user:
-                role_field = self.relationship.split('.', 1)[0]
-                role = getattr(self.get_parent_object(), role_field)
-                give_or_remove_permission(role, user, giving=bool(not request.data.get('disassociate', False)))
         if ret.status_code != 201:
             return ret
         try:

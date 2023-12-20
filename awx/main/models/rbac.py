@@ -9,6 +9,8 @@ import re
 
 # Django
 from django.db import models, transaction, connection
+from django.db.models.signals import m2m_changed
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils.translation import gettext_lazy as _
@@ -553,13 +555,62 @@ def get_role_definition(role):
     return rd
 
 
-def give_or_remove_permission(role, user, giving=True):
+def give_or_remove_permission(role, actor, giving=True):
     obj = role.content_object
     if obj is None:
         return
     rd = get_role_definition(role)
-    rd.give_or_remove_permission(user, obj, giving=giving)
+    rd.give_or_remove_permission(actor, obj, giving=giving)
 
 
 def give_creator_permissions(user, obj):
     RoleDefinition.objects.give_creator_permissions(user, obj)
+
+
+def sync_members_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs):
+    if action.startswith('pre_'):
+        return
+    if reverse:
+        raise RuntimeError('Removal of permssions through reverse relationship not supported')
+
+    if action == 'post_add':
+        is_giving = True
+    elif action == 'post_remove':
+        is_giving = False
+    elif action == 'post_clear':
+        raise RuntimeError('Clearing of role members not supported')
+
+    for user_id in pk_set:
+        user = get_user_model().objects.get(pk=user_id)
+        give_or_remove_permission(instance, user, giving=is_giving)
+
+
+def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs):
+    if action.startswith('pre_'):
+        return
+    if reverse:
+        raise RuntimeError('Removal of permssions through reverse relationship not supported')
+
+    if action == 'post_add':
+        is_giving = True
+    elif action == 'post_remove':
+        is_giving = False
+    elif action == 'post_clear':
+        raise RuntimeError('Clearing of role members not supported')
+
+    from awx.main.models.organization import Team
+
+    for role_id in pk_set:
+        parent_role = Role.objects.get(id=role_id)
+
+        # To a fault, we want to avoid running this if triggered from implicit_parents management
+        # we only want to do anything if we know for sure this is a non-implicit team role
+        if parent_role.role_field != 'member_role' or parent_role.content_type.model != 'team':
+            return
+
+        team = Team.objects.get(pk=parent_role.object_id)
+        give_or_remove_permission(instance, team, giving=is_giving)
+
+
+m2m_changed.connect(sync_members_to_new_rbac, Role.members.through)
+m2m_changed.connect(sync_parents_to_new_rbac, Role.parents.through)
