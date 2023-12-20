@@ -600,19 +600,23 @@ def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
     from awx.main.models.organization import Team
 
     if reverse:
-        child_role = instance
-    else:
         parent_role = instance
+    else:
+        child_role = instance
 
     for role_id in pk_set:
         if reverse:
-            parent_role = Role.objects.get(id=role_id)
-        else:
             child_role = Role.objects.get(id=role_id)
+        else:
+            parent_role = Role.objects.get(id=role_id)
 
         # To a fault, we want to avoid running this if triggered from implicit_parents management
         # we only want to do anything if we know for sure this is a non-implicit team role
         if parent_role.role_field != 'member_role' or parent_role.content_type.model != 'team':
+            return
+
+        # Team member role is a parent of its read role so we want to avoid this
+        if child_role.role_field == 'read_role' and child_role.content_type.model == 'team':
             return
 
         team = Team.objects.get(pk=parent_role.object_id)
