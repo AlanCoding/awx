@@ -586,10 +586,9 @@ def sync_members_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
 
 
 def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs):
+    logger.warning((instance, action, model, pk_set, reverse, kwargs))
     if action.startswith('pre_'):
         return
-    if reverse:
-        raise RuntimeError('Removal of permssions through reverse relationship not supported')
 
     if action == 'post_add':
         is_giving = True
@@ -600,8 +599,16 @@ def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
 
     from awx.main.models.organization import Team
 
+    if reverse:
+        child_role = instance
+    else:
+        parent_role = instance
+
     for role_id in pk_set:
-        parent_role = Role.objects.get(id=role_id)
+        if reverse:
+            parent_role = Role.objects.get(id=role_id)
+        else:
+            child_role = Role.objects.get(id=role_id)
 
         # To a fault, we want to avoid running this if triggered from implicit_parents management
         # we only want to do anything if we know for sure this is a non-implicit team role
@@ -609,7 +616,7 @@ def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
             return
 
         team = Team.objects.get(pk=parent_role.object_id)
-        give_or_remove_permission(instance, team, giving=is_giving)
+        give_or_remove_permission(child_role, team, giving=is_giving)
 
 
 m2m_changed.connect(sync_members_to_new_rbac, Role.members.through)
