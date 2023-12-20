@@ -2832,7 +2832,7 @@ class ResourceAccessListElementSerializer(UserSerializer):
                     role_dict['user_capabilities'] = {'unattach': False}
 
                 descendant_perms = list(
-                    RoleEvaluation.objects.filter(role=team.has_roles.all(), object_id=obj.id, content_type_id=content_type.id)
+                    RoleEvaluation.objects.filter(role__in=team.has_roles.all(), object_id=obj.id, content_type_id=content_type.id)
                     .values_list('codename', flat=True)
                     .distinct()
                 )
