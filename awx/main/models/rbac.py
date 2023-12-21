@@ -615,7 +615,7 @@ def sync_parents_to_new_rbac(instance, action, model, pk_set, reverse, **kwargs)
 
         # To a fault, we want to avoid running this if triggered from implicit_parents management
         # we only want to do anything if we know for sure this is a non-implicit team role
-        if parent_role.role_field != 'member_role' or parent_role.content_type.model != 'team':
+        if parent_role.role_field not in ('member_role', 'admin_role') or parent_role.content_type.model != 'team':
             return
 
         # Team member role is a parent of its read role so we want to avoid this
