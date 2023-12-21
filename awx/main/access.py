@@ -20,7 +20,9 @@ from rest_framework.exceptions import ParseError, PermissionDenied
 # Django OAuth Toolkit
 from awx.main.models.oauth import OAuth2Application, OAuth2AccessToken
 
+# django-ansible-base
 from ansible_base.utils.validation import to_python_boolean
+from ansible_base.models.rbac import RoleEvaluation
 
 # AWX
 from awx.main.utils import (
@@ -704,6 +706,15 @@ class UserAccess(BaseAccess):
             if not allow_orphans:
                 # in these cases only superusers can modify orphan users
                 return False
+            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+                # Permission granted if the user has all permissions that the target user has
+                target_perms = set(
+                    RoleEvaluation.objects.filter(role__in=obj.has_roles.all()).values_list('object_id', 'content_type_id', 'codename').distinct()
+                )
+                user_perms = set(
+                    RoleEvaluation.objects.filter(role__in=self.user.has_roles.all()).values_list('object_id', 'content_type_id', 'codename').distinct()
+                )
+                return not (target_perms - user_perms)
             return not obj.roles.all().exclude(ancestors__in=self.user.roles.all()).exists()
         else:
             return self.is_all_org_admin(obj)
@@ -2572,6 +2583,8 @@ class ScheduleAccess(UnifiedCredentialsMixin, BaseAccess):
         if not JobLaunchConfigAccess(self.user).can_add(data):
             return False
         if not data:
+            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+                return user.has_roles.filter(permission_partials__codename__in=['execute_jobtemplate', 'update_project', 'update_inventory']).exists()
             return Role.objects.filter(role_field__in=['update_role', 'execute_role'], ancestors__in=self.user.roles.all()).exists()
 
         return self.check_related('unified_job_template', UnifiedJobTemplate, data, role_field='execute_role', mandatory=True)
@@ -2770,7 +2783,7 @@ class ActivityStreamAccess(BaseAccess):
                 | Q(notification_template__organization__in=auditing_orgs)
                 | Q(notification__notification_template__organization__in=auditing_orgs)
                 | Q(label__organization__in=auditing_orgs)
-                | Q(role__in=Role.objects.filter(ancestors__in=self.user.roles.all()) if auditing_orgs else [])
+                | Q(role__in=Role.visible_roles(self.user) if auditing_orgs else [])
             )
 
         project_set = Project.accessible_pk_qs(self.user, 'read_role')
