@@ -49,7 +49,7 @@ from ansible_base.utils.models import get_type_for_model
 
 # AWX
 from awx.main.access import get_user_capabilities
-from awx.main.constants import ACTIVE_STATES, CENSOR_VALUE, to_permissions, org_role_to_permission
+from awx.main.constants import ACTIVE_STATES, CENSOR_VALUE, org_role_to_permission
 from awx.main.models import (
     ActivityStream,
     AdHocCommand,
@@ -103,7 +103,7 @@ from awx.main.models import (
     CLOUD_INVENTORY_SOURCES,
 )
 from awx.main.models.base import VERBOSITY_CHOICES, NEW_JOB_TYPE_CHOICES
-from awx.main.models.rbac import role_summary_fields_generator, give_creator_permissions, get_role_codenames
+from awx.main.models.rbac import role_summary_fields_generator, give_creator_permissions, get_role_codenames, to_permissions
 from awx.main.fields import ImplicitRoleField
 from awx.main.utils import (
     get_model_for_type,

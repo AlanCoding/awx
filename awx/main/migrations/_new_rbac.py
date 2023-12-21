@@ -4,6 +4,7 @@ import logging
 from django.db.models import ForeignKey
 
 from awx.main.fields import ImplicitRoleField
+from awx.main.constants import role_name_to_perm_mapping
 
 
 logger = logging.getLogger('awx.main.migrations._new_rbac')
@@ -11,18 +12,6 @@ logger = logging.getLogger('awx.main.migrations._new_rbac')
 """
 Data structures and methods for the migration of old Role model to ObjectRole
 """
-
-role_name_to_perm_mapping = {
-    'adhoc_role': ['adhoc_'],
-    'approval_role': ['approve_'],
-    'auditor_role': ['audit_'],
-    'admin_role': ['add_', 'change_', 'delete_'],
-    'execute_role': ['execute_'],
-    'read_role': ['view_'],
-    'update_role': ['update_'],
-    'member_role': ['member_'],
-    'use_role': ['use_'],
-}
 
 system_admin = ImplicitRoleField(name='system_administrator')
 system_auditor = ImplicitRoleField(name='system_auditor')

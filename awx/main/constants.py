@@ -116,16 +116,16 @@ SUBSCRIPTION_USAGE_MODEL_UNIQUE_HOSTS = 'unique_managed_hosts'
 HOST_FACTS_FIELDS = ('name', 'ansible_facts', 'ansible_facts_modified', 'modified', 'inventory_id')
 
 # Data for RBAC compatibility layer
-to_permissions = {
-    'admin_role': 'change',
-    'execute_role': 'execute',
-    'auditor_role': 'audit',
-    'update_role': 'update',
-    'use_role': 'use',
-    'adhoc_role': 'adhoc',
-    'member_role': 'member',
-    'approval_role': 'approve',
-    'read_role': 'view',
+role_name_to_perm_mapping = {
+    'adhoc_role': ['adhoc_'],
+    'approval_role': ['approve_'],
+    'auditor_role': ['audit_'],
+    'admin_role': ['change_', 'add_', 'delete_'],
+    'execute_role': ['execute_'],
+    'read_role': ['view_'],
+    'update_role': ['update_'],
+    'member_role': ['member_'],
+    'use_role': ['use_'],
 }
 
 org_role_to_permission = {

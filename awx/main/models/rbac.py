@@ -23,7 +23,7 @@ from awx.api.versioning import reverse
 # Ansible_base app
 from ansible_base.models.rbac import RoleDefinition
 from awx.main.migrations._new_rbac import build_role_map, get_permissions_for_role
-from awx.main.constants import to_permissions, org_role_to_permission
+from awx.main.constants import role_name_to_perm_mapping, org_role_to_permission
 
 __all__ = [
     'Role',
@@ -82,6 +82,11 @@ role_descriptions = {
     'use_role': _('Can use the %s in a job template'),
     'approval_role': _('Can approve or deny a workflow approval node'),
 }
+
+
+to_permissions = {}
+for k, v in role_name_to_perm_mapping.items():
+    to_permissions[k] = v[0].strip('_')
 
 
 tls = threading.local()  # thread local storage

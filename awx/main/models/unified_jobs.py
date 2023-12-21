@@ -38,6 +38,7 @@ from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.control import Control as ControlDispatcher
 from awx.main.registrar import activity_stream_registrar
 from awx.main.models.mixins import TaskManagerUnifiedJobMixin, ExecutionEnvironmentMixin
+from awx.main.models.rbac import to_permissions
 from awx.main.utils.common import (
     camelcase_to_underscore,
     get_model_for_type,
@@ -53,7 +54,7 @@ from awx.main.utils.common import (
 )
 from awx.main.utils.encryption import encrypt_dict, decrypt_field
 from awx.main.utils import polymorphic
-from awx.main.constants import ACTIVE_STATES, CAN_CANCEL, JOB_VARIABLE_PREFIXES, to_permissions
+from awx.main.constants import ACTIVE_STATES, CAN_CANCEL, JOB_VARIABLE_PREFIXES
 from awx.main.redact import UriCleaner, REPLACE_STR
 from awx.main.consumers import emit_channel_notification
 from awx.main.fields import AskForField, OrderedManyToManyField
