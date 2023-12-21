@@ -52,7 +52,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterModelOptions(
             name='organization',
-            options={'ordering': ('name',), 'permissions': [('member_organization', 'Basic participation permissions for organization')]},
+            options={
+                'default_permissions': ('change', 'delete', 'view'),
+                'ordering': ('name',),
+                'permissions': [
+                    ('member_organization', 'Basic participation permissions for organization'),
+                    ('audit_organization', 'Audit everything inside the organization'),
+                ],
+            },
         ),
         migrations.AlterModelOptions(
             name='team',

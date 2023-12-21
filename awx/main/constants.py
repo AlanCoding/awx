@@ -119,6 +119,7 @@ HOST_FACTS_FIELDS = ('name', 'ansible_facts', 'ansible_facts_modified', 'modifie
 to_permissions = {
     'admin_role': 'change',
     'execute_role': 'execute',
+    'auditor_role': 'audit',
     'update_role': 'update',
     'use_role': 'use',
     'adhoc_role': 'adhoc',

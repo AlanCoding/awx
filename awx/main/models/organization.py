@@ -33,7 +33,10 @@ class Organization(CommonModel, NotificationFieldsModel, ResourceMixin, CustomVi
     class Meta:
         app_label = 'main'
         ordering = ('name',)
-        permissions = [('member_organization', 'Basic participation permissions for organization')]
+        permissions = [
+            ('member_organization', 'Basic participation permissions for organization'),
+            ('audit_organization', 'Audit everything inside the organization'),
+        ]
         # Remove add permission, only superuser can add
         default_permissions = ('change', 'delete', 'view')
 

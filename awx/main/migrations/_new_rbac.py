@@ -15,6 +15,7 @@ Data structures and methods for the migration of old Role model to ObjectRole
 role_name_to_perm_mapping = {
     'adhoc_role': ['adhoc_'],
     'approval_role': ['approve_'],
+    'auditor_role': ['audit_'],
     'admin_role': ['add_', 'change_', 'delete_'],
     'execute_role': ['execute_'],
     'read_role': ['view_'],
