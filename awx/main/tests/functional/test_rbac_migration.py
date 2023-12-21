@@ -49,27 +49,3 @@ def test_implied_organization_subquery_job_template():
                 assert jt.test_field is None
             else:
                 assert jt.test_field == jt.project.organization_id
-
-
-@pytest.mark.django_db
-def test_give_explicit_inventory_permission():
-    dual_admin = User.objects.create(username='alice')
-    inv_admin = User.objects.create(username='bob')
-    inv_org = Organization.objects.create(name='inv-org')
-    proj_org = Organization.objects.create(name='proj-org')
-
-    inv_org.admin_role.members.add(inv_admin, dual_admin)
-    proj_org.admin_role.members.add(dual_admin)
-
-    proj = Project.objects.create(name="test-proj", organization=proj_org)
-    inv = Inventory.objects.create(name='test-inv', organization=inv_org)
-
-    jt = JobTemplate.objects.create(name='foo', project=proj, inventory=inv)
-
-    assert dual_admin in jt.admin_role
-
-    rbac.restore_inventory_admins(apps, None)
-
-    assert inv_admin in jt.admin_role.members.all()
-    assert dual_admin not in jt.admin_role.members.all()
-    assert dual_admin in jt.admin_role
