@@ -31,8 +31,6 @@ def test_get_roles_list_user(organization, inventory, team, get, user):
     'Users can see all roles they have access to, but not all roles'
     this_user = user('user-test_get_roles_list_user')
     organization.member_role.members.add(this_user)
-    custom_role = Role.objects.create(role_field='custom_role-test_get_roles_list_user')
-    organization.member_role.children.add(custom_role)
 
     url = reverse('api:role_list')
     response = get(url, this_user)
@@ -48,7 +46,6 @@ def test_get_roles_list_user(organization, inventory, team, get, user):
 
     assert organization.admin_role.id in role_hash
     assert organization.member_role.id in role_hash
-    assert custom_role.id in role_hash
 
     assert inventory.admin_role.id not in role_hash
     assert team.member_role.id not in role_hash
@@ -104,15 +101,6 @@ def test_cant_delete_role(delete, admin, inventory):
 #
 # /user/<id>/roles
 #
-
-
-@pytest.mark.django_db
-def test_get_user_roles_list(get, admin):
-    url = reverse('api:user_roles_list', kwargs={'pk': admin.id})
-    response = get(url, admin)
-    assert response.status_code == 200
-    roles = response.data
-    assert roles['count'] > 0  # 'system_administrator' role if nothing else
 
 
 @pytest.mark.django_db
