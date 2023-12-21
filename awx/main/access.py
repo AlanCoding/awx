@@ -2584,7 +2584,7 @@ class ScheduleAccess(UnifiedCredentialsMixin, BaseAccess):
             return False
         if not data:
             if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
-                return user.has_roles.filter(permission_partials__codename__in=['execute_jobtemplate', 'update_project', 'update_inventory']).exists()
+                return self.user.has_roles.filter(permission_partials__codename__in=['execute_jobtemplate', 'update_project', 'update_inventory']).exists()
             return Role.objects.filter(role_field__in=['update_role', 'execute_role'], ancestors__in=self.user.roles.all()).exists()
 
         return self.check_related('unified_job_template', UnifiedJobTemplate, data, role_field='execute_role', mandatory=True)

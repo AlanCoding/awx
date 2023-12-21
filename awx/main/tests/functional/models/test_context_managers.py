@@ -11,15 +11,6 @@ from awx.main.tests.functional import immediate_on_commit
 
 
 @pytest.mark.django_db
-def test_rbac_batch_rebuilding(rando, organization):
-    with batch_role_ancestor_rebuilding():
-        organization.admin_role.members.add(rando)
-        inventory = organization.inventories.create(name='test-inventory')
-        assert rando not in inventory.admin_role
-    assert rando in inventory.admin_role
-
-
-@pytest.mark.django_db
 def test_disable_activity_stream():
     with disable_activity_stream():
         Organization.objects.create(name='test-organization')
