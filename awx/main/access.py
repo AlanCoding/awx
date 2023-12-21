@@ -71,8 +71,6 @@ from awx.main.models import (
     WorkflowJobTemplateNode,
     WorkflowApproval,
     WorkflowApprovalTemplate,
-    ROLE_SINGLETON_SYSTEM_ADMINISTRATOR,
-    ROLE_SINGLETON_SYSTEM_AUDITOR,
 )
 from awx.main.models.mixins import ResourceMixin
 
@@ -647,9 +645,8 @@ class UserAccess(BaseAccess):
             qs = (
                 User.objects.filter(pk__in=Organization.accessible_objects(self.user, 'read_role').values('member_role__members'))
                 | User.objects.filter(pk=self.user.id)
-                | User.objects.filter(
-                    pk__in=Role.objects.filter(singleton_name__in=[ROLE_SINGLETON_SYSTEM_ADMINISTRATOR, ROLE_SINGLETON_SYSTEM_AUDITOR]).values('members')
-                )
+                | User.objects.filter(is_superuser=True)
+                | User.objects.filter(profile__is_system_auditor=True)
             ).distinct()
         return qs
 
