@@ -477,38 +477,6 @@ CELERYBEAT_SCHEDULE = {
 DJANGO_REDIS_IGNORE_EXCEPTIONS = True
 CACHES = {'default': {'BACKEND': 'awx.main.cache.AWXRedisCache', 'LOCATION': 'unix:///var/run/redis/redis.sock?db=1'}}
 
-
-ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': False, 'FILTERING': False, 'RBAC': True}
-
-
-from ansible_base import settings
-
-settings_file = os.path.join(os.path.dirname(settings.__file__), 'dynamic_settings.py')
-include(settings_file)
-
-del settings, settings_file
-
-# Settings for the ansible_base RBAC system
-
-# Settings for the RBAC system, override as necessary in app
-GATEWAY_ROLE_PRECREATE = {
-    'object_admin': '{cls._meta.model_name}-admin',
-    'org_admin': 'organization-admin',
-    'org_children': 'organization-{cls._meta.model_name}-admin',
-    'special': '{cls._meta.model_name}-{action}',
-}
-
-# Use the new Gateway RBAC system for evaluations? You should. We will remove the old system soon.
-ROLE_GATEWAY_SYSTEM_ACTIVATED = True
-
-# Custom setting for permission system
-ROLE_TEAM_MODEL = 'main.Team'
-ROLE_ORGANIZATION_MODEL = 'main.Organization'
-ROLE_PERMISSION_MODEL = 'auth.Permission'
-
-# Permissions a user will get when creating a new item
-ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'execute', 'use', 'adhoc', 'approve', 'update', 'view']
-
 # Social Auth configuration.
 SOCIAL_AUTH_STRATEGY = 'social_django.strategy.DjangoStrategy'
 SOCIAL_AUTH_STORAGE = 'social_django.models.DjangoStorage'
@@ -1109,3 +1077,26 @@ from ansible_base import settings  # noqa: E402
 
 settings_file = os.path.join(os.path.dirname(settings.__file__), 'dynamic_settings.py')
 include(settings_file)
+
+del settings, settings_file
+
+# Settings for the ansible_base RBAC system
+
+# Settings for the RBAC system, override as necessary in app
+GATEWAY_ROLE_PRECREATE = {
+    'object_admin': '{cls._meta.model_name}-admin',
+    'org_admin': 'organization-admin',
+    'org_children': 'organization-{cls._meta.model_name}-admin',
+    'special': '{cls._meta.model_name}-{action}',
+}
+
+# Use the new Gateway RBAC system for evaluations? You should. We will remove the old system soon.
+ROLE_GATEWAY_SYSTEM_ACTIVATED = True
+
+# Custom setting for permission system
+ROLE_TEAM_MODEL = 'main.Team'
+ROLE_ORGANIZATION_MODEL = 'main.Organization'
+ROLE_PERMISSION_MODEL = 'auth.Permission'
+
+# Permissions a user will get when creating a new item
+ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'execute', 'use', 'adhoc', 'approve', 'update', 'view']
