@@ -1797,7 +1797,7 @@ class JobAccess(BaseAccess):
         filter_kwargs = dict(
             content_type_id=ContentType.objects.get_for_model(Organization),
             object_id=obj.organization_id,
-            role_definition__permissions__codename='execute_role',
+            role_definition__permissions__codename='execute_jobtemplate',
         )
         if self.user.has_roles.filter(**filter_kwargs).exists():
             return True
