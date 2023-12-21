@@ -1071,7 +1071,7 @@ HOST_METRIC_SUMMARY_TASK_INTERVAL = 7  # days
 
 
 # django-ansible-base
-ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': False, 'SWAGGER': False, 'FILTERING': True}
+ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': False, 'SWAGGER': False, 'FILTERING': True, 'RBAC': True}
 
 from ansible_base import settings  # noqa: E402
 
