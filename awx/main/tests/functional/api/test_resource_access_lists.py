@@ -54,4 +54,4 @@ def test_indirect_access_list(get, organization, project, team_factory, user, ad
     assert project_admin_team_member_entry['team_name'] == project_admin_team.name
 
     admin_entry = admin_res['summary_fields']['indirect_access'][0]['role']
-    assert admin_entry['name'] == Role.singleton('system_administrator').name
+    assert admin_entry['name'] == 'system_administrator'

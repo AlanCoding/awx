@@ -95,10 +95,8 @@ def check_singleton(func):
     """
 
     def wrapper(*args, **kwargs):
-        sys_admin = Role.singleton(ROLE_SINGLETON_SYSTEM_ADMINISTRATOR)
-        sys_audit = Role.singleton(ROLE_SINGLETON_SYSTEM_AUDITOR)
         user = args[0]
-        if user in sys_admin or user in sys_audit:
+        if user.is_superuser or user.is_system_auditor:
             if len(args) == 2:
                 return args[1]
             return Role.objects.all()

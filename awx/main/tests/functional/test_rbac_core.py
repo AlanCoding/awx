@@ -110,14 +110,12 @@ def test_implicit_deletes(alice):
     assert Role.objects.filter(id=admin_role_id).count() == 1
     assert Role.objects.filter(id=auditor_role_id).count() == 1
     n_alice_roles = alice.roles.count()
-    n_system_admin_children = Role.singleton('system_administrator').children.count()
 
     delorg.delete()
 
     assert Role.objects.filter(id=admin_role_id).count() == 0
     assert Role.objects.filter(id=auditor_role_id).count() == 0
     assert alice.roles.count() == (n_alice_roles - 1)
-    assert Role.singleton('system_administrator').children.count() == (n_system_admin_children - 1)
     assert child.ancestors.count() == 1
     assert child.ancestors.all()[0] == child
 

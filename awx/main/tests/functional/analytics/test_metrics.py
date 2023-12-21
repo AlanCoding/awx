@@ -66,7 +66,6 @@ def test_metrics_permissions(get, admin, org_admin, alice, bob, organization):
     organization.auditor_role.members.add(bob)
     assert get(get_metrics_view_db_only(), user=bob).status_code == 403
 
-    Role.singleton('system_auditor').members.add(bob)
     bob.is_system_auditor = True
     assert get(get_metrics_view_db_only(), user=bob).status_code == 200
 

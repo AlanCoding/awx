@@ -46,7 +46,6 @@ def test_get_roles_list_user(organization, inventory, team, get, user):
     for r in roles['results']:
         role_hash[r['id']] = r
 
-    assert Role.singleton(ROLE_SINGLETON_SYSTEM_ADMINISTRATOR).id in role_hash
     assert organization.admin_role.id in role_hash
     assert organization.member_role.id in role_hash
     assert custom_role.id in role_hash
@@ -57,7 +56,8 @@ def test_get_roles_list_user(organization, inventory, team, get, user):
 
 @pytest.mark.django_db
 def test_roles_visibility(get, organization, project, admin, alice, bob):
-    Role.singleton('system_auditor').members.add(alice)
+    alice.is_system_auditor = True
+    alice.save()
     assert get(reverse('api:role_list') + '?id=%d' % project.update_role.id, user=admin).data['count'] == 1
     assert get(reverse('api:role_list') + '?id=%d' % project.update_role.id, user=alice).data['count'] == 1
     assert get(reverse('api:role_list') + '?id=%d' % project.update_role.id, user=bob).data['count'] == 0
@@ -67,7 +67,8 @@ def test_roles_visibility(get, organization, project, admin, alice, bob):
 
 @pytest.mark.django_db
 def test_roles_filter_visibility(get, organization, project, admin, alice, bob):
-    Role.singleton('system_auditor').members.add(alice)
+    alice.is_system_auditor = True
+    alice.save()
     project.update_role.members.add(admin)
 
     assert get(reverse('api:user_roles_list', kwargs={'pk': admin.id}) + '?id=%d' % project.update_role.id, user=admin).data['count'] == 1
@@ -141,7 +142,6 @@ def test_user_view_other_user_roles(organization, inventory, team, get, alice, b
 
     assert organization.admin_role.id in role_hash
     assert custom_role.id not in role_hash  # doesn't show up in the user roles list, not an explicit grant
-    assert Role.singleton(ROLE_SINGLETON_SYSTEM_ADMINISTRATOR).id not in role_hash
     assert inventory.admin_role.id not in role_hash
     assert team.member_role.id not in role_hash  # alice can't see this
 

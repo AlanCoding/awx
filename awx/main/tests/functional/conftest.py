@@ -421,7 +421,7 @@ def admin(user):
 @pytest.fixture
 def system_auditor(user):
     u = user('an-auditor', False)
-    Role.singleton('system_auditor').members.add(u)
+    u.is_system_auditor = True
     return u
 
 

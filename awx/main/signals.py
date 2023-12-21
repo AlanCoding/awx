@@ -139,6 +139,8 @@ def sync_superuser_status_to_rbac(instance, **kwargs):
 
 def sync_rbac_to_superuser_status(instance, sender, **kwargs):
     'When the is_superuser flag is false but a user has the System Admin role, update the database to reflect that'
+    if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        return
     if kwargs['action'] in ['post_add', 'post_remove', 'post_clear']:
         new_status_value = bool(kwargs['action'] == 'post_add')
         if hasattr(instance, 'singleton_name'):  # duck typing, role.members.add() vs user.roles.add()
