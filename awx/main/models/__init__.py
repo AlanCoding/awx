@@ -1,6 +1,8 @@
 # Copyright (c) 2015 Ansible, Inc.
 # All Rights Reserved.
 
+import json
+
 # Django
 from django.conf import settings  # noqa
 from django.db import connection
@@ -211,9 +213,12 @@ def user_is_system_auditor(user, tf):
         # request), we need one to set up the system auditor role
         user.save()
     if user.profile.is_system_auditor != bool(tf):
+        prior_value = user.profile.is_system_auditor
         user.profile.is_system_auditor = bool(tf)
         user.profile.save(update_fields=['is_system_auditor'])
         user._is_system_auditor = user.profile.is_system_auditor
+        entry = ActivityStream.objects.create(changes=json.dumps({"is_system_auditor": [prior_value, bool(tf)]}), object1='user', operation='update')
+        entry.user.add(user)
 
 
 User.add_to_class('is_system_auditor', user_is_system_auditor)

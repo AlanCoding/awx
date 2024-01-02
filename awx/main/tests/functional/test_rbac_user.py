@@ -18,7 +18,7 @@ class TestSysAuditorTransactional(TransactionTestCase):
 
     def test_auditor_caching(self):
         rando = self.rando()
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             v = rando.is_system_auditor
         assert not v
         with self.assertNumQueries(0):
