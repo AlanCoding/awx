@@ -103,7 +103,7 @@ from awx.main.models import (
     CLOUD_INVENTORY_SOURCES,
 )
 from awx.main.models.base import VERBOSITY_CHOICES, NEW_JOB_TYPE_CHOICES
-from awx.main.models.rbac import role_summary_fields_generator, give_creator_permissions, get_role_codenames, to_permissions
+from awx.main.models.rbac import role_summary_fields_generator, give_creator_permissions, get_role_codenames, to_permissions, get_role_from_object_role
 from awx.main.fields import ImplicitRoleField
 from awx.main.utils import (
     get_model_for_type,
@@ -2840,7 +2840,38 @@ class ResourceAccessListElementSerializer(UserSerializer):
                 ret.append({'role': role_dict, 'descendant_roles': get_roles_from_perms(descendant_perms)})
             return ret
 
-        direct_permissive_role_ids = Role.objects.filter(content_type=content_type, object_id=obj.id).values_list('id', flat=True)
+        gfk_kwargs = dict(content_type_id=content_type.id, object_id=obj.id)
+        direct_permissive_role_ids = Role.objects.filter(**gfk_kwargs).values_list('id', flat=True)
+
+        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            ret['summary_fields']['direct_access'] = []
+            ret['summary_fields']['indirect_access'] = []
+
+            new_roles_seen = set()
+            all_team_roles = set()
+            all_permissive_role_ids = set()
+            for evaluation in RoleEvaluation.objects.filter(role__users=user, **gfk_kwargs).prefetch_related('role'):
+                new_role = evaluation.role
+                if new_role.id in new_roles_seen:
+                    continue
+                new_roles_seen.add(new_role.id)
+                old_role = get_role_from_object_role(new_role)
+                all_permissive_role_ids.add(old_role.id)
+
+                if new_role.object_id == obj.id and new_role.content_type_id == content_type.id:
+                    ret['summary_fields']['direct_access'].append(format_role_perm(old_role))
+                elif new_role.content_type_id == team_content_type.id:
+                    all_team_roles.add(old_role)
+                else:
+                    ret['summary_fields']['indirect_access'].append(format_role_perm(old_role))
+
+            ret['summary_fields']['direct_access'].extend(
+                [y for x in (format_team_role_perm(r, direct_permissive_role_ids) for r in all_team_roles) for y in x]
+            )
+            ret['summary_fields']['direct_access'].extend([y for x in (format_team_role_perm(r, all_permissive_role_ids) for r in all_team_roles) for y in x])
+
+            return ret
+
         all_permissive_role_ids = Role.objects.filter(content_type=content_type, object_id=obj.id).values_list('ancestors__id', flat=True)
 
         direct_access_roles = user.roles.filter(id__in=direct_permissive_role_ids).all()

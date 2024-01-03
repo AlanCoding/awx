@@ -551,11 +551,32 @@ def get_role_definition(role):
     if obj is None:
         return
     f = obj._meta.get_field(role.role_field)
-    action_name = f.name.rsplit("_", 1)[0].replace('_', '-')
+    action_name = f.name.rsplit("_", 1)[0]
     rd_name = f'{obj._meta.model_name}-{action_name}-compat'
     perm_list = get_role_codenames(role)
     rd, created = RoleDefinition.objects.get_or_create(name=rd_name, permissions=perm_list)
     return rd
+
+
+def get_role_from_object_role(object_role):
+    """
+    Given an object role from the new system, return the corresponding role from the old system
+    reverses naming from get_role_definition, and the GATEWAY_ROLE_PRECREATE setting.
+    """
+    rd = object_role.role_definition
+    if rd.name.endswith('-compat'):
+        model_name, role_name, _ = rd.name.split('-')
+        role_name += '_role'
+    elif rd.name.endswith('-admin') and rd.name.count('-') == 2:
+        model_name, role_name = rd.name.split('-', 1)
+        role_name = role_name.replace('-', '_')
+    elif rd.name.endswith('-admin'):
+        model_name, _ = rd.name.rsplit('-', 1)
+        role_name = 'admin_role'
+    else:
+        model_name, role_name = rd.name.split('-')
+        role_name += '_role'
+    return getattr(object_role.content_object, role_name)
 
 
 def give_or_remove_permission(role, actor, giving=True):
