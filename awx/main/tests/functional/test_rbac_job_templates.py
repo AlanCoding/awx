@@ -4,7 +4,7 @@ import pytest
 from awx.api.versioning import reverse
 from awx.main.access import BaseAccess, JobTemplateAccess, ScheduleAccess
 from awx.main.models.jobs import JobTemplate
-from awx.main.models import Project, Organization, Inventory, Schedule, User
+from awx.main.models import Project, Organization, Schedule
 
 
 @mock.patch.object(BaseAccess, 'check_license', return_value=None)

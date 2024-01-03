@@ -4,7 +4,6 @@ from prometheus_client.parser import text_string_to_metric_families
 from awx.main import models
 from awx.main.analytics.metrics import metrics
 from awx.api.versioning import reverse
-from awx.main.models.rbac import Role
 
 EXPECTED_VALUES = {
     'awx_system_info': 1.0,

@@ -1,9 +1,7 @@
 import pytest
 
-from django.apps import apps
-
 from awx.main.migrations import _rbac as rbac
-from awx.main.models import UnifiedJobTemplate, InventorySource, Inventory, JobTemplate, Project, Organization, User
+from awx.main.models import UnifiedJobTemplate, InventorySource, Inventory, JobTemplate, Project, Organization
 
 
 @pytest.mark.django_db

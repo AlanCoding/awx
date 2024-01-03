@@ -1,7 +1,6 @@
 import pytest
 
 # AWX context managers for testing
-from awx.main.models.rbac import batch_role_ancestor_rebuilding
 from awx.main.signals import disable_activity_stream, disable_computed_fields, update_inventory_computed_fields
 
 # AWX models

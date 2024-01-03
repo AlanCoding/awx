@@ -28,7 +28,6 @@ from awx.main.models.organization import (
     Organization,
     Team,
 )
-from awx.main.models.rbac import Role
 from awx.main.models.notifications import NotificationTemplate, Notification
 from awx.main.models.events import (
     JobEvent,

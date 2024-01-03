@@ -3,7 +3,7 @@ import pytest
 
 from django.db import transaction
 from awx.api.versioning import reverse
-from awx.main.models.rbac import Role, ROLE_SINGLETON_SYSTEM_ADMINISTRATOR
+from awx.main.models.rbac import Role
 
 
 @pytest.fixture
