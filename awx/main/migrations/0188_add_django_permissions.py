@@ -75,14 +75,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AlterModelOptions(
-            name='organization',
-            options={
-                'default_permissions': ('change', 'delete', 'view'),
-                'ordering': ('name',),
-                'permissions': [('member_organization', 'Basic participation permissions for organization')],
-            },
-        ),
-        migrations.AlterModelOptions(
             name='instancegroup',
             options={
                 'default_permissions': ('change', 'delete', 'view'),
