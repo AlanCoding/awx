@@ -17,19 +17,7 @@ def migrate_to_new_user_model(apps, schema_editor):
     Role = apps.get_model('main', 'Role')
     auditor_role = Role.objects.get(singleton_name='system_auditor')
     auditor_ids = set(auditor_role.members.values_list('id', flat=True))
-    old_fields = (
-        'id',
-        'password',
-        'last_login',
-        'is_superuser',
-        'username',
-        'first_name',
-        'last_name',
-        'email',
-        'is_staff',
-        'is_active',
-        'date_joined',
-    )
+    old_fields = [f.name for f in old_user._meta.concrete_fields]
     for ct, old_u in enumerate(old_user.objects.all(), 1):
         new_u = new_user(**{k: getattr(old_u, k) for k in old_fields})
         if old_u.id in auditor_ids:
@@ -97,5 +85,5 @@ class Migration(migrations.Migration):
                 ('objects', django.contrib.auth.models.UserManager()),
             ],
         ),
-        migrations.RunPython(migrate_to_new_user_model),
+        migrations.RunPython(migrate_to_new_user_model, migrations.RunPython.noop),
     ]
