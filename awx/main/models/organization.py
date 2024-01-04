@@ -162,6 +162,10 @@ class User(AnsibleBaseUser):
     class Meta:
         app_label = 'main'
 
+    # Remove permission relationships from auth app, managed by RBAC
+    groups = None
+    user_permissions = None
+
 
 class Profile(CreatedModifiedModel):
     """

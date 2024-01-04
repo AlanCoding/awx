@@ -79,7 +79,14 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ('date_joined', models.DateTimeField(default=django.utils.timezone.now, verbose_name='date joined')),
-                ('is_system_auditor', models.BooleanField(default=False)),
+                (
+                    'is_system_auditor',
+                    models.BooleanField(
+                        default=False,
+                        help_text='Designates that this user can view everything in the system without explicitly assigning view permissions.',
+                        verbose_name='superauditor status',
+                    ),
+                ),
             ],
             managers=[
                 ('objects', django.contrib.auth.models.UserManager()),
