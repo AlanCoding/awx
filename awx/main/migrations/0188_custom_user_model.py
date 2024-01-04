@@ -41,7 +41,8 @@ def migrate_to_new_user_model(apps, schema_editor):
         ct += 1
     if ct:
         logger.info(f'Migrated {ct} users to new User model')
-    # TODO: also migrate relationships from auth.User to main.User... maybe
+    # TODO: also migrate relationships from auth.User to main.User
+    # TODO: delete records in the old auth.User table
 
 
 class Migration(migrations.Migration):
