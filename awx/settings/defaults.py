@@ -25,6 +25,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # existing models.
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
+# # Custom user model
+# AUTH_USER_MODEL = 'main.User'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -481,6 +484,7 @@ CACHES = {'default': {'BACKEND': 'awx.main.cache.AWXRedisCache', 'LOCATION': 'un
 SOCIAL_AUTH_STRATEGY = 'social_django.strategy.DjangoStrategy'
 SOCIAL_AUTH_STORAGE = 'social_django.models.DjangoStorage'
 SOCIAL_AUTH_USER_MODEL = 'auth.User'
+# SOCIAL_AUTH_USER_MODEL = 'main.User'
 
 _SOCIAL_AUTH_PIPELINE_BASE = (
     'social_core.pipeline.social_auth.social_details',
