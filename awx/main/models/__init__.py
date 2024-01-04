@@ -11,7 +11,7 @@ from ansible_base.utils.models import prevent_search
 # AWX
 from awx.main.models.base import BaseModel, PrimordialModel, accepts_json, CLOUD_INVENTORY_SOURCES, VERBOSITY_CHOICES  # noqa
 from awx.main.models.unified_jobs import UnifiedJob, UnifiedJobTemplate, StdoutMaxBytesExceeded  # noqa
-from awx.main.models.organization import Organization, Profile, Team, UserSessionMembership  # noqa
+from awx.main.models.organization import Organization, User, Profile, Team, UserSessionMembership  # noqa
 from awx.main.models.credential import Credential, CredentialType, CredentialInputSource, ManagedCredentialType, build_safe_env  # noqa
 from awx.main.models.projects import Project, ProjectUpdate  # noqa
 from awx.main.models.inventory import (  # noqa
@@ -91,8 +91,7 @@ from oauth2_provider.models import Grant, RefreshToken  # noqa -- needed django-
 
 
 # Add custom methods to User model for permissions checks.
-from django.contrib.auth.models import User  # noqa
-from awx.main.access import get_user_queryset, check_user_access, check_user_access_with_errors  # noqa
+from awx.main.access import get_user_queryset, check_user_access, check_user_access_with_errors
 
 
 User.add_to_class('get_queryset', get_user_queryset)
@@ -188,40 +187,6 @@ User.add_to_class('organizations', user_get_organizations)
 User.add_to_class('admin_of_organizations', user_get_admin_of_organizations)
 User.add_to_class('auditor_of_organizations', user_get_auditor_of_organizations)
 User.add_to_class('created', created)
-
-
-@property
-def user_is_system_auditor(user):
-    if not hasattr(user, '_is_system_auditor'):
-        if user.pk:
-            user._is_system_auditor = user.roles.filter(singleton_name='system_auditor', role_field='system_auditor').exists()
-        else:
-            # Odd case where user is unsaved, this should never be relied on
-            return False
-    return user._is_system_auditor
-
-
-@user_is_system_auditor.setter
-def user_is_system_auditor(user, tf):
-    if not user.id:
-        # If the user doesn't have a primary key yet (i.e., this is the *first*
-        # time they've logged in, and we've just created the new User in this
-        # request), we need one to set up the system auditor role
-        user.save()
-    if tf:
-        role = Role.singleton('system_auditor')
-        # must check if member to not duplicate activity stream
-        if user not in role.members.all():
-            role.members.add(user)
-        user._is_system_auditor = True
-    else:
-        role = Role.singleton('system_auditor')
-        if user in role.members.all():
-            role.members.remove(user)
-        user._is_system_auditor = False
-
-
-User.add_to_class('is_system_auditor', user_is_system_auditor)
 
 
 def user_is_in_enterprise_category(user, category):

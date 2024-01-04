@@ -5,7 +5,7 @@ from django.test.utils import override_settings
 from rest_framework.serializers import ValidationError
 
 from awx.api.serializers import UserSerializer
-from django.contrib.auth.models import User
+from awx.main.models import User
 
 
 @pytest.mark.parametrize(

@@ -846,7 +846,7 @@ class WorkflowApproval(UnifiedJob, JobNotificationMixin):
     )
     timed_out = models.BooleanField(default=False, help_text=_("Shows when an approval node (with a timeout assigned to it) has timed out."))
     approved_or_denied_by = models.ForeignKey(
-        'auth.User',
+        settings.AUTH_USER_MODEL,
         related_name='%s(class)s_approved+',
         default=None,
         null=True,

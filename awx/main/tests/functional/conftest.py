@@ -8,7 +8,6 @@ from unittest.mock import PropertyMock
 from django.urls import resolve
 from django.http import Http404
 from django.core.handlers.exception import response_for_exception
-from django.contrib.auth.models import User
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.backends.sqlite3.base import SQLiteCursorWrapper
 
@@ -41,6 +40,7 @@ from awx.main.models.workflow import WorkflowJobTemplate
 from awx.main.models.ad_hoc_commands import AdHocCommand
 from awx.main.models.oauth import OAuth2Application as Application
 from awx.main.models.execution_environments import ExecutionEnvironment
+from awx.main.models import User
 
 __SWAGGER_REQUESTS__ = {}
 

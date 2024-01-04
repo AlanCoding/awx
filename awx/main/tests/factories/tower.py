@@ -1,6 +1,3 @@
-from django.contrib.auth.models import User
-
-
 from awx.main.models import (
     Organization,
     Project,
@@ -10,6 +7,7 @@ from awx.main.models import (
     Inventory,
     Job,
     Label,
+    User,
     WorkflowJobTemplateNode,
 )
 

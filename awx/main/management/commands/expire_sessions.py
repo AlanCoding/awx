@@ -5,9 +5,11 @@ from importlib import import_module
 from django.utils import timezone
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 from django.core.exceptions import ObjectDoesNotExist
+
+# AWX
+from awx.main.models import User
 
 
 class Command(BaseCommand):

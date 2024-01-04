@@ -1,11 +1,11 @@
 # Django
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 
 # AWX
 from awx.main.models.oauth import OAuth2AccessToken
 from oauth2_provider.models import RefreshToken
+from awx.main.models import User
 
 
 def revoke_tokens(token_list):

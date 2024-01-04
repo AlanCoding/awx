@@ -5,7 +5,6 @@
 # Django
 from django.conf import settings
 from django.db import models
-from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 from django.utils.timezone import now as tz_now
 from django.utils.translation import gettext_lazy as _
@@ -22,7 +21,10 @@ from awx.main.models.rbac import (
 from awx.main.models.unified_jobs import UnifiedJob
 from awx.main.models.mixins import ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin
 
-__all__ = ['Organization', 'Team', 'Profile', 'UserSessionMembership']
+# django-ansible-base
+from ansible_base.models.user import AnsibleBaseUser
+
+__all__ = ['Organization', 'Team', 'User', 'Profile', 'UserSessionMembership']
 
 
 class Organization(CommonModel, NotificationFieldsModel, ResourceMixin, CustomVirtualEnvMixin, RelatedJobsMixin):
@@ -156,6 +158,11 @@ class Team(CommonModelNameNotUnique, ResourceMixin):
         return reverse('api:team_detail', kwargs={'pk': self.pk}, request=request)
 
 
+class User(AnsibleBaseUser):
+    class Meta:
+        app_label = 'main'
+
+
 class Profile(CreatedModifiedModel):
     """
     Profile model related to User object. Currently stores LDAP DN for users
@@ -165,7 +172,7 @@ class Profile(CreatedModifiedModel):
     class Meta:
         app_label = 'main'
 
-    user = AutoOneToOneField('auth.User', related_name='profile', editable=False, on_delete=models.CASCADE)
+    user = AutoOneToOneField(settings.AUTH_USER_MODEL, related_name='profile', editable=False, on_delete=models.CASCADE)
     ldap_dn = models.CharField(
         max_length=1024,
         default='',
@@ -182,7 +189,7 @@ class UserSessionMembership(BaseModel):
     class Meta:
         app_label = 'main'
 
-    user = models.ForeignKey('auth.User', related_name='+', blank=False, null=False, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='+', blank=False, null=False, on_delete=models.CASCADE)
     session = models.OneToOneField(Session, related_name='+', blank=False, null=False, on_delete=models.CASCADE)
     created = models.DateTimeField(default=None, editable=False)
 

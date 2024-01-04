@@ -10,7 +10,6 @@ from functools import reduce
 # Django
 from django.conf import settings
 from django.db.models import Q, Prefetch
-from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ObjectDoesNotExist, FieldDoesNotExist
 
@@ -65,6 +64,7 @@ from awx.main.models import (
     Team,
     UnifiedJob,
     UnifiedJobTemplate,
+    User,
     WorkflowJob,
     WorkflowJobNode,
     WorkflowJobTemplate,

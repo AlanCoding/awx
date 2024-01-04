@@ -5,12 +5,12 @@ import random
 from io import StringIO
 
 # Django
-from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
 # AWX
 from awx.main.models.oauth import OAuth2AccessToken
+from awx.main.models import User
 
 
 @pytest.mark.django_db

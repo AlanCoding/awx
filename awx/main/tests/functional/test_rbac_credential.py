@@ -4,7 +4,8 @@ from unittest import mock
 
 from awx.main.access import CredentialAccess
 from awx.main.models.credential import Credential
-from django.contrib.auth.models import User
+
+from awx.main.models import User
 
 
 @pytest.mark.django_db

@@ -4,7 +4,9 @@
 # Django
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
-from django.contrib.auth.models import User
+
+# AWX
+from awx.main.models import User
 
 
 class UpdatePassword(object):

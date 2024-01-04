@@ -31,7 +31,7 @@ class ActivityStream(models.Model):
         ('disassociate', _("Entity was Disassociated with another Entity")),
     ]
 
-    actor = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL, related_name='activity_stream')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='activity_stream')
     operation = models.CharField(max_length=13, choices=OPERATION_CHOICES)
     timestamp = models.DateTimeField(auto_now_add=True)
     changes = accepts_json(models.TextField(blank=True))
@@ -48,7 +48,7 @@ class ActivityStream(models.Model):
     object1 = models.TextField()
     object2 = models.TextField()
 
-    user = models.ManyToManyField("auth.User", blank=True)
+    user = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True)
     organization = models.ManyToManyField("Organization", blank=True)
     inventory = models.ManyToManyField("Inventory", blank=True)
     host = models.ManyToManyField("Host", blank=True)

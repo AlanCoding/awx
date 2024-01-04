@@ -19,7 +19,6 @@ from django.db import connection, transaction, DatabaseError, IntegrityError
 from django.db.models.fields.related import ForeignKey
 from django.utils.timezone import now, timedelta
 from django.utils.encoding import smart_str
-from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext_noop
 from django.core.cache import cache
@@ -48,6 +47,7 @@ from awx.main.models import (
     Inventory,
     SmartInventoryMembership,
     Job,
+    User,
     convert_jsonfields,
 )
 from awx.main.constants import ACTIVE_STATES

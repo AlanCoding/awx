@@ -1,6 +1,5 @@
 import json
 
-from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
 from unittest import mock
@@ -18,6 +17,7 @@ from awx.main.models import (
     Credential,
     Inventory,
     Label,
+    User,
     WorkflowJobTemplate,
     WorkflowJob,
     WorkflowJobNode,

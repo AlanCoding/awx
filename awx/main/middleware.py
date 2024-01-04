@@ -8,7 +8,6 @@ import urllib.parse
 
 from django.conf import settings
 from django.contrib.auth import logout
-from django.contrib.auth.models import User
 from django.db.migrations.executor import MigrationExecutor
 from django.db import connection
 from django.shortcuts import redirect
@@ -20,6 +19,7 @@ from django.urls import reverse, resolve
 from awx.main.utils.named_url_graph import generate_graph, GraphNode
 from awx.conf import fields, register
 from awx.main.utils.profiling import AWXProfiler
+from awx.main.models import User
 
 
 logger = logging.getLogger('awx.main.middleware')

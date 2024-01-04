@@ -1,7 +1,6 @@
 import pytest
 from unittest import mock
 
-from django.contrib.auth.models import User
 from django.forms.models import model_to_dict
 from rest_framework.exceptions import ParseError
 
@@ -14,6 +13,7 @@ from awx.main.models import (
     Project,
     Role,
     Organization,
+    User,
 )
 
 

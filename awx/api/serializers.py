@@ -21,7 +21,6 @@ from jinja2.exceptions import TemplateSyntaxError, UndefinedError, SecurityError
 # Django
 from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
-from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
@@ -50,6 +49,7 @@ from awx.main.access import get_user_capabilities
 from awx.main.constants import ACTIVE_STATES, CENSOR_VALUE
 from awx.main.models import (
     ActivityStream,
+    User,
     AdHocCommand,
     AdHocCommandEvent,
     Credential,

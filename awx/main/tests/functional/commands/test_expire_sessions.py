@@ -7,12 +7,12 @@ import random
 from django.utils import timezone
 from django.test import Client
 from django.conf import settings
-from django.contrib.auth.models import User
 from django.contrib.sessions.models import Session
 from django.core.management.base import CommandError
 
 # AWX
 from awx.main.management.commands.expire_sessions import Command
+from awx.main.models import User
 
 
 @pytest.mark.django_db

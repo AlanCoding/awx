@@ -281,7 +281,7 @@ class PrimordialModel(HasEditsMixin, CreatedModifiedModel):
         default='',
     )
     created_by = models.ForeignKey(
-        'auth.User',
+        settings.AUTH_USER_MODEL,
         related_name='%s(class)s_created+',
         default=None,
         null=True,
@@ -289,7 +289,7 @@ class PrimordialModel(HasEditsMixin, CreatedModifiedModel):
         on_delete=models.SET_NULL,
     )
     modified_by = models.ForeignKey(
-        'auth.User',
+        settings.AUTH_USER_MODEL,
         related_name='%s(class)s_modified+',
         default=None,
         null=True,
