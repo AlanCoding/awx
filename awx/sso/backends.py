@@ -10,7 +10,7 @@ import ldap
 
 # Django
 from django.dispatch import receiver
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.conf import settings as django_settings
 from django.core.signals import setting_changed
 from django.utils.encoding import force_str
@@ -107,10 +107,10 @@ class LDAPBackend(BaseLDAPBackend):
         if not self.settings.SERVER_URI:
             return None
         try:
-            user = User.objects.get(username=username)
+            user = get_user_model().objects.get(username=username)
             if user and (not user.profile or not user.profile.ldap_dn):
                 return None
-        except User.DoesNotExist:
+        except get_user_model().DoesNotExist:
             pass
 
         try:
@@ -182,9 +182,9 @@ def _decorate_enterprise_user(user, provider):
 def _get_or_set_enterprise_user(username, password, provider):
     created = False
     try:
-        user = User.objects.prefetch_related('enterprise_auth').get(username=username)
-    except User.DoesNotExist:
-        user = User(username=username)
+        user = get_user_model().objects.prefetch_related('enterprise_auth').get(username=username)
+    except get_user_model().DoesNotExist:
+        user = get_user_model()(username=username)
         enterprise_auth = _decorate_enterprise_user(user, provider)
         logger.debug("Created enterprise user %s via %s backend." % (username, enterprise_auth.get_provider_display()))
         created = True
@@ -246,8 +246,8 @@ class TACACSPlusBackend(object):
         if not django_settings.TACACSPLUS_HOST:
             return None
         try:
-            return User.objects.get(pk=user_id)
-        except User.DoesNotExist:
+            return get_user_model().objects.get(pk=user_id)
+        except get_user_model().DoesNotExist:
             return None
 
     def _get_client_ip(self, request):
@@ -394,7 +394,7 @@ def on_populate_user(sender, **kwargs):
 
     # If the LDAP user has a first or last name > $maxlen chars, truncate it
     for field in ('first_name', 'last_name'):
-        max_len = User._meta.get_field(field).max_length
+        max_len = get_user_model()._meta.get_field(field).max_length
         field_len = len(getattr(user, field))
         if field_len > max_len:
             setattr(user, field, getattr(user, field)[:max_len])

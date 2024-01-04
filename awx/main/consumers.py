@@ -8,12 +8,11 @@ import redis
 from django.core.serializers.json import DjangoJSONEncoder
 from django.conf import settings
 from django.utils.encoding import force_bytes
+from django.contrib.auth import get_user_model
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.layers import get_channel_layer
 from channels.db import database_sync_to_async
-
-from awx.main.models import User
 
 logger = logging.getLogger('awx.main.consumers')
 XRF_KEY = '_auth_user_xrf'
@@ -157,7 +156,7 @@ class EventConsumer(AsyncJsonWebsocketConsumer):
         # Specifically, type(user) != User
         # Therefore, get the "real" User objects from the database before
         # calling the access permission methods
-        user_access.user = User.objects.get(id=user_access.user.id)
+        user_access.user = get_user_model().objects.get(id=user_access.user.id)
         res = user_access.get_queryset().filter(pk=oid).exists()
         return res
 

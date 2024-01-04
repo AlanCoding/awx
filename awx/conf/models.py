@@ -6,6 +6,7 @@ import json
 
 # Django
 from django.db import models
+from django.conf import settings
 
 from ansible_base.utils.models import prevent_search
 
@@ -20,7 +21,9 @@ __all__ = ['Setting']
 class Setting(CreatedModifiedModel):
     key = models.CharField(max_length=255)
     value = models.JSONField(null=True)
-    user = prevent_search(models.ForeignKey('auth.User', related_name='settings', default=None, null=True, editable=False, on_delete=models.CASCADE))
+    user = prevent_search(
+        models.ForeignKey(settings.AUTH_USER_MODEL, related_name='settings', default=None, null=True, editable=False, on_delete=models.CASCADE)
+    )
 
     def __str__(self):
         try:

@@ -3,7 +3,7 @@
 
 # Django
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
 
@@ -15,5 +15,5 @@ class UserEnterpriseAuth(models.Model):
     class Meta:
         unique_together = ('user', 'provider')
 
-    user = models.ForeignKey(User, related_name='enterprise_auth', on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='enterprise_auth', on_delete=models.CASCADE)
     provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
