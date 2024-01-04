@@ -18,6 +18,7 @@ def migrate_to_new_user_model(apps, schema_editor):
     auditor_role = Role.objects.get(singleton_name='system_auditor')
     auditor_ids = set(auditor_role.members.values_list('id', flat=True))
     old_fields = (
+        'id',
         'password',
         'last_login',
         'is_superuser',
@@ -29,19 +30,16 @@ def migrate_to_new_user_model(apps, schema_editor):
         'is_active',
         'date_joined',
     )
-    ct = 0
-    for old_u in old_user.objects.all():
-        new_u = new_user(id=old_u.id)
-        for field_name in old_fields:
-            value = getattr(old_u, field_name)
-            setattr(new_u, field_name, value)
+    for ct, old_u in enumerate(old_user.objects.all(), 1):
+        new_u = new_user(**{k: getattr(old_u, k) for k in old_fields})
         if old_u.id in auditor_ids:
             new_u.is_system_auditor = True
         new_u.save()
-        ct += 1
     if ct:
         logger.info(f'Migrated {ct} users to new User model')
     # TODO: also migrate relationships from auth.User to main.User
+    # User.objects.first()._meta.get_all_related_objects()
+    # User.objects.first()._meta.get_all_related_many_to_many_objects()
     # TODO: delete records in the old auth.User table
 
 
