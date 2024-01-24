@@ -1093,12 +1093,12 @@ from ansible_base.lib import dynamic_config  # noqa: E402
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)
 
-del settings, settings_file
+del settings_file
 
 # Settings for the ansible_base RBAC system
 
 # Settings for the RBAC system, override as necessary in app
-GATEWAY_ROLE_PRECREATE = {
+ANSIBLE_BASE_ROLE_PRECREATE = {
     'object_admin': '{cls._meta.model_name}-admin',
     'org_admin': 'organization-admin',
     'org_children': 'organization-{cls._meta.model_name}-admin',
@@ -1106,7 +1106,7 @@ GATEWAY_ROLE_PRECREATE = {
 }
 
 # Use the new Gateway RBAC system for evaluations? You should. We will remove the old system soon.
-ROLE_GATEWAY_SYSTEM_ACTIVATED = True
+ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED = True
 
 # Permissions a user will get when creating a new item
-ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'execute', 'use', 'adhoc', 'approve', 'update', 'view']
+ANSIBLE_BASE_CREATOR_DEFAULTS = ['change', 'delete', 'execute', 'use', 'adhoc', 'approve', 'update', 'view']

@@ -129,8 +129,8 @@ def migrate_to_new_rbac(apps, schema_editor):
     to the new RoleDefinition and ObjectRole models
     """
     Role = apps.get_model('main', 'Role')
-    RoleDefinition = apps.get_model('ansible_base', 'RoleDefinition')
-    ObjectRole = apps.get_model('ansible_base', 'ObjectRole')
+    RoleDefinition = apps.get_model('dab_rbac', 'RoleDefinition')
+    ObjectRole = apps.get_model('dab_rbac', 'ObjectRole')
     Permission = apps.get_model('auth', 'Permission')
 
     # remove add premissions that are not valid for migrations from old versions

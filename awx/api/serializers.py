@@ -45,8 +45,7 @@ from polymorphic.models import PolymorphicModel
 
 # django-ansible-base
 from ansible_base.lib.utils.models import get_type_for_model
-from ansible_base.models.rbac import RoleEvaluation
-from ansible_base.utils.models import get_type_for_model
+from ansible_base.rbac.models import RoleEvaluation
 
 # AWX
 from awx.main.access import get_user_capabilities
@@ -2844,7 +2843,7 @@ class ResourceAccessListElementSerializer(UserSerializer):
         gfk_kwargs = dict(content_type_id=content_type.id, object_id=obj.id)
         direct_permissive_role_ids = Role.objects.filter(**gfk_kwargs).values_list('id', flat=True)
 
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             ret['summary_fields']['direct_access'] = []
             ret['summary_fields']['indirect_access'] = []
 

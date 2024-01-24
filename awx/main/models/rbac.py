@@ -21,7 +21,7 @@ from django.conf import settings
 from awx.api.versioning import reverse
 
 # Ansible_base app
-from ansible_base.models.rbac import RoleDefinition
+from ansible_base.rbac.models import RoleDefinition
 from awx.main.migrations._new_rbac import build_role_map, get_permissions_for_role
 from awx.main.constants import role_name_to_perm_mapping, org_role_to_permission
 
@@ -190,7 +190,7 @@ class Role(models.Model):
             elif self.role_field in ('read_role', 'auditor_role') and accessor.is_system_auditor:
                 return True
 
-            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
                 if self.role_field not in to_permissions and self.content_object and self.content_object._meta.model_name == 'organization':
                     # valid alternative for narrow exceptions with org roles
                     if self.role_field not in org_role_to_permission:
@@ -313,7 +313,7 @@ class Role(models.Model):
         #
         #
 
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             return
 
         if len(additions) == 0 and len(removals) == 0:
@@ -448,8 +448,8 @@ class Role(models.Model):
         in their organization, but some of those roles descend from
         organization admin_role, but not auditor_role.
         """
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
-            from ansible_base.models.rbac import RoleEvaluation
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
+            from ansible_base.rbac.models import RoleEvaluation
 
             q = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
             return roles_qs.extra(where=[f'(object_id,content_type_id) in ({q})'])
@@ -478,7 +478,7 @@ class Role(models.Model):
 
 class AncestorManager(models.Manager):
     def get_queryset(self):
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             raise RuntimeError('The old RBAC system has been disabled, this should never be called')
         return super(AncestorManager, self).get_queryset()
 
@@ -561,7 +561,7 @@ def get_role_definition(role):
 def get_role_from_object_role(object_role):
     """
     Given an object role from the new system, return the corresponding role from the old system
-    reverses naming from get_role_definition, and the GATEWAY_ROLE_PRECREATE setting.
+    reverses naming from get_role_definition, and the ANSIBLE_BASE_ROLE_PRECREATE setting.
     """
     rd = object_role.role_definition
     if rd.name.endswith('-compat'):

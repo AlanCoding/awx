@@ -22,7 +22,7 @@ from awx.main.models.oauth import OAuth2Application, OAuth2AccessToken
 
 # django-ansible-base
 from ansible_base.lib.utils.validation import to_python_boolean
-from ansible_base.models.rbac import RoleEvaluation
+from ansible_base.rbac.models import RoleEvaluation
 
 # AWX
 from awx.main.utils import (
@@ -706,7 +706,7 @@ class UserAccess(BaseAccess):
             if not allow_orphans:
                 # in these cases only superusers can modify orphan users
                 return False
-            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
                 # Permission granted if the user has all permissions that the target user has
                 target_perms = set(
                     RoleEvaluation.objects.filter(role__in=obj.has_roles.all()).values_list('object_id', 'content_type_id', 'codename').distinct()
@@ -1407,7 +1407,7 @@ class ExecutionEnvironmentAccess(BaseAccess):
     def can_change(self, obj, data):
         if obj and obj.organization_id is None:
             raise PermissionDenied
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             if not self.user.has_obj_perm(obj, 'change'):
                 raise PermissionDenied
         else:
@@ -2583,7 +2583,7 @@ class ScheduleAccess(UnifiedCredentialsMixin, BaseAccess):
         if not JobLaunchConfigAccess(self.user).can_add(data):
             return False
         if not data:
-            if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+            if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
                 return self.user.has_roles.filter(permission_partials__codename__in=['execute_jobtemplate', 'update_project', 'update_inventory']).exists()
             return Role.objects.filter(role_field__in=['update_role', 'execute_role'], ancestors__in=self.user.roles.all()).exists()
 
@@ -2613,7 +2613,7 @@ class NotificationTemplateAccess(BaseAccess):
     prefetch_related = ('created_by', 'modified_by', 'organization')
 
     def filtered_queryset(self):
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             return self.model.new_accessible_objects(self.user, 'view')
         return self.model.objects.filter(
             Q(organization__in=Organization.accessible_objects(self.user, 'notification_admin_role')) | Q(organization__in=self.user.auditor_of_organizations)

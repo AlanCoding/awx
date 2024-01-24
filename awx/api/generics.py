@@ -33,9 +33,7 @@ from rest_framework.negotiation import DefaultContentNegotiation
 # django-ansible-base
 from ansible_base.rest_filters.rest_framework.field_lookup_backend import FieldLookupBackend
 from ansible_base.lib.utils.models import get_all_field_names
-from ansible_base.models.rbac import RoleEvaluation
-from ansible_base.filters.rest_framework.field_lookup_backend import FieldLookupBackend
-from ansible_base.utils.models import get_all_field_names
+from ansible_base.rbac.models import RoleEvaluation
 
 # AWX
 from awx.main.models import UnifiedJob, UnifiedJobTemplate, User, Role, Credential, WorkflowJobTemplateNode, WorkflowApprovalTemplate
@@ -805,7 +803,7 @@ class ResourceAccessList(ParentMixin, ListAPIView):
 
         content_type = ContentType.objects.get_for_model(obj)
 
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             ancestors = set(RoleEvaluation.objects.filter(content_type_id=content_type.id, object_id=obj.id).values_list('role_id', flat=True))
             return (User.objects.filter(has_roles__in=ancestors) | User.objects.filter(is_superuser=True)).distinct()
 

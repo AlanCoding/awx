@@ -126,7 +126,7 @@ def rebuild_role_ancestor_list(reverse, model, instance, pk_set, action, **kwarg
 
 def sync_superuser_status_to_rbac(instance, **kwargs):
     'When the is_superuser flag is changed on a user, reflect that in the membership of the System Admnistrator role'
-    if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+    if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
         return
     update_fields = kwargs.get('update_fields', None)
     if update_fields and 'is_superuser' not in update_fields:
@@ -139,7 +139,7 @@ def sync_superuser_status_to_rbac(instance, **kwargs):
 
 def sync_rbac_to_superuser_status(instance, sender, **kwargs):
     'When the is_superuser flag is false but a user has the System Admin role, update the database to reflect that'
-    if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+    if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
         return
     if kwargs['action'] in ['post_add', 'post_remove', 'post_clear']:
         new_status_value = bool(kwargs['action'] == 'post_add')

@@ -5,10 +5,10 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('main', '0188_add_django_permissions'),
+        ('main', '0189_add_django_permissions'),
     ]
     run_before = [
-        ('ansible_base', '0010_RBAC'),
+        ('dab_rbac', '__first__'),
     ]
 
     operations = [

@@ -211,7 +211,7 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         # do not use this if in a subclass
         if cls != UnifiedJobTemplate:
             return super(UnifiedJobTemplate, cls).accessible_pk_qs(accessor, role_field)
-        from ansible_base.models.rbac import RoleEvaluation
+        from ansible_base.rbac.models import RoleEvaluation
 
         action = to_permissions[role_field]
 

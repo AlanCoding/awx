@@ -61,7 +61,7 @@ import pytz
 from wsgiref.util import FileWrapper
 
 # django-ansible-base
-from ansible_base.models.rbac import RoleEvaluation, ObjectRole
+from ansible_base.rbac.models import RoleEvaluation, ObjectRole
 
 # AWX
 from awx.main.tasks.system import send_notifications, update_inventory_computed_fields

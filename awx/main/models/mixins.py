@@ -65,13 +65,13 @@ class ResourceMixin(models.Model):
 
     @staticmethod
     def _accessible_pk_qs(cls, accessor, role_field, content_types=None):
-        if settings.ROLE_GATEWAY_SYSTEM_ACTIVATED:
+        if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
             if role_field not in to_permissions and cls._meta.model_name == 'organization':
                 # superficial alternative for narrow exceptions with org roles
                 # I think this mostly applies to organization members, which is not fully defined yet
                 if accessor.is_superuser:
                     return cls.objects.values_list('id')
-                from ansible_base.models.rbac import ObjectRole
+                from ansible_base.rbac.models import ObjectRole
 
                 codename = org_role_to_permission[role_field]
 

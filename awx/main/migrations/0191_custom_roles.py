@@ -6,7 +6,7 @@ from django.contrib.contenttypes.management import create_contenttypes
 
 from awx.main.migrations._new_rbac import migrate_to_new_rbac
 
-from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
+from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
 
 
 def create_contenttypes_as_operation(apps, schema_editor):
@@ -23,8 +23,8 @@ def create_permissions_as_operation(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('main', '0189_profile_is_system_auditor'),
-        ('ansible_base', '0010_RBAC'),
+        ('main', '0190_profile_is_system_auditor'),
+        ('dab_rbac', '__first__'),
     ]
 
     operations = [
