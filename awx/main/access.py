@@ -2614,7 +2614,7 @@ class NotificationTemplateAccess(BaseAccess):
 
     def filtered_queryset(self):
         if settings.ANSIBLE_BASE_ROLE_SYSTEM_ACTIVATED:
-            return self.model.new_accessible_objects(self.user, 'view')
+            return self.model.access_qs(self.user, 'view')
         return self.model.objects.filter(
             Q(organization__in=Organization.accessible_objects(self.user, 'notification_admin_role')) | Q(organization__in=self.user.auditor_of_organizations)
         ).distinct()
