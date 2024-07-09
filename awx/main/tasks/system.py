@@ -37,7 +37,7 @@ import ansible_runner.cleanup
 from dateutil.parser import parse as parse_date
 
 # django-ansible-base
-from ansible_base.resource_registry.tasks.sync import SyncExecutor
+from ansible_base.resource_registry.tasks.sync import SyncExecutor, SyncResult, SyncStatus
 
 # AWX
 from awx import __version__ as awx_application_version
@@ -970,6 +970,13 @@ def deep_copy_model_obj(model_module, model_name, obj_pk, new_obj_pk, user_pk, p
         update_inventory_computed_fields.delay(new_obj.id)
 
 
+class AWXSyncExecutor(SyncExecutor):
+    def _process_manifest_item(self, manifest_item):
+        if manifest_item.resource_data.get('username', None) == '_system':
+            return SyncResult(SyncStatus.NOOP, manifest_item)
+        return super()._process_manifest_item(manifest_item)
+
+
 @task(queue=get_task_queuename)
 def periodic_resource_sync():
     if not getattr(settings, 'RESOURCE_SERVER', None):
@@ -982,7 +989,7 @@ def periodic_resource_sync():
             return
         logger.debug("Running periodic resource sync")
 
-        executor = SyncExecutor()
+        executor = AWXSyncExecutor()
         executor.run()
         for key, item_list in executor.results:
             if not item_list or key == 'noop':
