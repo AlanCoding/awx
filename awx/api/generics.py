@@ -161,6 +161,7 @@ def get_view_description(view, html=False):
 
 
 def get_default_schema():
+    # TODO: get current_env
     if settings.SETTINGS_MODULE == 'awx.settings.development':
         from awx.api.swagger import schema_view
 

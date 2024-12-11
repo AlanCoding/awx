@@ -37,13 +37,14 @@ def get_urlpatterns(prefix=None):
         re_path(r'^(?!api/).*', include('awx.ui.urls', namespace='ui')),
     ]
 
-    if settings.SETTINGS_MODULE == 'awx.settings.development':
-        try:
-            import debug_toolbar
+    # TODO: check current_env
+    # if settings.SETTINGS_MODULE == 'awx.settings.development':
+    #     try:
+    #         import debug_toolbar
 
-            urlpatterns += [re_path(r'^__debug__/', include(debug_toolbar.urls))]
-        except ImportError:
-            pass
+    #         urlpatterns += [re_path(r'^__debug__/', include(debug_toolbar.urls))]
+    #     except ImportError:
+    #         pass
 
     return urlpatterns
 

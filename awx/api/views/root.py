@@ -66,6 +66,7 @@ class ApiVersionRootView(APIView):
     def get(self, request, format=None):
         '''List top level resources'''
         data = OrderedDict()
+        data["foo"] = settings.FOO
         data['ping'] = reverse('api:api_v2_ping_view', request=request)
         data['instances'] = reverse('api:instance_list', request=request)
         data['instance_groups'] = reverse('api:instance_group_list', request=request)

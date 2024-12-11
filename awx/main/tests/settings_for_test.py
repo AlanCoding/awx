@@ -1,6 +1,8 @@
 # Python
 import uuid
 
+# TODO: move to settings test
+
 # Load development settings for base variables.
 from awx.settings.development import *  # NOQA
 
