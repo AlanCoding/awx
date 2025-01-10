@@ -9,7 +9,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 # Django
-from django.conf import LazySettings
 from django.conf import settings, UserSettingsHolder
 from django.core.cache import cache as django_cache
 from django.core.exceptions import ImproperlyConfigured, SynchronousOnlyOperation
@@ -528,19 +527,3 @@ class SettingsWrapper(UserSettingsHolder):
         for safety sake we are ensuring the key schema does not change.
         """
         return cachetools.keys.hashkey(f"<{cls.__name__}>", *args, **kwargs)
-
-
-def __getattr_without_cache__(self, name):
-    # Django 1.10 added an optimization to settings lookup:
-    # https://code.djangoproject.com/ticket/27625
-    # https://github.com/django/django/commit/c1b221a9b913315998a1bcec2f29a9361a74d1ac
-    # This change caches settings lookups on the __dict__ of the LazySettings
-    # object, which is not okay to do in an environment where settings can
-    # change in-process (the entire point of awx's custom settings implementation)
-    # This restores the original behavior that *does not* cache.
-    if self._wrapped is empty:
-        self._setup(name)
-    return getattr(self._wrapped, name)
-
-
-LazySettings.__getattr__ = __getattr_without_cache__
