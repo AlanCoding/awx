@@ -9,7 +9,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import collections
-from multiprocessing import Process
+from multiprocessing import Process, set_start_method, set_forkserver_preload
 from multiprocessing import Queue as MPQueue
 from queue import Full as QueueFull, Empty as QueueEmpty
 
@@ -31,6 +31,13 @@ if 'run_callback_receiver' in sys.argv:
     logger = logging.getLogger('awx.main.commands.run_callback_receiver')
 else:
     logger = logging.getLogger('awx.main.dispatch')
+
+
+# For memory research task
+
+set_start_method("forkserver", force=True)
+
+set_forkserver_preload(["awx.main.dispatch.hazmat"])
 
 
 class NoOpResultQueue(object):
@@ -69,13 +76,13 @@ class PoolWorker(object):
 
     track_managed_tasks = False
 
-    def __init__(self, queue_size, target, args, **kwargs):
+    def __init__(self, queue_size, target_cls, args, **kwargs):
         self.messages_sent = 0
         self.messages_finished = 0
         self.managed_tasks = collections.OrderedDict()
         self.finished = MPQueue(queue_size) if self.track_managed_tasks else NoOpResultQueue()
         self.queue = MPQueue(queue_size)
-        self.process = Process(target=target, args=(self.queue, self.finished) + args)
+        self.process = Process(target=worker_run, args=(target_cls, self.queue, self.finished) + args)
         self.process.daemon = True
 
     def start(self):
@@ -197,6 +204,10 @@ class StatefulPoolWorker(PoolWorker):
     track_managed_tasks = True
 
 
+def worker_run(cls, *args, **kwargs):
+    cls().work_loop(*args, **kwargs)
+
+
 class WorkerPool(object):
     """
     Creates a pool of forked PoolWorkers.
@@ -231,8 +242,8 @@ class WorkerPool(object):
     def __len__(self):
         return len(self.workers)
 
-    def init_workers(self, target, *target_args):
-        self.target = target
+    def init_workers(self, target_cls, *target_args):
+        self.target_cls = target_cls
         self.target_args = target_args
         for idx in range(self.min_workers):
             self.up()
@@ -244,7 +255,7 @@ class WorkerPool(object):
         # for the DB and cache connections (that way lies race conditions)
         django_connection.close()
         django_cache.close()
-        worker = self.pool_cls(self.queue_size, self.target, (idx,) + self.target_args)
+        worker = self.pool_cls(self.queue_size, self.target_cls, (idx,) + self.target_args)
         self.workers.append(worker)
         try:
             worker.start()

@@ -32,7 +32,7 @@ class Command(BaseCommand):
         try:
             consumer = AWXConsumerRedis(
                 'callback_receiver',
-                CallbackBrokerWorker(),
+                CallbackBrokerWorker,
                 queues=[getattr(settings, 'CALLBACK_QUEUE', '')],
             )
             consumer.run()

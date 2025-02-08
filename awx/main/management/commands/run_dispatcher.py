@@ -67,7 +67,7 @@ class Command(BaseCommand):
 
         try:
             queues = ['tower_broadcast_all', 'tower_settings_change', get_task_queuename()]
-            consumer = AWXConsumerPG('dispatcher', TaskWorker(), queues, AutoscalePool(min_workers=4), schedule=settings.CELERYBEAT_SCHEDULE)
+            consumer = AWXConsumerPG('dispatcher', TaskWorker, queues, AutoscalePool(min_workers=4), schedule=settings.CELERYBEAT_SCHEDULE)
             consumer.run()
         except KeyboardInterrupt:
             logger.debug('Terminating Task Dispatcher')

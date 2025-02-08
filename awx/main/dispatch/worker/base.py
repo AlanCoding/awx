@@ -47,17 +47,17 @@ class WorkerSignalHandler:
 class AWXConsumerBase(object):
     last_stats = time.time()
 
-    def __init__(self, name, worker, queues=[], pool=None):
+    def __init__(self, name, worker_cls, queues=[], pool=None):
         self.should_stop = False
 
         self.name = name
         self.total_messages = 0
         self.queues = queues
-        self.worker = worker
+        self.worker = worker_cls()
         self.pool = pool
         if pool is None:
             self.pool = WorkerPool()
-        self.pool.init_workers(self.worker.work_loop)
+        self.pool.init_workers(worker_cls)
         self.redis = redis.Redis.from_url(settings.BROKER_URL)
 
     @property
