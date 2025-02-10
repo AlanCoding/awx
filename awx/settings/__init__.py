@@ -8,7 +8,7 @@ from ansible_base.lib.dynamic_config import (
     load_standard_settings_files,
     validate,
 )
-from .application_name import merge_application_name
+from .functions import merge_application_name, toggle_feature_flags
 
 # Create a the standard DYNACONF instance which will come with DAB defaults
 # This loads defaults.py and environment specific file e.g: development_defaults.py
@@ -83,6 +83,13 @@ load_envvars(DYNACONF)
 DYNACONF.update(
     merge_application_name(DYNACONF),
     loader_identifier="awx.settings:merge_application_name",
+    merge=True,
+)
+
+# Toggle feature flags based on installer settings
+DYNACONF.update(
+    toggle_feature_flags(DYNACONF),
+    loader_identifier="awx.settings:toggle_feature_flags",
     merge=True,
 )
 
