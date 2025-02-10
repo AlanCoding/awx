@@ -9,9 +9,6 @@ import tempfile
 import socket
 from datetime import timedelta
 
-from split_settings.tools import include
-
-FOO = 0
 DEBUG = True
 SQL_DEBUG = DEBUG
 
@@ -1017,11 +1014,6 @@ ANSIBLE_BASE_TEAM_MODEL = 'main.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'main.Organization'
 ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = 'awx.resource_api'
 ANSIBLE_BASE_PERMISSION_MODEL = 'main.Permission'
-
-# TODO: Move this to the settings object from DAB
-from ansible_base.lib import dynamic_config  # noqa: E402
-
-include(os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py'))
 
 # Add a postfix to the API URL patterns
 # example if set to '' API pattern will be /api
