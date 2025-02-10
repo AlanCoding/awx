@@ -5,7 +5,7 @@
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "awx.settings")
-os.environ.setdefault("AWX_MODE", "development")
+os.environ.setdefault("AWX_MODE", "development,quiet")
 
 from ansible_base.lib.dynamic_config import export
 from . import DYNACONF  # noqa
