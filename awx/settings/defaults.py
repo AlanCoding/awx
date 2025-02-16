@@ -1008,7 +1008,6 @@ METRICS_SUBSYSTEM_CONFIG = {
     }
 }
 
-
 # django-ansible-base
 ANSIBLE_BASE_TEAM_MODEL = 'main.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'main.Organization'

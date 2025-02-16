@@ -3,9 +3,14 @@
 
 # Local Django settings for AWX project.
 
-# All variables defined in awx/settings/development.py will already be loaded
-# into the global namespace before this file is loaded, to allow for reading
-# and updating the default settings as needed.
+# This file is loaded by Dynaconf from awx/settings.py 
+# dynaconf reads only the UPPER case variables from this file
+# To customize existing settings use dynaconf merging syntax
+# e.g: 
+# DATABASES__default__NAME = 'custom_db_name'
+# LOGGING__handlers__console__level = 'DEBUG'
+# 
+# For more complex conditionals use Dynaconf Post Hook.
 
 ###############################################################################
 # MISC PROJECT SETTINGS
@@ -35,30 +40,49 @@ OPTIONAL_API_URLPATTERN_PREFIX = '{{ api_urlpattern_prefix }}'
 # WARNING also logs 4xx responses.
 
 # Enable the following lines to turn on lots of permissions-related logging.
-# LOGGING['loggers']['awx.main.access']['level'] = 'DEBUG'
-# LOGGING['loggers']['awx.main.signals']['level'] = 'DEBUG'
-# LOGGING['loggers']['awx.main.permissions']['level'] = 'DEBUG'
-
-# Enable the following line to turn on database settings logging.
-# LOGGING['loggers']['awx.conf']['level'] = 'DEBUG'
+# LOGGING__loggers = {
+#     "dynaconf_merge": True,
+#     'awx.main.access': {'level': 'DEBUG'},
+#     'awx.main.signals': {'level': 'DEBUG'},
+#     'awx.main.permissions': {'level': 'DEBUG'},
+#     # Enable the following line to turn on database settings logging.
+#     # "awx.conf": {'level': 'DEBUG'}
+# }
 
 {% if enable_otel|bool %}
-LOGGING['handlers']['otel'] |= {
-    'class': 'awx.main.utils.handlers.OTLPHandler',
-    'endpoint': 'http://otel:4317',
-}
-# Add otel log handler to all log handlers where propagate is False
-for name in LOGGING['loggers'].keys():
-    if not LOGGING['loggers'][name].get('propagate', True):
-        handler = LOGGING['loggers'][name].get('handlers', [])
-        if 'otel' not in handler:
-            LOGGING['loggers'][name].get('handlers', []).append('otel')
+LOGGING__handlers__otel__class = 'awx.main.utils.handlers.OTLPHandler'
+LOGGING__handlers__otel__endpoint = 'http://otel:4317'
 
-# Everything without explicit propagate=False ends up logging to 'awx' so add it
-handler = LOGGING['loggers']['awx'].get('handlers', [])
-if 'otel' not in handler:
-    LOGGING['loggers']['awx'].get('handlers', []).append('otel')
+from dynaconf import post_hook
 
+
+@post_hook
+def set_log_handlers(settings) -> dict:
+    """Defers the setting of log handlers until after the settings are fully loaded.
+    this function is registered as a dynaconf hook, 
+    this must return a dict that will be merged into the settings.
+    NOTE: `settings` is a read-only that contains the settings loaded so far. 
+    """
+    data = {}
+    if (logging := settings.get('LOGGING')) is not None:
+        loggers = logging.get('loggers', {})
+        
+        # Add otel log handler to all log handlers where propagate is False
+        for logger in loggers.values():
+            if logger.get('propagate', True):
+                continue
+            if (handlers := logger.get('handlers')) is not None:
+                if 'otel' not in handlers:
+                    handlers.append('otel')
+
+
+        # Everything without explicit propagate=False ends up logging to 'awx' so add it
+        if (handlers := loggers.get('awx', {}).get('handlers')) is not None:
+            if 'otel' not in handlers:
+                handlers.append('otel')
+
+        data['LOGGING'] = logging
+    return data
 {% endif %}
 
 BROADCAST_WEBSOCKET_PORT = 8013

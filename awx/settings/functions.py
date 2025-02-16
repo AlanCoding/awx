@@ -28,5 +28,5 @@ def merge_application_name(settings):
     """Return a dynaconf merge dict to set the application name for the connection."""
     data = {}
     if "sqlite3" not in settings.get("DATABASES__default__ENGINE", ""):
-        data["DATABASES__default__OPTIONS__application_name"] = get_application_name(settings.CLUSTER_HOST_ID)
+        data["DATABASES__default__OPTIONS__application_name"] = get_application_name(settings.get("CLUSTER_HOST_ID"))
     return data

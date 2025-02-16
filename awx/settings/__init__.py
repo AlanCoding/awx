@@ -57,7 +57,7 @@ else:
     DYNACONF.load_file("local_*.py")
 
 # Check at least one required setting file has been loaded
-if "production" in DYNACONF.current_env.lower():
+if "production" in DYNACONF.current_env.lower():  # pragma: no cover
     required_settings_paths = [
         os.path.dirname(settings_file_path),
         "/etc/ansible-automation-platform/",
