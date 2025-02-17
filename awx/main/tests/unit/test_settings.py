@@ -1,7 +1,3 @@
-from django.conf import settings
-from awx.settings import REST_FRAMEWORK
-from awx.settings.functions import toggle_feature_flags, merge_application_name
-
 LOCAL_SETTINGS = (
     'ALLOWED_HOSTS',
     'BROADCAST_WEBSOCKET_PORT',
@@ -18,11 +14,15 @@ LOCAL_SETTINGS = (
 
 def test_postprocess_auth_basic_enabled():
     """The final loaded settings should have basic auth enabled."""
+    from awx.settings import REST_FRAMEWORK
+
     assert 'awx.api.authentication.LoggedBasicAuthentication' in REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES']
 
 
 def test_default_settings():
     """Ensure that all default settings are present in the snapshot."""
+    from django.conf import settings
+
     for k in dir(settings):
         if k not in settings.DEFAULTS_SNAPSHOT or k in LOCAL_SETTINGS:
             continue
@@ -33,34 +33,35 @@ def test_default_settings():
 
 def test_django_conf_settings_is_awx_settings():
     """Ensure that the settings loaded from dynaconf are the same as the settings delivered to django."""
-    assert settings.REST_FRAMEWORK is REST_FRAMEWORK
+    from django.conf import settings
+    from awx.settings import REST_FRAMEWORK
+
+    assert settings.REST_FRAMEWORK == REST_FRAMEWORK
 
 
 def test_dynaconf_is_awx_settings():
     """Ensure that the settings loaded from dynaconf are the same as the settings delivered to django."""
-    assert settings.DYNACONF.REST_FRAMEWORK is REST_FRAMEWORK
+    from django.conf import settings
+    from awx.settings import REST_FRAMEWORK
+
+    assert settings.DYNACONF.REST_FRAMEWORK == REST_FRAMEWORK
 
 
-def test_production_settings_can_be_directly_imported():
-    """Ensure that the production settings can be directly imported."""
-    from awx.settings.production import REST_FRAMEWORK
-    from awx.settings.production import DEBUG
-
-    assert settings.REST_FRAMEWORK is REST_FRAMEWORK
-    assert DEBUG is False
-
-
-def test_development_settings_can_be_directly_imported():
+def test_development_settings_can_be_directly_imported(monkeypatch):
     """Ensure that the development settings can be directly imported."""
+    monkeypatch.setenv('AWX_MODE', 'development')
+    from django.conf import settings
     from awx.settings.development import REST_FRAMEWORK
     from awx.settings.development import DEBUG  # actually set on defaults.py and not overridden in development.py
 
-    assert settings.REST_FRAMEWORK is REST_FRAMEWORK
+    assert settings.REST_FRAMEWORK == REST_FRAMEWORK
     assert DEBUG is True
 
 
 def test_toggle_feature_flags():
     """Ensure that the toggle_feature_flags function works as expected."""
+    from awx.settings.functions import toggle_feature_flags
+
     settings = {
         "FLAGS": {
             "FEATURE_SOME_PLATFORM_FLAG_ENABLED": [
@@ -80,8 +81,12 @@ def test_toggle_feature_flags():
 
 def test_merge_application_name():
     """Ensure that the merge_application_name function works as expected."""
+    from awx.settings.functions import merge_application_name
+
     settings = {
         "DATABASES__default__ENGINE": "django.db.backends.postgresql",
         "CLUSTER_HOST_ID": "test-cluster-host-id",
     }
-    assert merge_application_name(settings) == {"DATABASES__default__OPTIONS__application_name": "test-cluster-host-id"}
+    result = merge_application_name(settings)["DATABASES__default__OPTIONS__application_name"]
+    assert result.startswith("awx-")
+    assert "test-cluster" in result

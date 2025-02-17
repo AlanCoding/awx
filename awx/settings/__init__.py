@@ -8,7 +8,11 @@ from ansible_base.lib.dynamic_config import (
     load_standard_settings_files,
     validate,
 )
-from .functions import merge_application_name, toggle_feature_flags
+from .functions import merge_application_name, toggle_feature_flags, add_backwards_compatibility
+
+
+add_backwards_compatibility()
+
 
 # Create a the standard DYNACONF instance which will come with DAB defaults
 # This loads defaults.py and environment specific file e.g: development_defaults.py
