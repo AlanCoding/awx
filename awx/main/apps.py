@@ -88,7 +88,12 @@ class MainConfig(AppConfig):
         dispatcher_setup(
             {
                 "version": 2,
-                "service": {"pool_kwargs": {"max_workers": 4}, "main_kwargs": {"node_id": settings.CLUSTER_HOST_ID}},
+                "service": {
+                    "pool_kwargs": {"max_workers": 4},
+                    "main_kwargs": {"node_id": settings.CLUSTER_HOST_ID},
+                    "process_manager_cls": "ForkServerManager",
+                    "process_manager_kwargs": {"preload_modules": ['awx.main.dispatch.hazmat']},
+                },
                 "brokers": {
                     "pg_notify": {
                         "config": get_pg_notify_params(),
