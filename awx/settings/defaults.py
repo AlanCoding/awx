@@ -451,7 +451,8 @@ CELERYBEAT_SCHEDULE = {
 }
 
 DISPATCHER_SCHEDULE = {}
-for task_name, options in CELERYBEAT_SCHEDULE.items():
+for options in CELERYBEAT_SCHEDULE.values():
+    task_name = options['task']
     DISPATCHER_SCHEDULE[task_name] = options
     DISPATCHER_SCHEDULE[task_name]['schedule'] = options['schedule'].total_seconds()
 
