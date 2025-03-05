@@ -761,6 +761,9 @@ LOGGING = {
             'filters': ['dynamic_level_filter', 'guid'],
             'formatter': 'simple',
         },
+        'dispatcher': {
+            '()': 'logging.StreamHandler',
+        },
         'null': {'class': 'logging.NullHandler'},
         'file': {'class': 'logging.NullHandler', 'formatter': 'simple'},
         'syslog': {'level': 'WARNING', 'filters': ['require_debug_false'], 'class': 'logging.NullHandler', 'formatter': 'simple'},
@@ -805,6 +808,7 @@ LOGGING = {
         'social': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
         'system_tracking_migrations': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
         'rbac_migrations': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
+        'dispatcher': {'handlers': ['console'], 'level': 'INFO'},
     },
 }
 

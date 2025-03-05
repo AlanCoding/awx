@@ -78,3 +78,10 @@ from awx.main.models.receptor_address import ReceptorAddress
 from awx.main.models.schedules import Schedule
 from awx.main.models.unified_jobs import UnifiedJob, UnifiedJobDeprecatedStdout, UnifiedJobTemplate
 from awx.main.models.workflow import WorkflowApproval, WorkflowApprovalTemplate, WorkflowJob, WorkflowJobNode, WorkflowJobTemplate, WorkflowJobTemplateNode
+
+from django.core.cache import cache as django_cache
+from django.db import connection
+
+
+connection.close()
+django_cache.close()
