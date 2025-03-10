@@ -103,7 +103,7 @@ class MainConfig(AppConfig):
                         "config": get_pg_notify_params(),
                         "sync_connection_factory": "awx.main.utils.db.psycopg_connection_from_django",
                         "channels": ['tower_broadcast_all', 'tower_settings_change', get_task_queuename()],
-                        # "default_publish_channel": "tower_broadcast_all"
+                        "default_publish_channel": settings.CLUSTER_HOST_ID,  # used for debugging commands
                     }
                 },
                 "producers": {
