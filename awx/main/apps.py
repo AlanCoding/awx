@@ -84,12 +84,16 @@ class MainConfig(AppConfig):
         from django.conf import settings
         from awx.main.utils.db import get_pg_notify_params
         from awx.main.dispatch import get_task_queuename
+        from awx.main.dispatch.config import get_max_workers
 
         dispatcher_setup(
             {
                 "version": 2,
                 "service": {
-                    "pool_kwargs": {"max_workers": 4},
+                    "pool_kwargs": {
+                        "min_workers": settings.JOB_EVENT_WORKERS,
+                        "max_workers": get_max_workers(),
+                    },
                     "main_kwargs": {"node_id": settings.CLUSTER_HOST_ID},
                     "process_manager_cls": "ForkServerManager",
                     "process_manager_kwargs": {"preload_modules": ['awx.main.dispatch.hazmat']},
