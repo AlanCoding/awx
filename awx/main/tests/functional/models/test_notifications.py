@@ -156,3 +156,11 @@ class TestJobNotificationMixin(object):
 
         context_stub = JobNotificationMixin.context_stub()
         check_structure_and_completeness(TestJobNotificationMixin.CONTEXT_STRUCTURE, context_stub)
+
+    @pytest.mark.django_db
+    def test_notification_template_error(self, job_template):
+        job = job_template.create_unified_job()
+        msg, body = job.build_notification_message()
+        print(msg)
+        print(body)
+        raise Exception

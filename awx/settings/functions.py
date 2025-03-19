@@ -60,6 +60,11 @@ def load_extra_development_files(settings: Dynaconf):
         load_python_file_with_injected_context("local_*.py", settings=settings)
 
 
+def load_extra_test_files(settings: Dynaconf):
+    if "production" not in settings.current_env.lower():
+        load_python_file_with_injected_context("settings_for_test.py", settings=settings)
+
+
 def assert_production_settings(settings: Dynaconf, settings_dir: str, settings_file_path: str):  # pragma: no cover
     """Ensure at least one setting file has been loaded in production mode.
     Current systems will require /etc/tower/settings.py and

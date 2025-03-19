@@ -10,12 +10,7 @@ from ansible_base.lib.dynamic_config import (
     load_standard_settings_files,
     toggle_feature_flags,
 )
-from .functions import (
-    assert_production_settings,
-    merge_application_name,
-    add_backwards_compatibility,
-    load_extra_development_files,
-)
+from .functions import assert_production_settings, merge_application_name, add_backwards_compatibility, load_extra_development_files, load_extra_test_files
 
 add_backwards_compatibility()
 
@@ -24,7 +19,7 @@ add_backwards_compatibility()
 DYNACONF = factory(
     __name__,
     "AWX",
-    environments=("development", "production", "quiet", "kube"),
+    environments=("development", "production", "quiet", "kube", "test"),
     settings_files=["defaults.py"],
 )
 
@@ -57,6 +52,8 @@ load_standard_settings_files(DYNACONF)
 
 # Load optional development only settings files
 load_extra_development_files(DYNACONF)
+
+load_extra_test_files(DYNACONF)
 
 # Check at least one setting file has been loaded in production mode
 assert_production_settings(DYNACONF, settings_dir, settings_file_path)
