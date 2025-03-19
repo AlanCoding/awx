@@ -2,9 +2,7 @@
 import logging
 
 # Django
-from django.conf import settings
 from django.core.cache import cache
-from django.core.signals import setting_changed
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
 
@@ -28,12 +26,15 @@ def handle_setting_change(key, for_delete=False):
     cache_keys = {Setting.get_cache_key(k) for k in setting_keys}
     cache.delete_many(cache_keys)
 
+    from .lazy import settings
+
     # if we have changed a setting, we want to avoid mucking with the in-memory cache entirely
     settings._awx_conf_memoizedcache.clear()
 
-    # Send setting_changed signal with new value for each setting.
-    for setting_key in setting_keys:
-        setting_changed.send(sender=Setting, setting=setting_key, value=getattr(settings, setting_key, None), enter=not bool(for_delete))
+    # Send db_setting_changed signal with new value for each setting.
+    # for setting_key in setting_keys:
+    #     handle_setting_change(setting_key)
+    # db_setting_changed.send(sender=Setting, setting=setting_key, value=getattr(settings, setting_key, None), enter=not bool(for_delete))
 
 
 @receiver(post_save, sender=Setting)

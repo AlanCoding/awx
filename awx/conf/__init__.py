@@ -6,6 +6,7 @@ from django.utils.module_loading import autodiscover_modules
 
 # AWX
 from .registry import settings_registry
+from .lazy import settings  # noqa
 
 
 def register(setting, **kwargs):

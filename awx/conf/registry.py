@@ -25,10 +25,10 @@ class SettingsRegistry(object):
         :param settings: a ``django.conf.LazySettings`` object used to lookup
                          file-based field values (e.g., ``local_settings.py``
                          and ``/etc/tower/conf.d/example.py``).  If unspecified,
-                         defaults to ``django.conf.settings``.
+                         defaults to ``awx.conf.settings.settings``.
         """
         if settings is None:
-            from django.conf import settings
+            from .lazy import settings
         self._registry = OrderedDict()
         self._validate_registry = {}
         self._dependent_settings = {}

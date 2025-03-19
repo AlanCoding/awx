@@ -9,7 +9,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 # Django
-from django.conf import settings, UserSettingsHolder
+from django.conf import UserSettingsHolder
 from django.core.cache import cache as django_cache
 from django.core.exceptions import ImproperlyConfigured, SynchronousOnlyOperation
 from django.db import transaction, connection
@@ -26,6 +26,7 @@ from awx.main.utils import encrypt_field, decrypt_field
 from awx.conf import settings_registry
 from awx.conf.fields import PrimaryKeyRelatedField
 from awx.conf.models import Setting
+from awx.conf.lazy import settings
 
 # FIXME: Gracefully handle when settings are accessed before the database is
 # ready (or during migrations).
