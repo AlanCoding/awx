@@ -327,7 +327,7 @@ class JobTemplate(
         return [fd for fd in ['project', 'inventory'] if not getattr(self, '{}_id'.format(fd))]
 
     def clean_forks(self):
-        if db_settings.MAX_FORKS > 0 and self.forks > settings.MAX_FORKS:
+        if db_settings.MAX_FORKS > 0 and self.forks > db_settings.MAX_FORKS:
             raise ValidationError(_(f'Maximum number of forks ({db_settings.MAX_FORKS}) exceeded.'))
         return self.forks
 
