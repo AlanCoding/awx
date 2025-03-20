@@ -16,6 +16,7 @@ from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
 from django.urls import reverse, resolve
 
+from awx.conf import db_settings
 from awx.main import migrations
 from awx.main.utils.profiling import AWXProfiler
 from awx.main.utils.common import memoize
@@ -35,7 +36,7 @@ class SettingsCacheMiddleware(MiddlewareMixin):
     """
 
     def process_request(self, request):
-        settings._awx_conf_memoizedcache.clear()
+        db_settings._awx_conf_memoizedcache.clear()
 
 
 class TimingMiddleware(threading.local, MiddlewareMixin):

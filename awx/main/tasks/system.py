@@ -45,6 +45,7 @@ from flags.state import flag_enabled
 from rest_framework.exceptions import PermissionDenied
 
 # AWX
+from awx.conf import db_settings
 from awx import __version__ as awx_application_version
 from awx.conf import settings_registry
 from awx.main import analytics
@@ -430,7 +431,7 @@ def events_processed_hook(unified_job):
 
 @task_awx(queue=get_task_queuename)
 def gather_analytics():
-    if is_run_threshold_reached(getattr(settings, 'AUTOMATION_ANALYTICS_LAST_GATHER', None), settings.AUTOMATION_ANALYTICS_GATHER_INTERVAL):
+    if is_run_threshold_reached(getattr(db_settings, 'AUTOMATION_ANALYTICS_LAST_GATHER', None), db_settings.AUTOMATION_ANALYTICS_GATHER_INTERVAL):
         analytics.gather()
 
 
