@@ -7,7 +7,6 @@ import time
 
 from kubernetes.config import kube_config
 
-from django.conf import settings
 from django_guid import set_guid
 
 from awx.main.tasks.system import dispatch_startup, inform_cluster_of_shutdown
