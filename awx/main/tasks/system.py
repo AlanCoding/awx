@@ -722,7 +722,9 @@ def awx_receptor_workunit_reaper():
     receptor_work_list = receptor_ctl.simple_command("work list")
 
     unit_ids = [id for id in receptor_work_list]
-    jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids).exclude(status__in=ACTIVE_STATES)
+    # Only consider jobs with a final status that finished so-many seconds ago or before
+    time_cutoff = now() - timedelta(seconds=settings.WORK_UNIT_CLEANUP_GRACE_PERIOD)
+    jobs_with_unreleased_receptor_units = UnifiedJob.objects.filter(work_unit_id__in=unit_ids, finished__lte=time_cutoff).exclude(status__in=ACTIVE_STATES)
     if settings.RECEPTOR_KEEP_WORK_ON_ERROR:
         jobs_with_unreleased_receptor_units = jobs_with_unreleased_receptor_units.exclude(status__in=ERROR_STATES)
     for job in jobs_with_unreleased_receptor_units:

@@ -883,6 +883,7 @@ AWX_RUNNER_KEEPALIVE_SECONDS = 0
 # Delete completed work units in receptor
 RECEPTOR_RELEASE_WORK = True
 RECEPTOR_KEEP_WORK_ON_ERROR = False
+WORK_UNIT_CLEANUP_GRACE_PERIOD = 60
 
 # K8S only. Use receptor_log_level on AWX spec to set this properly
 RECEPTOR_LOG_LEVEL = 'info'
