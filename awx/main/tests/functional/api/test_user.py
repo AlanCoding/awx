@@ -242,11 +242,14 @@ def test_user_create_with_django_password_validation_ext(post, delete, admin):
         print(f"Testing fixtures {i}: {expected_status_code=} {user_attrs=}")
         with override_settings(AUTH_PASSWORD_VALIDATORS=password_validators):
             response = post(reverse('api:user_list'), user_attrs, admin, middleware=SessionMiddleware(mock.Mock()))
-            assert response.status_code == expected_status_code
+            assert response.status_code == expected_status_code, (i, fixtures)
             # Delete user if it was created succesfully.
             if response.status_code == 201:
                 response = delete(reverse('api:user_detail', kwargs={'pk': response.data['id']}), admin, middleware=SessionMiddleware(mock.Mock()))
                 assert response.status_code == 204
+            else:
+                username = fixtures['user_attrs']['username']
+                assert not User.objects.filter(username=username)
 
 
 @pytest.mark.django_db
