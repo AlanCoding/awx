@@ -9,6 +9,8 @@ import tempfile
 import socket
 from datetime import timedelta
 
+from ansible_base.lib.dynamic_config.constants import api_documentation, rest_filters
+
 DEBUG = True
 SQL_DEBUG = DEBUG
 
@@ -383,6 +385,7 @@ REST_FRAMEWORK = {
     # see https://github.com/encode/django-rest-framework/pull/6532
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
     # 'URL_FORMAT_OVERRIDE': None,
+    'DEFAULT_FILTER_BACKENDS': rest_filters.dab_rest_filters,
 }
 
 SWAGGER_SETTINGS = {
@@ -1083,3 +1086,6 @@ INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS = 7
 FLAGS = {'FEATURE_INDIRECT_NODE_COUNTING_ENABLED': [{'condition': 'boolean', 'value': False}]}
 
 FLAG_SOURCES = ('flags.sources.SettingsFlagsSource',)
+
+del api_documentation
+del rest_filters
