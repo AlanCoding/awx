@@ -9,7 +9,7 @@ import tempfile
 import socket
 from datetime import timedelta
 
-from ansible_base.lib.dynamic_config.constants import api_documentation, rest_filters
+from ansible_base.lib.dynamic_config.constants import rest_filters
 
 DEBUG = True
 SQL_DEBUG = DEBUG
@@ -1087,5 +1087,4 @@ FLAGS = {'FEATURE_INDIRECT_NODE_COUNTING_ENABLED': [{'condition': 'boolean', 'va
 
 FLAG_SOURCES = ('flags.sources.SettingsFlagsSource',)
 
-del api_documentation
 del rest_filters
