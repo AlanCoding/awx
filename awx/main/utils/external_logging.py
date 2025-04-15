@@ -9,6 +9,8 @@ from awx.main.utils.reload import supervisor_service_command
 from awx.main.dispatch.publish import task
 
 
+# TODO: make less noisy, like
+# stdout { codec => line { format => "LOGSTASH: %{message}" } }
 JSON_PARSE = ['*.* action(type="mmjsonparse")', 'if $!level == "DEBUG" then stop']
 
 
