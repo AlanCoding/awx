@@ -9,6 +9,9 @@ from awx.main.utils.reload import supervisor_service_command
 from awx.main.dispatch.publish import task
 
 
+JSON_PARSE = ['*.* action(type="mmjsonparse")', 'if $!level == "DEBUG" then stop']
+
+
 def construct_rsyslog_conf_template(settings=settings):
     tmpl = ''
     parts = []
@@ -119,6 +122,7 @@ def construct_rsyslog_conf_template(settings=settings):
                 # you can only have a basic auth password if there's a username
                 params.append(f'pwd="{password}"')
         params = ' '.join(params)
+        parts.extend(JSON_PARSE)
         parts.extend(['module(load="omhttp")', f'action({params})'])
     elif protocol and host and port:
         params = [
@@ -131,6 +135,7 @@ def construct_rsyslog_conf_template(settings=settings):
             'template="awx"',
         ] + queue_options
         params = ' '.join(params)
+        parts.extend(JSON_PARSE)
         parts.append(f'action({params})')
 
     else:
