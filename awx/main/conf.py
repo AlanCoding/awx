@@ -20,6 +20,7 @@ logger = logging.getLogger('awx.main.conf')
 register(
     'ACTIVITY_STREAM_ENABLED',
     field_class=fields.BooleanField,
+    default=True,
     label=_('Enable Activity Stream'),
     help_text=_('Enable capturing activity for the activity stream.'),
     category=_('System'),
@@ -29,6 +30,7 @@ register(
 register(
     'ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC',
     field_class=fields.BooleanField,
+    default=False,
     label=_('Enable Activity Stream for Inventory Sync'),
     help_text=_('Enable capturing activity for the activity stream when running inventory sync.'),
     category=_('System'),
@@ -38,6 +40,7 @@ register(
 register(
     'ORG_ADMINS_CAN_SEE_ALL_USERS',
     field_class=fields.BooleanField,
+    default=True,
     label=_('All Users Visible to Organization Admins'),
     help_text=_('Controls whether any Organization Admin can view all users and teams, even those not associated with their Organization.'),
     category=_('System'),
@@ -47,6 +50,7 @@ register(
 register(
     'MANAGE_ORGANIZATION_AUTH',
     field_class=fields.BooleanField,
+    default=True,
     label=_('Organization Admins Can Manage Users and Teams'),
     help_text=_('Controls whether any Organization Admin has the privileges to create and manage users and teams.'),
     category=_('System'),
@@ -67,6 +71,7 @@ register(
 register(
     'REMOTE_HOST_HEADERS',
     field_class=fields.StringListField,
+    default=['REMOTE_ADDR', 'REMOTE_HOST'],
     label=_('Remote Host Headers'),
     help_text=_(
         'HTTP headers and meta keys to search to determine remote host '
@@ -82,6 +87,7 @@ register(
 register(
     'PROXY_IP_ALLOWED_LIST',
     field_class=fields.StringListField,
+    default=[],
     label=_('Proxy IP Allowed List'),
     help_text=_(
         "If the service is behind a reverse proxy/load balancer, use this setting "
@@ -195,6 +201,7 @@ register(
 register(
     'DEFAULT_CONTROL_PLANE_QUEUE_NAME',
     field_class=fields.CharField,
+    default='controlplane',
     label=_('The instance group where control plane tasks run'),
     category=_('System'),
     category_slug='system',
@@ -204,6 +211,7 @@ register(
 register(
     'DEFAULT_EXECUTION_QUEUE_NAME',
     field_class=fields.CharField,
+    default='default',
     label=_('The instance group where user jobs run (currently only on non-VM installs)'),
     category=_('System'),
     category_slug='system',
@@ -235,6 +243,27 @@ register(
 register(
     'AD_HOC_COMMANDS',
     field_class=fields.StringListField,
+    default=[
+        'command',
+        'shell',
+        'yum',
+        'apt',
+        'apt_key',
+        'apt_repository',
+        'apt_rpm',
+        'service',
+        'group',
+        'user',
+        'mount',
+        'ping',
+        'selinux',
+        'setup',
+        'win_ping',
+        'win_service',
+        'win_updates',
+        'win_group',
+        'win_user',
+    ],
     label=_('Ansible Modules Allowed for Ad Hoc Jobs'),
     help_text=_('List of modules allowed to be used by ad-hoc jobs.'),
     category=_('Jobs'),
@@ -250,6 +279,7 @@ register(
         ('never', _('Never')),
         ('template', _('Only On Job Template Definitions')),
     ],
+    default='template',
     required=True,
     label=_('When can extra variables contain Jinja templates?'),
     help_text=_(

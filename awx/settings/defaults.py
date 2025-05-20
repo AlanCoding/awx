@@ -152,26 +152,10 @@ else:
 # See https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
 ALLOWED_HOSTS = []
 
-# HTTP headers and meta keys to search to determine remote host name or IP. Add
-# additional items to this list, such as "HTTP_X_FORWARDED_FOR", if behind a
-# reverse proxy.
-REMOTE_HOST_HEADERS = ['REMOTE_ADDR', 'REMOTE_HOST']
-
-# If we are behind a reverse proxy/load balancer, use this setting to
-# allow the proxy IP addresses from which Tower should trust custom
-# REMOTE_HOST_HEADERS header values
-# REMOTE_HOST_HEADERS = ['HTTP_X_FORWARDED_FOR', ''REMOTE_ADDR', 'REMOTE_HOST']
-# PROXY_IP_ALLOWED_LIST = ['10.0.1.100', '10.0.1.101']
-# If this setting is an empty list (the default), the headers specified by
-# REMOTE_HOST_HEADERS will be trusted unconditionally')
-PROXY_IP_ALLOWED_LIST = []
-
 # If we are behind a reverse proxy/load balancer, use this setting to
 # allow the scheme://addresses from which Tower should trust csrf requests from
 # If this setting is an empty list (the default), we will only trust ourself
 CSRF_TRUSTED_ORIGINS = []
-
-CUSTOM_VENV_PATHS = []
 
 # Warning: this is a placeholder for a database setting
 # This should not be set via a file.
@@ -499,9 +483,6 @@ GALAXY_TASK_ENV = {'ANSIBLE_FORCE_COLOR': 'false', 'GIT_SSH_COMMAND': "ssh -o St
 # Rebuild Host Smart Inventory memberships.
 AWX_REBUILD_SMART_MEMBERSHIP = False
 
-# By default, allow arbitrary Jinja templating in extra_vars defined on a Job Template
-ALLOW_JINJA_IN_EXTRA_VARS = 'template'
-
 # Run project updates with extra verbosity
 PROJECT_UPDATE_VVV = False
 
@@ -557,30 +538,6 @@ INSIGHTS_TRACKING_STATE = False
 AUTOMATION_ANALYTICS_LAST_GATHER = None
 # Last gathered entries for expensive Analytics
 AUTOMATION_ANALYTICS_LAST_ENTRIES = ''
-
-# Default list of modules allowed for ad hoc commands.
-# Note: This setting may be overridden by database settings.
-AD_HOC_COMMANDS = [
-    'command',
-    'shell',
-    'yum',
-    'apt',
-    'apt_key',
-    'apt_repository',
-    'apt_rpm',
-    'service',
-    'group',
-    'user',
-    'mount',
-    'ping',
-    'selinux',
-    'setup',
-    'win_ping',
-    'win_service',
-    'win_updates',
-    'win_group',
-    'win_user',
-]
 
 INV_ENV_VARIABLE_BLOCKED = ("HOME", "USER", "_", "TERM", "PATH")
 
@@ -694,14 +651,6 @@ SCM_EXCLUDE_EMPTY_GROUPS = False
 CONSTRUCTED_INSTANCE_ID_VAR = 'remote_tower_id'
 
 CONSTRUCTED_EXCLUDE_EMPTY_GROUPS = False
-
-# ---------------------
-# -- Activity Stream --
-# ---------------------
-# Defaults for enabling/disabling activity stream.
-# Note: These settings may be overridden by database settings.
-ACTIVITY_STREAM_ENABLED = True
-ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC = False
 
 CALLBACK_QUEUE = "callback_tasks"
 
@@ -949,8 +898,6 @@ BROADCAST_WEBSOCKET_BEACON_FROM_WEB_RATE_SECONDS = 15
 
 DJANGO_GUID = {'GUID_HEADER_NAME': 'X-API-Request-Id'}
 
-# Name of the default task queue
-DEFAULT_EXECUTION_QUEUE_NAME = 'default'
 # pod spec used when the default execution queue is a container group, e.g. when deploying on k8s/ocp with the operator
 DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE = ''
 # Max number of concurrently consumed forks for the default execution queue
@@ -959,9 +906,6 @@ DEFAULT_EXECUTION_QUEUE_MAX_FORKS = 0
 # Max number of concurrently running jobs for the default execution queue
 # Zero means no limit
 DEFAULT_EXECUTION_QUEUE_MAX_CONCURRENT_JOBS = 0
-
-# Name of the default controlplane queue
-DEFAULT_CONTROL_PLANE_QUEUE_NAME = 'controlplane'
 
 # Extend container runtime attributes.
 # For example, to disable SELinux in containers for podman
