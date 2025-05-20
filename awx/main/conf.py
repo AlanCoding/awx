@@ -98,7 +98,6 @@ register(
     ),
     category=_('System'),
     category_slug='system',
-    required=False,
 )
 
 register(
@@ -196,6 +195,7 @@ register(
     category=_('System'),
     category_slug='system',
     read_only=True,
+    default='00000000-0000-0000-0000-000000000000',
 )
 
 register(
@@ -268,7 +268,6 @@ register(
     help_text=_('List of modules allowed to be used by ad-hoc jobs.'),
     category=_('Jobs'),
     category_slug='jobs',
-    required=False,
 )
 
 register(
@@ -280,7 +279,6 @@ register(
         ('template', _('Only On Job Template Definitions')),
     ],
     default='template',
-    required=True,
     label=_('When can extra variables contain Jinja templates?'),
     help_text=_(
         'Ansible allows variable substitution via the Jinja2 templating '
@@ -305,7 +303,6 @@ register(
 register(
     'AWX_ISOLATION_SHOW_PATHS',
     field_class=fields.StringListIsolatedPathField,
-    required=False,
     label=_('Paths to expose to isolated jobs'),
     help_text=_(
         'List of paths that would otherwise be hidden to expose to isolated jobs. Enter one path per line. '
@@ -363,6 +360,7 @@ register(
 register(
     'PROJECT_UPDATE_VVV',
     field_class=fields.BooleanField,
+    default=False,
     label=_('Run Project Updates With Higher Verbosity'),
     help_text=_('Adds the CLI -vvv flag to ansible-playbook runs of project_update.yml used for project updates.'),
     category=_('Jobs'),
@@ -428,6 +426,7 @@ register(
 register(
     'STDOUT_MAX_BYTES_DISPLAY',
     field_class=fields.IntegerField,
+    default=1048576,
     min_value=0,
     label=_('Standard Output Maximum Display Size'),
     help_text=_('Maximum Size of Standard Output in bytes to display before requiring the output be downloaded.'),
@@ -471,7 +470,6 @@ register(
 register(
     'AWX_ANSIBLE_CALLBACK_PLUGINS',
     field_class=fields.StringListField,
-    required=False,
     label=_('Ansible Callback Plugins'),
     help_text=_('List of paths to search for extra callback plugins to be used when running jobs. Enter one path per line.'),
     category=_('Jobs'),
@@ -585,7 +583,6 @@ register(
     help_text=_('Port on Logging Aggregator to send logs to (if required and not provided in Logging Aggregator).'),
     category=_('Logging'),
     category_slug='logging',
-    required=False,
 )
 register(
     'LOG_AGGREGATOR_TYPE',
@@ -607,7 +604,6 @@ register(
     help_text=_('Username for external log aggregator (if required; HTTP/s only).'),
     category=_('Logging'),
     category_slug='logging',
-    required=False,
 )
 register(
     'LOG_AGGREGATOR_PASSWORD',
@@ -619,7 +615,6 @@ register(
     help_text=_('Password or authentication token for external log aggregator (if required; HTTP/s only).'),
     category=_('Logging'),
     category_slug='logging',
-    required=False,
 )
 register(
     'LOG_AGGREGATOR_LOGGERS',
@@ -806,7 +801,6 @@ register(
     allow_null=True,
     category=_('System'),
     category_slug='system',
-    required=False,
     hidden=True,
 )
 register(

@@ -173,9 +173,6 @@ GLOBAL_JOB_EXECUTION_ENVIRONMENTS = [{'name': 'AWX EE (latest)', 'image': 'quay.
 # If a registry credential is needed to pull the image, that can be provided to the awx-manage command
 CONTROL_PLANE_EXECUTION_ENVIRONMENT = 'quay.io/ansible/awx-ee:latest'
 
-# Note: This setting may be overridden by database settings.
-STDOUT_MAX_BYTES_DISPLAY = 1048576
-
 # The amount of time before a stdout file is expired and removed locally
 # Note that this can be recreated if the stdout is downloaded
 LOCAL_STDOUT_EXPIRE_TIME = 2592000

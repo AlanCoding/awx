@@ -9,7 +9,7 @@ from .registry import settings_registry
 from .lazy import settings as db_settings  # noqa
 
 
-def register(setting, **kwargs):
+def register(setting: str, **kwargs):
     settings_registry.register(setting, **kwargs)
 
 
