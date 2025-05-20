@@ -830,11 +830,6 @@ DEFAULT_EXECUTION_QUEUE_MAX_FORKS = 0
 # Zero means no limit
 DEFAULT_EXECUTION_QUEUE_MAX_CONCURRENT_JOBS = 0
 
-# Extend container runtime attributes.
-# For example, to disable SELinux in containers for podman
-# DEFAULT_CONTAINER_RUN_OPTIONS = ['--security-opt', 'label=disable']
-DEFAULT_CONTAINER_RUN_OPTIONS = ['--network', 'slirp4netns:enable_ipv6=true']
-
 # Mount exposed paths as hostPath resource in k8s/ocp
 AWX_MOUNT_ISOLATED_PATHS_ON_K8S = False
 

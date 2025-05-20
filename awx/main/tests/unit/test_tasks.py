@@ -12,7 +12,7 @@ import yaml
 
 from awx_plugins.interfaces._temporary_private_container_api import CONTAINER_ROOT
 
-from django.conf import settings
+from awx.conf import db_settings
 
 from awx.main.models import (
     AdHocCommand,
@@ -929,7 +929,7 @@ class TestProjectUpdateGalaxyCredentials(TestJobExecution):
     }
 
     def test_galaxy_credentials_ignore_certs(self, private_data_dir, project_update, ignore, mock_me):
-        settings.GALAXY_IGNORE_CERTS = ignore
+        db_settings.GALAXY_IGNORE_CERTS = ignore
         task = jobs.RunProjectUpdate()
         task.instance = project_update
         env = task.build_env(project_update, private_data_dir)

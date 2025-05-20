@@ -182,8 +182,8 @@ class BaseTask(object):
             "container_options": ['--user=root'],
         }
 
-        if settings.DEFAULT_CONTAINER_RUN_OPTIONS:
-            params['container_options'].extend(settings.DEFAULT_CONTAINER_RUN_OPTIONS)
+        if db_settings.DEFAULT_CONTAINER_RUN_OPTIONS:
+            params['container_options'].extend(db_settings.DEFAULT_CONTAINER_RUN_OPTIONS)
 
         if instance.execution_environment.credential:
             cred = instance.execution_environment.credential
@@ -939,8 +939,8 @@ class RunJob(SourceControlMixin, BaseTask):
             env['PROJECT_REVISION'] = job.project.scm_revision
         env['ANSIBLE_RETRY_FILES_ENABLED'] = "False"
         env['MAX_EVENT_RES'] = str(settings.MAX_EVENT_RES_DATA)
-        if hasattr(settings, 'AWX_ANSIBLE_CALLBACK_PLUGINS') and settings.AWX_ANSIBLE_CALLBACK_PLUGINS:
-            env['ANSIBLE_CALLBACK_PLUGINS'] = ':'.join(settings.AWX_ANSIBLE_CALLBACK_PLUGINS)
+        if hasattr(db_settings, 'AWX_ANSIBLE_CALLBACK_PLUGINS') and db_settings.AWX_ANSIBLE_CALLBACK_PLUGINS:
+            env['ANSIBLE_CALLBACK_PLUGINS'] = ':'.join(db_settings.AWX_ANSIBLE_CALLBACK_PLUGINS)
         env['AWX_HOST'] = db_settings.TOWER_URL_BASE
 
         # Create a directory for ControlPath sockets that is unique to each job
@@ -1230,7 +1230,7 @@ class RunProjectUpdate(BaseTask):
         # like https://github.com/ansible/ansible/issues/30064
         env['TMP'] = db_settings.AWX_ISOLATION_BASE_PATH
         env['PROJECT_UPDATE_ID'] = str(project_update.pk)
-        if settings.GALAXY_IGNORE_CERTS:
+        if db_settings.GALAXY_IGNORE_CERTS:
             env['ANSIBLE_GALAXY_IGNORE'] = str(True)
 
         # build out env vars for Galaxy credentials (in order)
@@ -1300,7 +1300,7 @@ class RunProjectUpdate(BaseTask):
         optionally using ssh-agent for public/private key authentication.
         """
         args = []
-        if getattr(settings, 'PROJECT_UPDATE_VVV', False):
+        if getattr(db_settings, 'PROJECT_UPDATE_VVV', False):
             args.append('-vvv')
         if project_update.job_tags:
             args.extend(['-t', project_update.job_tags])
@@ -1321,7 +1321,7 @@ class RunProjectUpdate(BaseTask):
             scm_branch = 'HEAD'
 
         galaxy_creds_are_defined = project_update.project.organization and project_update.project.organization.galaxy_credentials.exists()
-        if not galaxy_creds_are_defined and (settings.AWX_ROLES_ENABLED or settings.AWX_COLLECTIONS_ENABLED):
+        if not galaxy_creds_are_defined and (db_settings.AWX_ROLES_ENABLED or db_settings.AWX_COLLECTIONS_ENABLED):
             logger.warning('Galaxy role/collection syncing is enabled, but no credentials are configured for {project_update.project.organization}.')
 
         extra_vars.update(
@@ -1337,9 +1337,9 @@ class RunProjectUpdate(BaseTask):
                 'scm_branch': scm_branch,
                 'scm_clean': project_update.scm_clean,
                 'scm_track_submodules': project_update.scm_track_submodules,
-                'roles_enabled': galaxy_creds_are_defined and settings.AWX_ROLES_ENABLED,
-                'collections_enabled': galaxy_creds_are_defined and settings.AWX_COLLECTIONS_ENABLED,
-                'galaxy_task_env': settings.GALAXY_TASK_ENV,
+                'roles_enabled': galaxy_creds_are_defined and db_settings.AWX_ROLES_ENABLED,
+                'collections_enabled': galaxy_creds_are_defined and db_settings.AWX_COLLECTIONS_ENABLED,
+                'galaxy_task_env': db_settings.GALAXY_TASK_ENV,
             }
         )
         # apply custom refspec from user for PR refs and the like
@@ -1426,9 +1426,9 @@ class RunProjectUpdate(BaseTask):
         # copy over the roles and collection cache to job folder
         cache_path = os.path.join(project.get_cache_path(), project.cache_id)
         subfolders = []
-        if settings.AWX_COLLECTIONS_ENABLED:
+        if db_settings.AWX_COLLECTIONS_ENABLED:
             subfolders.append('requirements_collections')
-        if settings.AWX_ROLES_ENABLED:
+        if db_settings.AWX_ROLES_ENABLED:
             subfolders.append('requirements_roles')
         for subfolder in subfolders:
             cache_subpath = os.path.join(cache_path, subfolder)
