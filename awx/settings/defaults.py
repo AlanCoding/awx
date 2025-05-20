@@ -176,22 +176,6 @@ CONTROL_PLANE_EXECUTION_ENVIRONMENT = 'quay.io/ansible/awx-ee:latest'
 # Note: This setting may be overridden by database settings.
 STDOUT_MAX_BYTES_DISPLAY = 1048576
 
-# Returned in the header on event api lists as a recommendation to the UI
-# on how many events to display before truncating/hiding
-MAX_UI_JOB_EVENTS = 4000
-
-# Returned in index.html, tells the UI if it should make requests
-# to update job data in response to status changes websocket events
-UI_LIVE_UPDATES_ENABLED = True
-
-# The maximum size of the ansible callback event's res data structure
-# beyond this limit and the value will be removed
-MAX_EVENT_RES_DATA = 700000
-
-# Note: These settings may be overridden by database settings.
-EVENT_STDOUT_MAX_BYTES_DISPLAY = 1024
-MAX_WEBSOCKET_EVENT_RATE = 30
-
 # The amount of time before a stdout file is expired and removed locally
 # Note that this can be recreated if the stdout is downloaded
 LOCAL_STDOUT_EXPIRE_TIME = 2592000
@@ -250,10 +234,6 @@ K8S_POD_REAPER_GRACE_PERIOD = 60
 # Disallow sending session cookies over insecure connections
 SESSION_COOKIE_SECURE = True
 
-# Seconds before sessions expire.
-# Note: This setting may be overridden by database settings.
-SESSION_COOKIE_AGE = 1800
-
 # Option to change userLoggedIn cookie SameSite policy.
 USER_COOKIE_SAMESITE = 'Lax'
 
@@ -261,10 +241,6 @@ USER_COOKIE_SAMESITE = 'Lax'
 # Note: Changing this value may require changes to any clients.
 SESSION_COOKIE_NAME = 'awx_sessionid'
 
-# Maximum number of per-user valid, concurrent sessions.
-# -1 is unlimited
-# Note: This setting may be overridden by database settings.
-SESSIONS_PER_USER = -1
 
 CSRF_USE_SESSIONS = False
 
@@ -371,17 +347,9 @@ SWAGGER_SETTINGS = {
 
 AUTHENTICATION_BACKENDS = ('awx.main.backends.AWXModelBackend',)
 
-# Enable / Disable HTTP Basic Authentication used in the API browser
-# Note: Session limits are not enforced when using HTTP Basic Authentication.
-# Note: This setting may be overridden by database settings.
-AUTH_BASIC_ENABLED = True
-
 # If set, specifies a URL that unauthenticated users will be redirected to
 # when trying to access a UI page that requries authentication.
 LOGIN_REDIRECT_OVERRIDE = ''
-
-# Note: This setting may be overridden by database settings.
-ALLOW_METRICS_FOR_ANONYMOUS_USERS = False
 
 DEVSERVER_DEFAULT_ADDR = '0.0.0.0'
 DEVSERVER_DEFAULT_PORT = '8013'
@@ -653,11 +621,6 @@ CONSTRUCTED_INSTANCE_ID_VAR = 'remote_tower_id'
 CONSTRUCTED_EXCLUDE_EMPTY_GROUPS = False
 
 CALLBACK_QUEUE = "callback_tasks"
-
-# Note: This setting may be overridden by database settings.
-ORG_ADMINS_CAN_SEE_ALL_USERS = True
-MANAGE_ORGANIZATION_AUTH = True
-DISABLE_LOCAL_AUTH = False
 
 # Note: This setting may be overridden by database settings.
 TOWER_URL_BASE = "https://platformhost"
