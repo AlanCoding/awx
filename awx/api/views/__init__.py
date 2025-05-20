@@ -126,7 +126,6 @@ from awx.api.views.mixin import (
 )
 from awx.api.pagination import UnifiedJobEventPagination
 from awx.main.utils import set_environ
-from awx.conf import db_settings
 
 logger = logging.getLogger('awx.api.views')
 
