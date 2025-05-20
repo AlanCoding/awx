@@ -415,7 +415,19 @@ class SettingsWrapper(UserSettingsHolder):
         return empty
 
     def _get_default(self, name):
-        return getattr(self.default_settings, name)
+        """Changelog note - after moving DB settings to their own module, the typical default is the field default
+
+        This field default must be usable even when the database is not available, like for unit tests.
+        However, we will still respect a default settings module for user-defined values in files.
+        """
+        try:
+            return getattr(self.default_settings, name)
+        except AttributeError:
+            field = self.registry.get_setting_field(name)
+            try:
+                return field.get_default()
+            except SkipField:
+                raise RuntimeError(f'Could not find {name} in field default or user settings, field: {field}')
 
     @property
     def SETTINGS_MODULE(self):

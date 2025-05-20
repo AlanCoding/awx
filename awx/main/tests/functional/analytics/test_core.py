@@ -6,8 +6,10 @@ import tempfile
 from unittest import mock
 import pytest
 
-from django.conf import settings
 from django.test.utils import override_settings
+
+from awx.conf import db_settings
+
 from awx.main.analytics import gather, register, ship
 
 
@@ -39,7 +41,7 @@ def mock_valid_license():
 
 @pytest.mark.django_db
 def test_gather(mock_valid_license):
-    settings.INSIGHTS_TRACKING_STATE = True
+    db_settings.INSIGHTS_TRACKING_STATE = True
 
     tgzfiles = gather(module=importlib.import_module(__name__), collection_type='dry-run')
     files = {}

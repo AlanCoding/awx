@@ -6,6 +6,8 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import translation
 
+from awx.conf import db_settings
+
 from awx.api.generics import APIView, Response
 from awx.api.permissions import AnalyticsPermission
 from awx.api.versioning import reverse
@@ -130,7 +132,7 @@ class AnalyticsGenericView(APIView):
 
     @staticmethod
     def _get_setting(setting_name, default, error_message):
-        setting = getattr(settings, setting_name, default)
+        setting = getattr(db_settings, setting_name, default)
         if not setting:
             raise MissingSettings(error_message)
         return setting

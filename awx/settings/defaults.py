@@ -467,10 +467,6 @@ ALLOW_LOCAL_RESOURCE_MANAGEMENT = True
 # If True, allow users to be assigned to roles that were created via JWT
 ALLOW_LOCAL_ASSIGNING_JWT_ROLES = False
 
-# Enable Pendo on the UI, possible values are 'off', 'anonymous', and 'detailed'
-# Note: This setting may be overridden by database settings.
-PENDO_TRACKING_STATE = "off"
-
 INV_ENV_VARIABLE_BLOCKED = ("HOME", "USER", "_", "TERM", "PATH")
 
 # ----------------

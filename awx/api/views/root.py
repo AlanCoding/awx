@@ -222,8 +222,8 @@ class ApiV2AttachView(APIView):
         subscription_id = data.get('subscription_id', None)
         if not subscription_id:
             return Response({"error": _("No subscription ID provided.")}, status=status.HTTP_400_BAD_REQUEST)
-        user = getattr(settings, 'SUBSCRIPTIONS_CLIENT_ID', None)
-        pw = getattr(settings, 'SUBSCRIPTIONS_CLIENT_SECRET', None)
+        user = getattr(db_settings, 'SUBSCRIPTIONS_CLIENT_ID', None)
+        pw = getattr(db_settings, 'SUBSCRIPTIONS_CLIENT_SECRET', None)
         if subscription_id and user and pw:
             data = request.data.copy()
             try:
@@ -269,7 +269,7 @@ class ApiV2ConfigView(APIView):
         if not license_data.get('valid_key', False):
             license_data = {}
 
-        pendo_state = settings.PENDO_TRACKING_STATE if settings.PENDO_TRACKING_STATE in ('off', 'anonymous', 'detailed') else 'off'
+        pendo_state = db_settings.PENDO_TRACKING_STATE if db_settings.PENDO_TRACKING_STATE in ('off', 'anonymous', 'detailed') else 'off'
 
         data = dict(
             time_zone=settings.TIME_ZONE,

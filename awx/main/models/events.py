@@ -17,6 +17,9 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from django.utils.encoding import force_str
 
+# dynamic settings
+from awx.conf import db_settings
+
 from awx.api.versioning import reverse
 from awx.main import consumers
 from awx.main.fields import JSONBlob
@@ -63,7 +66,7 @@ def create_host_status_counts(event_data):
 
 
 def emit_event_detail(event):
-    if settings.UI_LIVE_UPDATES_ENABLED is False and event.event not in MINIMAL_EVENTS:
+    if db_settings.UI_LIVE_UPDATES_ENABLED is False and event.event not in MINIMAL_EVENTS:
         return
     cls = event.__class__
     relation = {

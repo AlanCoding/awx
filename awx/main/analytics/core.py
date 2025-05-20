@@ -181,7 +181,7 @@ def gather(dest=None, module=None, subset=None, since=None, until=None, collecti
         return None
 
     if collection_type != 'dry-run':
-        if not settings.INSIGHTS_TRACKING_STATE:
+        if not db_settings.INSIGHTS_TRACKING_STATE:
             logger.log(log_level, "Automation Analytics not enabled. Use --dry-run to gather locally without sending.")
             return None
 
@@ -376,8 +376,8 @@ def ship(path):
     rh_secret = getattr(settings, 'REDHAT_PASSWORD', None)
 
     if not (rh_id and rh_secret):
-        rh_id = getattr(settings, 'SUBSCRIPTIONS_CLIENT_ID', None)
-        rh_secret = getattr(settings, 'SUBSCRIPTIONS_CLIENT_SECRET', None)
+        rh_id = getattr(db_settings, 'SUBSCRIPTIONS_CLIENT_ID', None)
+        rh_secret = getattr(db_settings, 'SUBSCRIPTIONS_CLIENT_SECRET', None)
 
     if not rh_id:
         logger.error('Neither REDHAT_USERNAME nor SUBSCRIPTIONS_CLIENT_ID are set')
