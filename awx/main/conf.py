@@ -939,7 +939,6 @@ register(
     field_class=fields.StringListField,
     default=['--network', 'slirp4netns:enable_ipv6=true'],
     label=_('Container Run Options'),
-    default=['--network', 'slirp4netns:enable_ipv6=true'],
     help_text=_("List of options to pass to podman run example: ['--network', 'slirp4netns:enable_ipv6=true', '--log-level', 'debug']"),
     category=('Jobs'),
     category_slug='jobs',
