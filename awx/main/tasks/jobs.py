@@ -232,9 +232,9 @@ class BaseTask(object):
         """
         Create a temporary directory for job-related files.
         """
-        path = tempfile.mkdtemp(prefix=JOB_FOLDER_PREFIX % instance.pk, dir=settings.AWX_ISOLATION_BASE_PATH)
+        path = tempfile.mkdtemp(prefix=JOB_FOLDER_PREFIX % instance.pk, dir=db_settings.AWX_ISOLATION_BASE_PATH)
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-        if settings.AWX_CLEANUP_PATHS:
+        if db_settings.AWX_CLEANUP_PATHS:
             self.cleanup_paths.append(path)
         # We will write files in these folders later
         for subfolder in ('inventory', 'env'):
@@ -546,8 +546,8 @@ class BaseTask(object):
                 status = self.instance.status
                 raise RuntimeError('not starting %s task' % self.instance.status)
 
-            if not os.path.exists(settings.AWX_ISOLATION_BASE_PATH):
-                raise RuntimeError('AWX_ISOLATION_BASE_PATH=%s does not exist' % settings.AWX_ISOLATION_BASE_PATH)
+            if not os.path.exists(db_settings.AWX_ISOLATION_BASE_PATH):
+                raise RuntimeError('AWX_ISOLATION_BASE_PATH=%s does not exist' % db_settings.AWX_ISOLATION_BASE_PATH)
 
             # May have to serialize the value
             private_data_files, ssh_key_data = self.build_private_data_files(self.instance, private_data_dir)
@@ -1228,7 +1228,7 @@ class RunProjectUpdate(BaseTask):
         env['DISPLAY'] = ''  # Prevent stupid password popup when running tests.
         # give ansible a hint about the intended tmpdir to work around issues
         # like https://github.com/ansible/ansible/issues/30064
-        env['TMP'] = settings.AWX_ISOLATION_BASE_PATH
+        env['TMP'] = db_settings.AWX_ISOLATION_BASE_PATH
         env['PROJECT_UPDATE_ID'] = str(project_update.pk)
         if settings.GALAXY_IGNORE_CERTS:
             env['ANSIBLE_GALAXY_IGNORE'] = str(True)

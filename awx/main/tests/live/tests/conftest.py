@@ -7,8 +7,6 @@ import logging
 
 import pytest
 
-from django.conf import settings
-
 from awx.conf import db_settings
 
 from awx.api.versioning import reverse
