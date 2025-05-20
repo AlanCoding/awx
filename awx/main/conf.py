@@ -66,6 +66,7 @@ register(
     help_text=_('This setting is used by services like notifications to render a valid url to the service.'),
     category=_('System'),
     category_slug='system',
+    default='https://platformhost',
 )
 
 register(
@@ -444,6 +445,7 @@ register(
     ),
     category=_('Jobs'),
     category_slug='jobs',
+    default=1024,
 )
 
 register(

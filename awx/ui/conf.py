@@ -60,6 +60,7 @@ register(
     category=_('UI'),
     category_slug='ui',
     hidden=True,
+    default=4000,
 )
 
 register(

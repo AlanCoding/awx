@@ -49,6 +49,9 @@ from ansible_base.rbac import permission_registry
 # django-flags
 from flags.state import flag_enabled
 
+# dynamic settings
+from awx.conf import db_settings
+
 # AWX
 from awx.main.access import get_user_capabilities
 from awx.main.constants import ACTIVE_STATES, org_role_to_permission
@@ -4408,7 +4411,7 @@ class JobEventSerializer(BaseSerializer):
         # If the view logic says to not truncate (request was to the detail view or a param was used)
         if self.context.get('no_truncate', False):
             return data
-        max_bytes = settings.EVENT_STDOUT_MAX_BYTES_DISPLAY
+        max_bytes = db_settings.EVENT_STDOUT_MAX_BYTES_DISPLAY
         if 'stdout' in data:
             data['stdout'] = truncate_stdout(data['stdout'], max_bytes)
         return data
@@ -4483,7 +4486,7 @@ class AdHocCommandEventSerializer(BaseSerializer):
         # If the view logic says to not truncate (request was to the detail view or a param was used)
         if self.context.get('no_truncate', False):
             return data
-        max_bytes = settings.EVENT_STDOUT_MAX_BYTES_DISPLAY
+        max_bytes = db_settings.EVENT_STDOUT_MAX_BYTES_DISPLAY
         if 'stdout' in data:
             data['stdout'] = truncate_stdout(data['stdout'], max_bytes)
         return data

@@ -58,6 +58,9 @@ from ansible_base.lib.utils.requests import get_remote_hosts
 from ansible_base.rbac.models import RoleEvaluation, ObjectRole
 from ansible_base.resource_registry.shared_types import OrganizationType, TeamType, UserType
 
+# dynamic settings
+from awx.conf import db_settings
+
 # AWX
 from awx.main.tasks.system import send_notifications, update_inventory_computed_fields
 from awx.main.access import get_user_queryset
@@ -1054,7 +1057,7 @@ class ProjectUpdateEventsList(SubListAPIView):
     pagination_class = UnifiedJobEventPagination
 
     def finalize_response(self, request, response, *args, **kwargs):
-        response['X-UI-Max-Events'] = settings.MAX_UI_JOB_EVENTS
+        response['X-UI-Max-Events'] = db_settings.MAX_UI_JOB_EVENTS
         return super(ProjectUpdateEventsList, self).finalize_response(request, response, *args, **kwargs)
 
     def get_queryset(self):
@@ -1073,7 +1076,7 @@ class SystemJobEventsList(SubListAPIView):
     pagination_class = UnifiedJobEventPagination
 
     def finalize_response(self, request, response, *args, **kwargs):
-        response['X-UI-Max-Events'] = settings.MAX_UI_JOB_EVENTS
+        response['X-UI-Max-Events'] = db_settings.MAX_UI_JOB_EVENTS
         return super(SystemJobEventsList, self).finalize_response(request, response, *args, **kwargs)
 
     def get_queryset(self):
@@ -3626,7 +3629,7 @@ class BaseJobEventsList(NoTruncateMixin, SubListAPIView):
     search_fields = ('stdout',)
 
     def finalize_response(self, request, response, *args, **kwargs):
-        response['X-UI-Max-Events'] = settings.MAX_UI_JOB_EVENTS
+        response['X-UI-Max-Events'] = db_settings.MAX_UI_JOB_EVENTS
         return super(BaseJobEventsList, self).finalize_response(request, response, *args, **kwargs)
 
 
