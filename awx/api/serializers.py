@@ -5959,7 +5959,7 @@ class InstanceGroupSerializer(BaseSerializer):
         return res
 
     def validate_policy_instance_list(self, value):
-        if self.instance and self.instance.name in [settings.DEFAULT_EXECUTION_QUEUE_NAME, settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
+        if self.instance and self.instance.name in [db_settings.DEFAULT_EXECUTION_QUEUE_NAME, settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
             if self.instance.policy_instance_list != value:
                 raise serializers.ValidationError(_('%s instance group policy_instance_list may not be changed.' % self.instance.name))
         for instance_name in value:
@@ -5972,7 +5972,7 @@ class InstanceGroupSerializer(BaseSerializer):
         return value
 
     def validate_policy_instance_percentage(self, value):
-        if self.instance and self.instance.name in [settings.DEFAULT_EXECUTION_QUEUE_NAME, settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
+        if self.instance and self.instance.name in [db_settings.DEFAULT_EXECUTION_QUEUE_NAME, db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
             if value != self.instance.policy_instance_percentage:
                 raise serializers.ValidationError(
                     _('%s instance group policy_instance_percentage may not be changed from the initial value set by the installer.' % self.instance.name)
@@ -5987,16 +5987,16 @@ class InstanceGroupSerializer(BaseSerializer):
         return value
 
     def validate_name(self, value):
-        if self.instance and self.instance.name == settings.DEFAULT_EXECUTION_QUEUE_NAME and value != settings.DEFAULT_EXECUTION_QUEUE_NAME:
-            raise serializers.ValidationError(_('%s instance group name may not be changed.' % settings.DEFAULT_EXECUTION_QUEUE_NAME))
+        if self.instance and self.instance.name == db_settings.DEFAULT_EXECUTION_QUEUE_NAME and value != db_settings.DEFAULT_EXECUTION_QUEUE_NAME:
+            raise serializers.ValidationError(_('%s instance group name may not be changed.' % db_settings.DEFAULT_EXECUTION_QUEUE_NAME))
 
-        if self.instance and self.instance.name == settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME and value != settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME:
-            raise serializers.ValidationError(_('%s instance group name may not be changed.' % settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME))
+        if self.instance and self.instance.name == db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME and value != db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME:
+            raise serializers.ValidationError(_('%s instance group name may not be changed.' % db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME))
 
         return value
 
     def validate_is_container_group(self, value):
-        if self.instance and self.instance.name in [settings.DEFAULT_EXECUTION_QUEUE_NAME, settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
+        if self.instance and self.instance.name in [db_settings.DEFAULT_EXECUTION_QUEUE_NAME, db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME]:
             if value != self.instance.is_container_group:
                 raise serializers.ValidationError(_('%s instance group is_container_group may not be changed.' % self.instance.name))
 
