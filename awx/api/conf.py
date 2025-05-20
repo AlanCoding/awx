@@ -67,6 +67,7 @@ register(
     help_text=_('If true, anonymous users are allowed to poll metrics.'),
     category=_('Authentication'),
     category_slug='authentication',
+    default=False,
 )
 
 
