@@ -480,7 +480,7 @@ register(
     help_text=_('List of paths to search for extra callback plugins to be used when running jobs. Enter one path per line.'),
     category=_('Jobs'),
     category_slug='jobs',
-    default='',
+    default=[],
 )
 
 register(
