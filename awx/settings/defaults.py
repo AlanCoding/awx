@@ -455,48 +455,8 @@ ANSIBLE_FORCE_COLOR = True
 # If tmp generated inventory parsing fails (error state), fail playbook fast
 ANSIBLE_INVENTORY_UNPARSED_FAILED = True
 
-# Additional environment variables to be passed to the ansible subprocesses
-AWX_TASK_ENV = {}
-
-# Additional environment variables to apply when running ansible-galaxy commands
-# to fetch Ansible content - roles and collections
-GALAXY_TASK_ENV = {'ANSIBLE_FORCE_COLOR': 'false', 'GIT_SSH_COMMAND': "ssh -o StrictHostKeyChecking=no"}
-
 # Rebuild Host Smart Inventory memberships.
 AWX_REBUILD_SMART_MEMBERSHIP = False
-
-# Run project updates with extra verbosity
-PROJECT_UPDATE_VVV = False
-
-# Enable dynamically pulling roles from a requirement.yml file
-# when updating SCM projects
-# Note: This setting may be overridden by database settings.
-AWX_ROLES_ENABLED = True
-
-# Enable dynamically pulling collections from a requirement.yml file
-# when updating SCM projects
-# Note: This setting may be overridden by database settings.
-AWX_COLLECTIONS_ENABLED = True
-
-# Follow symlinks when scanning for playbooks
-AWX_SHOW_PLAYBOOK_LINKS = False
-
-# Applies to any galaxy server
-GALAXY_IGNORE_CERTS = False
-
-# Additional paths to show for jobs using process isolation.
-# Note: This setting may be overridden by database settings.
-AWX_ISOLATION_SHOW_PATHS = []
-
-# The directory in which the service will create new temporary directories for job
-# execution and isolation (such as credential files and custom
-# inventory scripts).
-# Note: This setting may be overridden by database settings.
-AWX_ISOLATION_BASE_PATH = tempfile.gettempdir()
-
-# User definable ansible callback plugins
-# Note: This setting may be overridden by database settings.
-AWX_ANSIBLE_CALLBACK_PLUGINS = ""
 
 # Automatically remove nodes that have missed their heartbeats after some time
 AWX_AUTO_DEPROVISION_INSTANCES = False
@@ -511,15 +471,6 @@ ALLOW_LOCAL_ASSIGNING_JWT_ROLES = False
 # Enable Pendo on the UI, possible values are 'off', 'anonymous', and 'detailed'
 # Note: This setting may be overridden by database settings.
 PENDO_TRACKING_STATE = "off"
-
-# Enables Insights data collection.
-# Note: This setting may be overridden by database settings.
-INSIGHTS_TRACKING_STATE = False
-
-# Last gather date for Analytics
-AUTOMATION_ANALYTICS_LAST_GATHER = None
-# Last gathered entries for expensive Analytics
-AUTOMATION_ANALYTICS_LAST_ENTRIES = ''
 
 INV_ENV_VARIABLE_BLOCKED = ("HOME", "USER", "_", "TERM", "PATH")
 

@@ -200,9 +200,9 @@ class BaseTask(object):
         if pull:
             params['container_options'].append(f'--pull={pull}')
 
-        if settings.AWX_ISOLATION_SHOW_PATHS:
+        if db_settings.AWX_ISOLATION_SHOW_PATHS:
             params['container_volume_mounts'] = []
-            for this_path in settings.AWX_ISOLATION_SHOW_PATHS:
+            for this_path in db_settings.AWX_ISOLATION_SHOW_PATHS:
                 # Verify if a mount path and SELinux context has been passed
                 # Using z allows the dir to be mounted by multiple containers
                 # Uppercase Z restricts access (in weird ways) to 1 container at a time

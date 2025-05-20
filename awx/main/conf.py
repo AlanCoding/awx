@@ -1,5 +1,6 @@
 # Python
 import logging
+import tempfile
 
 # Django
 from django.core.checks import Error
@@ -299,6 +300,7 @@ register(
     help_text=_('The directory in which the service will create new temporary directories for job execution and isolation (such as credential files).'),
     category=_('Jobs'),
     category_slug='jobs',
+    default=tempfile.gettempdir,
 )
 
 register(
@@ -312,6 +314,7 @@ register(
     ),
     category=_('Jobs'),
     category_slug='jobs',
+    default=[],
 )
 
 register(
@@ -346,6 +349,7 @@ register(
     category=_('Jobs'),
     category_slug='jobs',
     placeholder={'HTTP_PROXY': 'myproxy.local:8080'},
+    default={'ANSIBLE_FORCE_COLOR': 'false', 'GIT_SSH_COMMAND': "ssh -o StrictHostKeyChecking=no"},
 )
 
 register(
@@ -476,6 +480,7 @@ register(
     help_text=_('List of paths to search for extra callback plugins to be used when running jobs. Enter one path per line.'),
     category=_('Jobs'),
     category_slug='jobs',
+    default='',
 )
 
 register(
@@ -804,6 +809,7 @@ register(
     category=_('System'),
     category_slug='system',
     hidden=True,
+    default=None,
 )
 register(
     'AUTOMATION_ANALYTICS_LAST_ENTRIES',

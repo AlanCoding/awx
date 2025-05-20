@@ -662,11 +662,11 @@ class AWXReceptorJob:
         # This assumes the node and SA supports hostPath volumes
         # type is not passed due to backward compatibility,
         # which means that no checks will be performed before mounting the hostPath volume.
-        if settings.AWX_MOUNT_ISOLATED_PATHS_ON_K8S and settings.AWX_ISOLATION_SHOW_PATHS:
+        if settings.AWX_MOUNT_ISOLATED_PATHS_ON_K8S and db_settings.AWX_ISOLATION_SHOW_PATHS:
             spec_volume_mounts = []
             spec_volumes = []
 
-            for idx, this_path in enumerate(settings.AWX_ISOLATION_SHOW_PATHS):
+            for idx, this_path in enumerate(db_settings.AWX_ISOLATION_SHOW_PATHS):
                 mount_option = None
                 if this_path.count(':') == MAX_ISOLATED_PATH_COLON_DELIMITER:
                     src, dest, mount_option = this_path.split(':')
