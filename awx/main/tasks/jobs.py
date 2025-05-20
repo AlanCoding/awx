@@ -93,6 +93,9 @@ from django.utils.translation import gettext_lazy as _
 # Django flags
 from flags.state import flag_enabled
 
+# AWX conf
+from awx.conf import db_settings
+
 logger = logging.getLogger('awx.main.tasks.jobs')
 
 
@@ -305,7 +308,7 @@ class BaseTask(object):
         """
 
     def _write_extra_vars_file(self, private_data_dir, vars, safe_dict={}):
-        if settings.ALLOW_JINJA_IN_EXTRA_VARS == 'always':
+        if db_settings.ALLOW_JINJA_IN_EXTRA_VARS == 'always':
             content = yaml.safe_dump(vars)
         else:
             content = safe_dump(vars, safe_dict)
@@ -938,7 +941,7 @@ class RunJob(SourceControlMixin, BaseTask):
         env['MAX_EVENT_RES'] = str(settings.MAX_EVENT_RES_DATA)
         if hasattr(settings, 'AWX_ANSIBLE_CALLBACK_PLUGINS') and settings.AWX_ANSIBLE_CALLBACK_PLUGINS:
             env['ANSIBLE_CALLBACK_PLUGINS'] = ':'.join(settings.AWX_ANSIBLE_CALLBACK_PLUGINS)
-        env['AWX_HOST'] = settings.TOWER_URL_BASE
+        env['AWX_HOST'] = db_settings.TOWER_URL_BASE
 
         # Create a directory for ControlPath sockets that is unique to each job
         cp_dir = os.path.join(private_data_dir, 'cp')
@@ -1087,7 +1090,7 @@ class RunJob(SourceControlMixin, BaseTask):
         # higher levels of privilege - those that have the ability create and
         # edit Job Templates)
         safe_dict = {}
-        if job.job_template and settings.ALLOW_JINJA_IN_EXTRA_VARS == 'template':
+        if job.job_template and db_settings.ALLOW_JINJA_IN_EXTRA_VARS == 'template':
             safe_dict = job.job_template.extra_vars_dict
 
         return self._write_extra_vars_file(private_data_dir, extra_vars, safe_dict)
@@ -1907,7 +1910,7 @@ class RunAdHocCommand(BaseTask):
 
     def build_module_args(self, ad_hoc_command):
         module_args = ad_hoc_command.module_args
-        if settings.ALLOW_JINJA_IN_EXTRA_VARS != 'always':
+        if db_settings.ALLOW_JINJA_IN_EXTRA_VARS != 'always':
             module_args = sanitize_jinja(module_args)
         return module_args
 

@@ -39,6 +39,8 @@ from receptorctl.socket_interface import ReceptorControl
 
 from filelock import FileLock
 
+from awx.conf import db_settings
+
 logger = logging.getLogger('awx.main.tasks.receptor')
 __RECEPTOR_CONF = '/etc/receptor/receptor.conf'
 __RECEPTOR_CONF_LOCKFILE = f'{__RECEPTOR_CONF}.lock'
@@ -712,7 +714,7 @@ class AWXReceptorJob:
         if self.task:
             pod_spec['metadata'] = deepmerge(
                 pod_spec.get('metadata', {}),
-                dict(name=self.pod_name, labels={'ansible-awx': settings.INSTALL_UUID, 'ansible-awx-job-id': str(self.task.instance.id)}),
+                dict(name=self.pod_name, labels={'ansible-awx': db_settings.INSTALL_UUID, 'ansible-awx-job-id': str(self.task.instance.id)}),
             )
 
         return pod_spec

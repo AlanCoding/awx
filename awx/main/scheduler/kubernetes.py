@@ -11,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 
 from awx.main.utils.common import parse_yaml_or_json, deepmerge
 from awx.main.utils.execution_environments import get_default_pod_spec
+from awx.conf import db_settings
 
 logger = logging.getLogger('awx.main.scheduler')
 
@@ -25,7 +26,9 @@ class PodManager(object):
         pm = PodManager(task)
         pods = {}
         try:
-            for pod in pm.kube_api.list_namespaced_pod(pm.namespace, label_selector='ansible-awx={}'.format(settings.INSTALL_UUID)).to_dict().get('items', []):
+            for pod in (
+                pm.kube_api.list_namespaced_pod(pm.namespace, label_selector='ansible-awx={}'.format(db_settings.INSTALL_UUID)).to_dict().get('items', [])
+            ):
                 job = pod['metadata'].get('labels', {}).get('ansible-awx-job-id')
                 if job:
                     try:
@@ -59,7 +62,7 @@ class PodManager(object):
 
         # Construct Secret object
         secret = client.V1Secret()
-        secret_name = "automation-{0}-image-pull-secret-{1}".format(settings.INSTALL_UUID[:5], job.execution_environment.credential.id)
+        secret_name = "automation-{0}-image-pull-secret-{1}".format(db_settings.INSTALL_UUID[:5], job.execution_environment.credential.id)
         secret.metadata = client.V1ObjectMeta(name="{}".format(secret_name))
         secret.type = "kubernetes.io/dockerconfigjson"
         secret.kind = "Secret"
@@ -170,7 +173,8 @@ class PodManager(object):
 
         if self.task:
             pod_spec['metadata'] = deepmerge(
-                pod_spec.get('metadata', {}), dict(name=self.pod_name, labels={'ansible-awx': settings.INSTALL_UUID, 'ansible-awx-job-id': str(self.task.id)})
+                pod_spec.get('metadata', {}),
+                dict(name=self.pod_name, labels={'ansible-awx': db_settings.INSTALL_UUID, 'ansible-awx-job-id': str(self.task.id)}),
             )
             pod_spec['spec']['containers'][0]['name'] = self.pod_name
 

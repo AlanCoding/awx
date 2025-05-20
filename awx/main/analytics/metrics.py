@@ -1,4 +1,5 @@
 from django.conf import settings
+from awx.conf import db_settings
 from prometheus_client import CollectorRegistry, Gauge, Info, generate_latest
 
 from awx.conf.license import get_license
@@ -137,7 +138,7 @@ def metrics():
     license_info = get_license()
     SYSTEM_INFO.info(
         {
-            'install_uuid': settings.INSTALL_UUID,
+            'install_uuid': db_settings.INSTALL_UUID,
             'insights_analytics': str(settings.INSIGHTS_TRACKING_STATE),
             'tower_url_base': settings.TOWER_URL_BASE,
             'tower_version': get_awx_version(),

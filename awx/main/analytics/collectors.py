@@ -17,6 +17,7 @@ from awx.main.utils import get_awx_version, camelcase_to_underscore, datetime_ho
 from awx.main import models
 from awx.main.analytics import register
 from awx.main.scheduler.task_manager_models import TaskManagerModels
+from awx.conf import db_settings
 
 """
 This module is used to define metrics collected by awx.main.analytics.gather()
@@ -146,7 +147,7 @@ def config(since, **kwargs):
             'release': platform.release(),
             'type': install_type,
         },
-        'install_uuid': settings.INSTALL_UUID,
+        'install_uuid': db_settings.INSTALL_UUID,
         'instance_uuid': settings.SYSTEM_UUID,
         'tower_url_base': settings.TOWER_URL_BASE,
         'tower_version': get_awx_version(),
