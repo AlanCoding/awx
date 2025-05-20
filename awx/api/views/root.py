@@ -182,7 +182,7 @@ class ApiV2SubscriptionView(APIView):
             data['subscriptions_client_secret'] = db_settings.SUBSCRIPTIONS_CLIENT_SECRET
         try:
             user, pw = data.get('subscriptions_client_id'), data.get('subscriptions_client_secret')
-            with set_environ(**settings.AWX_TASK_ENV):
+            with set_environ(**db_settings.AWX_TASK_ENV):
                 validated = get_licenser().validate_rh(user, pw)
             if user:
                 db_settings.SUBSCRIPTIONS_CLIENT_ID = data['subscriptions_client_id']
@@ -227,7 +227,7 @@ class ApiV2AttachView(APIView):
         if subscription_id and user and pw:
             data = request.data.copy()
             try:
-                with set_environ(**settings.AWX_TASK_ENV):
+                with set_environ(**db_settings.AWX_TASK_ENV):
                     validated = get_licenser().validate_rh(user, pw)
             except Exception as exc:
                 msg = _("Invalid Subscription")

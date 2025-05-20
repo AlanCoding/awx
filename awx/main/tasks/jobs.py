@@ -324,7 +324,7 @@ class BaseTask(object):
             if attr == attr.upper() and attr.startswith('ANSIBLE_') and not attr.startswith('ANSIBLE_BASE_'):
                 env[attr] = str(getattr(settings, attr))
         # Also set environment variables configured in AWX_TASK_ENV setting.
-        for key, value in settings.AWX_TASK_ENV.items():
+        for key, value in db_settings.AWX_TASK_ENV.items():
             env[key] = str(value)
 
         env['AWX_PRIVATE_DATA_DIR'] = private_data_dir

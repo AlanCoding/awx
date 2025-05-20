@@ -1486,7 +1486,7 @@ class CredentialExternalTest(SubDetailAPIView):
                 backend_kwargs[field_name] = value
         backend_kwargs.update(request.data.get('metadata', {}))
         try:
-            with set_environ(**settings.AWX_TASK_ENV):
+            with set_environ(**db_settings.AWX_TASK_ENV):
                 obj.credential_type.plugin.backend(**backend_kwargs)
                 return Response({}, status=status.HTTP_202_ACCEPTED)
         except requests.exceptions.HTTPError as exc:

@@ -392,7 +392,7 @@ def ship(path):
         s = requests.Session()
         s.headers = get_awx_http_client_headers()
         s.headers.pop('Content-Type')
-        with set_environ(**settings.AWX_TASK_ENV):
+        with set_environ(**db_settings.AWX_TASK_ENV):
             try:
                 client = OIDCClient(rh_id, rh_secret)
                 response = client.make_request("POST", url, headers=s.headers, files=files, verify=settings.INSIGHTS_CERT_PATH, timeout=(31, 31))
