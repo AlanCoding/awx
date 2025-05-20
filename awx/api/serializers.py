@@ -3663,7 +3663,7 @@ class AdHocCommandSerializer(UnifiedJobSerializer):
         # Load module name choices dynamically from DB settings.
         if field_name == 'module_name':
             field_class = serializers.ChoiceField
-            module_name_choices = [(x, x) for x in settings.AD_HOC_COMMANDS]
+            module_name_choices = [(x, x) for x in db_settings.AD_HOC_COMMANDS]
             module_name_default = 'command' if 'command' in [x[0] for x in module_name_choices] else ''
             field_kwargs['choices'] = module_name_choices
             field_kwargs['required'] = bool(not module_name_default)
