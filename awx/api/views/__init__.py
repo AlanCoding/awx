@@ -123,6 +123,7 @@ from awx.api.views.mixin import (
 )
 from awx.api.pagination import UnifiedJobEventPagination
 from awx.main.utils import set_environ
+from awx.conf import db_settings
 
 logger = logging.getLogger('awx.api.views')
 
@@ -462,7 +463,7 @@ class InstanceInstanceGroupsList(InstanceGroupMembershipMixin, SubListCreateAtta
         res = self.is_valid_relation(parent, sub)
         if res:
             return res
-        if sub.name == settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME and parent.node_type == 'hybrid':
+        if sub.name == db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME and parent.node_type == 'hybrid':
             return {'msg': _(f"Cannot disassociate hybrid instance {parent.hostname} from {sub.name}.")}
         return None
 
@@ -567,7 +568,7 @@ class InstanceGroupInstanceList(InstanceGroupMembershipMixin, SubListAttachDetac
         res = self.is_valid_relation(parent, sub)
         if res:
             return res
-        if sub.node_type == 'hybrid' and parent.name == settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME:
+        if sub.node_type == 'hybrid' and parent.name == db_settings.DEFAULT_CONTROL_PLANE_QUEUE_NAME:
             return {'msg': _(f"Cannot disassociate hybrid node {sub.hostname} from {parent.name}.")}
         return None
 
@@ -2109,7 +2110,7 @@ class InventorySourceHostsList(HostRelatedSearchMixin, SubListDestroyAPIView):
     def perform_list_destroy(self, instance_list):
         inv_source = self.get_parent_object()
         with ignore_inventory_computed_fields():
-            if not settings.ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC:
+            if not db_settings.ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC:
                 from awx.main.signals import disable_activity_stream
 
                 with disable_activity_stream():
@@ -2137,7 +2138,7 @@ class InventorySourceGroupsList(SubListDestroyAPIView):
     def perform_list_destroy(self, instance_list):
         inv_source = self.get_parent_object()
         with ignore_inventory_computed_fields():
-            if not settings.ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC:
+            if not db_settings.ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC:
                 from awx.main.signals import disable_activity_stream
 
                 with disable_activity_stream():

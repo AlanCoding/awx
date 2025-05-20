@@ -16,6 +16,7 @@ from rest_framework.exceptions import PermissionDenied
 import requests
 
 from awx.conf.license import get_license
+from awx.conf import db_settings
 
 from ansible_base.lib.utils.db import advisory_lock
 
@@ -185,8 +186,11 @@ def gather(dest=None, module=None, subset=None, since=None, until=None, collecti
             return None
 
         if not (
-            settings.AUTOMATION_ANALYTICS_URL
-            and ((settings.REDHAT_USERNAME and settings.REDHAT_PASSWORD) or (settings.SUBSCRIPTIONS_CLIENT_ID and settings.SUBSCRIPTIONS_CLIENT_SECRET))
+            db_settings.AUTOMATION_ANALYTICS_URL
+            and (
+                (db_settings.REDHAT_USERNAME and db_settings.REDHAT_PASSWORD)
+                or (db_settings.SUBSCRIPTIONS_CLIENT_ID and db_settings.SUBSCRIPTIONS_CLIENT_SECRET)
+            )
         ):
             logger.log(log_level, "Not gathering analytics, configuration is invalid. Use --dry-run to gather locally without sending.")
             return None

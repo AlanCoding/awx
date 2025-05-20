@@ -11,6 +11,7 @@ from awx.main import models
 from awx.conf.models import Setting
 from awx.main.management.commands import regenerate_secret_key
 from awx.main.utils.encryption import encrypt_field, decrypt_field, encrypt_value
+from awx.conf import db_settings
 
 
 PREFIX = '$encrypted$UTF8$AESCBC$'
@@ -38,10 +39,10 @@ class TestKeyRegeneration:
 
     def test_encrypted_setting_values(self):
         # test basic decryption
-        settings.REDHAT_PASSWORD = 'sensitive'
+        db_settings.REDHAT_PASSWORD = 'sensitive'
         s = Setting.objects.filter(key='REDHAT_PASSWORD').first()
         assert s.value.startswith(PREFIX)
-        assert settings.REDHAT_PASSWORD == 'sensitive'
+        assert db_settings.REDHAT_PASSWORD == 'sensitive'
 
         # re-key the setting value
         new_key = regenerate_secret_key.Command().handle()

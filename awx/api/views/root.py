@@ -179,15 +179,15 @@ class ApiV2SubscriptionView(APIView):
     def post(self, request):
         data = request.data.copy()
         if data.get('subscriptions_client_secret') == '$encrypted$':
-            data['subscriptions_client_secret'] = settings.SUBSCRIPTIONS_CLIENT_SECRET
+            data['subscriptions_client_secret'] = db_settings.SUBSCRIPTIONS_CLIENT_SECRET
         try:
             user, pw = data.get('subscriptions_client_id'), data.get('subscriptions_client_secret')
             with set_environ(**settings.AWX_TASK_ENV):
                 validated = get_licenser().validate_rh(user, pw)
             if user:
-                settings.SUBSCRIPTIONS_CLIENT_ID = data['subscriptions_client_id']
+                db_settings.SUBSCRIPTIONS_CLIENT_ID = data['subscriptions_client_id']
             if pw:
-                settings.SUBSCRIPTIONS_CLIENT_SECRET = data['subscriptions_client_secret']
+                db_settings.SUBSCRIPTIONS_CLIENT_SECRET = data['subscriptions_client_secret']
         except Exception as exc:
             msg = _("Invalid Subscription")
             if isinstance(exc, TokenError) or (
@@ -245,7 +245,7 @@ class ApiV2AttachView(APIView):
         for sub in validated:
             if sub['subscription_id'] == subscription_id:
                 sub['valid_key'] = True
-                settings.LICENSE = sub
+                db_settings.LICENSE = sub
                 return Response(sub)
 
         return Response({"error": _("Error processing subscription metadata.")}, status=status.HTTP_400_BAD_REQUEST)
@@ -346,7 +346,7 @@ class ApiV2ConfigView(APIView):
 
     def delete(self, request):
         try:
-            settings.LICENSE = {}
+            db_settings.LICENSE = {}
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception:
             # FIX: Log

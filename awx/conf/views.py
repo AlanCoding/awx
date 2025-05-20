@@ -31,6 +31,7 @@ from awx.conf.models import Setting
 from awx.conf.serializers import SettingCategorySerializer, SettingSingletonSerializer
 from awx.conf import settings_registry
 from awx.main.utils.external_logging import reconfigure_rsyslog
+from awx.conf import db_settings
 
 
 SettingCategory = collections.namedtuple('SettingCategory', ('url', 'slug', 'name'))
@@ -146,8 +147,8 @@ class SettingSingletonDetail(RetrieveUpdateDestroyAPIView):
         # used to make the request as a default.
         if hasattr(instance, 'TOWER_URL_BASE'):
             url = '{}://{}'.format(self.request.scheme, self.request.get_host())
-            if settings.TOWER_URL_BASE != url:
-                settings.TOWER_URL_BASE = url
+            if db_settings.TOWER_URL_BASE != url:
+                db_settings.TOWER_URL_BASE = url
 
 
 class SettingLoggingTest(GenericAPIView):

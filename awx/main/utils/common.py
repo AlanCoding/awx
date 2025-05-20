@@ -42,6 +42,7 @@ from django.apps import apps
 
 # AWX
 from awx.conf.license import get_license
+from awx.conf import db_settings
 
 logger = logging.getLogger('awx.main.utils')
 
@@ -1020,7 +1021,7 @@ def get_current_apps():
 def get_custom_venv_choices():
     from django.conf import settings
 
-    all_venv_paths = settings.CUSTOM_VENV_PATHS + [settings.BASE_VENV_PATH]
+    all_venv_paths = db_settings.CUSTOM_VENV_PATHS + [settings.BASE_VENV_PATH]
     custom_venv_choices = []
 
     for venv_path in all_venv_paths:
