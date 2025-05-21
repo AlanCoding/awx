@@ -1205,11 +1205,10 @@ def cleanup_new_process(func):
 
     @functools.wraps(func)
     def wrapper_cleanup_new_process(*args, **kwargs):
-        from awx.conf.settings import SettingsWrapper  # noqa
-
         django_connection.close()
         django_cache.close()
-        SettingsWrapper.initialize()
+        config_app = apps.get_app_config('conf')
+        config_app.initialize_settings()
         return func(*args, **kwargs)
 
     return wrapper_cleanup_new_process
