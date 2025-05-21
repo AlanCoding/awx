@@ -25,10 +25,10 @@ class SettingsRegistry(object):
         :param settings: a ``django.conf.LazySettings`` object used to lookup
                          file-based field values (e.g., ``local_settings.py``
                          and ``/etc/tower/conf.d/example.py``).  If unspecified,
-                         defaults to ``awx.conf.settings.settings``.
+                         defaults to ``django.conf.settings``.
         """
         if settings is None:
-            from .lazy import settings
+            from django.conf import settings
         self._registry = OrderedDict()
         self._validate_registry = {}
         self._dependent_settings = {}
@@ -159,7 +159,7 @@ class SettingsRegistry(object):
             except AttributeError:
                 pass
             except Exception:
-                logger.warning('Unable to retrieve default value for setting "%s".', setting, exc_info=True)
+                logger.exception('Unable to retrieve default value for setting "%s".', setting, exc_info=True)
 
         # `PENDO_TRACKING_STATE` is disabled for the open source awx license
         if setting == 'PENDO_TRACKING_STATE' and get_license().get('license_type') == 'open':
