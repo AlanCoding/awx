@@ -7,6 +7,7 @@ from django.urls import re_path, include, path
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
 
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
+from ansible_base.rbac.service_api.urls import rbac_service_urls
 
 from awx.main.views import handle_400, handle_403, handle_404, handle_500, handle_csp_violation, handle_login_redirect
 
@@ -23,6 +24,7 @@ def get_urlpatterns(prefix=None):
 
     urlpatterns += [
         path(f'api{prefix}v2/', include(resource_api_urls)),
+        path(f'api{prefix}v2/', include(rbac_service_urls)),
         path(f'api{prefix}v2/', include(api_version_urls)),
         path(f'api{prefix}', include(api_urls)),
         path('', include(root_urls)),
