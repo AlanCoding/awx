@@ -625,7 +625,9 @@ def prefetch_page_capabilities(model, page, prefetch_list, user):
         if type(paths) is not list:
             paths = [paths]
 
-        # Build the query for accessible_objects according the user & role(s)
+        # Build the query for access_qs according the user & role(s)
+        from awx.main.models.rbac import to_permissions
+
         filter_args = []
         for role_path in paths:
             if '.' in role_path:
@@ -635,11 +637,14 @@ def prefetch_page_capabilities(model, page, prefetch_list, user):
                 for subpath in role_path.split('.')[:-1]:
                     parent_model = parent_model._meta.get_field(subpath).related_model
                 filter_args.append(
-                    Q(Q(**{'%s__pk__in' % res_path: parent_model.accessible_pk_qs(user, '%s_role' % role_type)}) | Q(**{'%s__isnull' % res_path: True}))
+                    Q(
+                        Q(**{'%s__pk__in' % res_path: parent_model.access_ids_qs(user, to_permissions['%s_role' % role_type])})
+                        | Q(**{'%s__isnull' % res_path: True})
+                    )
                 )
             else:
                 role_type = role_path
-                filter_args.append(Q(**{'pk__in': model.accessible_pk_qs(user, '%s_role' % role_type)}))
+                filter_args.append(Q(**{'pk__in': model.access_ids_qs(user, to_permissions['%s_role' % role_type])}))
 
         if display_method is None:
             # Role name translation to UI names for methods

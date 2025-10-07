@@ -34,8 +34,9 @@ from awx.main.tasks.system import clear_setting_cache
 from awx.main.utils import get_awx_version, get_custom_venv_choices
 from awx.main.utils.licensing import validate_entitlement_manifest
 from awx.api.versioning import URLPathVersioning, reverse, drf_reverse
-from awx.main.constants import PRIVILEGE_ESCALATION_METHODS
+from awx.main.constants import PRIVILEGE_ESCALATION_METHODS, org_role_to_permission
 from awx.main.models import Project, Organization, Instance, InstanceGroup, JobTemplate
+from awx.main.models.rbac import to_permissions
 from awx.main.utils import set_environ
 from awx.main.utils.analytics_proxy import TokenError
 from awx.main.utils.licensing import get_licenser
@@ -350,9 +351,9 @@ class ApiV2ConfigView(APIView):
         if (
             request.user.is_superuser
             or request.user.is_system_auditor
-            or Organization.accessible_objects(request.user, 'admin_role').exists()
-            or Organization.accessible_objects(request.user, 'auditor_role').exists()
-            or Organization.accessible_objects(request.user, 'project_admin_role').exists()
+            or Organization.access_qs(request.user, to_permissions['admin_role']).exists()
+            or Organization.access_qs(request.user, to_permissions['auditor_role']).exists()
+            or Organization.access_qs(request.user, org_role_to_permission['project_admin_role']).exists()
         ):
             data.update(
                 dict(
@@ -361,7 +362,7 @@ class ApiV2ConfigView(APIView):
                     custom_virtualenvs=get_custom_venv_choices(),
                 )
             )
-        elif JobTemplate.accessible_objects(request.user, 'admin_role').exists():
+        elif JobTemplate.access_qs(request.user, to_permissions['admin_role']).exists():
             data['custom_virtualenvs'] = get_custom_venv_choices()
 
         return Response(data)

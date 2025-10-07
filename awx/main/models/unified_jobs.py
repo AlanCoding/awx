@@ -215,10 +215,12 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         A re-implementation of accessible pk queryset for the "normal" unified JTs.
         Does not return inventory sources or system JTs, these should
         be handled inside of get_queryset where it is utilized.
+
+        This method forwards to access_ids_qs from django-ansible-base.
         """
         # do not use this if in a subclass
         if cls != UnifiedJobTemplate:
-            return super(UnifiedJobTemplate, cls).accessible_pk_qs(accessor, role_field)
+            return cls.access_ids_qs(accessor, to_permissions[role_field])
 
         action = to_permissions[role_field]
 

@@ -28,6 +28,7 @@ from awx.main.utils import (
     get_pk_from_dict,
     get_licenser,
 )
+from awx.main.models.rbac import to_permissions
 from awx.main.models import (
     ActivityStream,
     AdHocCommand,
@@ -689,7 +690,7 @@ class UserAccess(BaseAccess):
         returns True if `u` is member of any organization that is
         not also an organization that `self.user` admins
         """
-        return not self.user_organizations(u).exclude(pk__in=Organization.accessible_pk_qs(self.user, 'admin_role')).exists()
+        return not self.user_organizations(u).exclude(pk__in=Organization.access_ids_qs(self.user, to_permissions['admin_role'])).exists()
 
     def user_is_orphaned(self, u):
         return not self.user_organizations(u).exists()
@@ -903,7 +904,7 @@ class HostAccess(BaseAccess):
     prefetch_related = ('groups', 'inventory_sources')
 
     def filtered_queryset(self):
-        return self.model.objects.filter(inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(inventory__in=Inventory.access_ids_qs(self.user, 'view'))
 
     def can_add(self, data):
         if not data:  # So the browseable API will work
@@ -965,7 +966,7 @@ class GroupAccess(BaseAccess):
     )
 
     def filtered_queryset(self):
-        return Group.objects.filter(inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
+        return Group.objects.filter(inventory__in=Inventory.access_ids_qs(self.user, 'view'))
 
     def can_add(self, data):
         if not data:  # So the browseable API will work
@@ -1007,7 +1008,7 @@ class InventorySourceAccess(NotificationAttachMixin, UnifiedCredentialsMixin, Ba
     prefetch_related = ('credentials__credential_type', 'last_job', 'source_project')
 
     def filtered_queryset(self):
-        return self.model.objects.filter(inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(inventory__in=Inventory.access_ids_qs(self.user, 'view'))
 
     def can_add(self, data):
         if not data or 'inventory' not in data:
@@ -1057,7 +1058,7 @@ class InventoryUpdateAccess(BaseAccess):
     prefetch_related = ('unified_job_template', 'instance_group', 'credentials__credential_type', 'inventory')
 
     def filtered_queryset(self):
-        return self.model.objects.filter(inventory_source__inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(inventory_source__inventory__in=Inventory.access_ids_qs(self.user, 'view'))
 
     def can_cancel(self, obj):
         if not obj.can_cancel:
@@ -1185,7 +1186,7 @@ class CredentialInputSourceAccess(BaseAccess):
     select_related = ('target_credential', 'source_credential')
 
     def filtered_queryset(self):
-        return CredentialInputSource.objects.filter(target_credential__in=Credential.accessible_pk_qs(self.user, 'read_role'))
+        return CredentialInputSource.objects.filter(target_credential__in=Credential.access_ids_qs(self.user, 'view'))
 
     @check_superuser
     def can_add(self, data):
@@ -1231,7 +1232,7 @@ class TeamAccess(BaseAccess):
         ):
             return self.model.objects.all()
         return self.model.objects.filter(
-            Q(organization__in=Organization.accessible_pk_qs(self.user, 'member_role')) | Q(pk__in=self.model.accessible_pk_qs(self.user, 'read_role'))
+            Q(organization__in=Organization.access_ids_qs(self.user, 'member')) | Q(pk__in=self.model.access_ids_qs(self.user, 'view'))
         )
 
     @check_superuser
@@ -1419,7 +1420,7 @@ class ProjectUpdateAccess(BaseAccess):
     )
 
     def filtered_queryset(self):
-        return self.model.objects.filter(project__in=Project.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(project__in=Project.access_ids_qs(self.user, 'view'))
 
     @check_superuser
     def can_cancel(self, obj):
@@ -1957,7 +1958,7 @@ class WorkflowJobNodeAccess(BaseAccess):
 
     def filtered_queryset(self):
         return self.model.objects.filter(
-            Q(workflow_job__unified_job_template__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
+            Q(workflow_job__unified_job_template__in=UnifiedJobTemplate.access_ids_qs(self.user, 'view'))
             | Q(workflow_job__organization__in=Organization.objects.filter(Q(admin_role__members=self.user)))
         )
 
@@ -2101,8 +2102,7 @@ class WorkflowJobAccess(BaseAccess):
 
     def filtered_queryset(self):
         return WorkflowJob.objects.filter(
-            Q(unified_job_template__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
-            | Q(organization__in=Organization.accessible_pk_qs(self.user, 'auditor_role'))
+            Q(unified_job_template__in=UnifiedJobTemplate.access_ids_qs(self.user, 'view')) | Q(organization__in=Organization.access_ids_qs(self.user, 'audit'))
         )
 
     def can_read(self, obj):
@@ -2207,7 +2207,7 @@ class AdHocCommandAccess(BaseAccess):
     )
 
     def filtered_queryset(self):
-        return self.model.objects.filter(inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(inventory__in=Inventory.access_ids_qs(self.user, 'view'))
 
     def can_add(self, data, validate_license=True):
         if not data:  # So the browseable API will work
@@ -2322,8 +2322,7 @@ class JobEventAccess(BaseAccess):
 
     def filtered_queryset(self):
         return self.model.objects.filter(
-            Q(host__inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
-            | Q(job__job_template__in=JobTemplate.accessible_pk_qs(self.user, 'read_role'))
+            Q(host__inventory__in=Inventory.access_ids_qs(self.user, 'view')) | Q(job__job_template__in=JobTemplate.access_ids_qs(self.user, 'view'))
         )
 
     def can_add(self, data):
@@ -2348,7 +2347,7 @@ class ProjectUpdateEventAccess(BaseAccess):
     model = ProjectUpdateEvent
 
     def filtered_queryset(self):
-        return self.model.objects.filter(Q(project_update__project__in=Project.accessible_pk_qs(self.user, 'read_role')))
+        return self.model.objects.filter(Q(project_update__project__in=Project.access_ids_qs(self.user, 'view')))
 
     def can_add(self, data):
         return False
@@ -2368,7 +2367,7 @@ class InventoryUpdateEventAccess(BaseAccess):
     model = InventoryUpdateEvent
 
     def filtered_queryset(self):
-        return self.model.objects.filter(Q(inventory_update__inventory_source__inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role')))
+        return self.model.objects.filter(Q(inventory_update__inventory_source__inventory__in=Inventory.access_ids_qs(self.user, 'view')))
 
     def can_add(self, data):
         return False
@@ -2388,7 +2387,7 @@ class ReceptorAddressAccess(BaseAccess):
     model = ReceptorAddress
 
     def filtered_queryset(self):
-        return self.model.objects.filter(Q(instance__in=Instance.accessible_pk_qs(self.user, 'read_role')))
+        return self.model.objects.filter(Q(instance__in=Instance.access_ids_qs(self.user, 'view')))
 
     @check_superuser
     def can_add(self, data):
@@ -2452,8 +2451,7 @@ class UnifiedJobTemplateAccess(BaseAccess):
 
     def filtered_queryset(self):
         return self.model.objects.filter(
-            Q(pk__in=self.model.accessible_pk_qs(self.user, 'read_role'))
-            | Q(inventorysource__inventory__id__in=Inventory._accessible_pk_qs(Inventory, self.user, 'read_role'))
+            Q(pk__in=self.model.access_ids_qs(self.user, 'view')) | Q(inventorysource__inventory__id__in=Inventory.access_ids_qs(self.user, 'view'))
         )
 
     def can_start(self, obj, validate_license=True):
@@ -2499,12 +2497,12 @@ class UnifiedJobAccess(BaseAccess):
     # )
 
     def filtered_queryset(self):
-        inv_pk_qs = Inventory._accessible_pk_qs(Inventory, self.user, 'read_role')
+        inv_pk_qs = Inventory.access_ids_qs(self.user, 'view')
         qs = self.model.objects.filter(
-            Q(unified_job_template_id__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
+            Q(unified_job_template_id__in=UnifiedJobTemplate.access_ids_qs(self.user, 'view'))
             | Q(inventoryupdate__inventory_source__inventory__id__in=inv_pk_qs)
             | Q(adhoccommand__inventory__id__in=inv_pk_qs)
-            | Q(organization__in=Organization.accessible_pk_qs(self.user, 'auditor_role'))
+            | Q(organization__in=Organization.access_ids_qs(self.user, 'audit'))
         )
         return qs
 
@@ -2624,8 +2622,8 @@ class LabelAccess(BaseAccess):
 
     def filtered_queryset(self):
         return self.model.objects.filter(
-            Q(organization__in=Organization.accessible_pk_qs(self.user, 'read_role'))
-            | Q(unifiedjobtemplate_labels__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
+            Q(organization__in=Organization.access_ids_qs(self.user, 'view'))
+            | Q(unifiedjobtemplate_labels__in=UnifiedJobTemplate.access_ids_qs(self.user, 'view'))
         ).distinct()
 
     @check_superuser
@@ -2701,7 +2699,7 @@ class ActivityStreamAccess(BaseAccess):
         # 'inventory_source', 'workflow_job_template'
 
         q = Q(user=self.user)
-        inventory_set = Inventory.accessible_pk_qs(self.user, 'read_role')
+        inventory_set = Inventory.access_ids_qs(self.user, 'view')
         if inventory_set:
             q |= (
                 Q(ad_hoc_command__inventory__in=inventory_set)
@@ -2712,7 +2710,7 @@ class ActivityStreamAccess(BaseAccess):
                 | Q(inventory_update__inventory_source__inventory__in=inventory_set)
             )
 
-        credential_set = Credential.accessible_pk_qs(self.user, 'read_role')
+        credential_set = Credential.access_ids_qs(self.user, 'view')
         if credential_set:
             q |= Q(credential__in=credential_set)
 
@@ -2727,15 +2725,15 @@ class ActivityStreamAccess(BaseAccess):
                 | Q(role__in=Role.visible_roles(self.user) if auditing_orgs else [])
             )
 
-        project_set = Project.accessible_pk_qs(self.user, 'read_role')
+        project_set = Project.access_ids_qs(self.user, 'view')
         if project_set:
             q |= Q(project__in=project_set) | Q(project_update__project__in=project_set)
 
-        jt_set = JobTemplate.accessible_pk_qs(self.user, 'read_role')
+        jt_set = JobTemplate.access_ids_qs(self.user, 'view')
         if jt_set:
             q |= Q(job_template__in=jt_set) | Q(job__job_template__in=jt_set)
 
-        wfjt_set = WorkflowJobTemplate.accessible_pk_qs(self.user, 'read_role')
+        wfjt_set = WorkflowJobTemplate.access_ids_qs(self.user, 'view')
         if wfjt_set:
             q |= (
                 Q(workflow_job_template__in=wfjt_set)
@@ -2743,7 +2741,7 @@ class ActivityStreamAccess(BaseAccess):
                 | Q(workflow_job__workflow_job_template__in=wfjt_set)
             )
 
-        team_set = Team.accessible_pk_qs(self.user, 'read_role')
+        team_set = Team.access_ids_qs(self.user, 'view')
         if team_set:
             q |= Q(team__in=team_set)
 
@@ -2850,7 +2848,7 @@ class WorkflowApprovalAccess(BaseAccess):
         return True
 
     def filtered_queryset(self):
-        return self.model.objects.filter(unified_job_node__workflow_job__unified_job_template__in=WorkflowJobTemplate.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(unified_job_node__workflow_job__unified_job_template__in=WorkflowJobTemplate.access_ids_qs(self.user, 'view'))
 
     def can_approve_or_deny(self, obj):
         if (obj.workflow_job_template and self.user in obj.workflow_job_template.approval_role) or self.user.is_superuser:
@@ -2896,7 +2894,7 @@ class WorkflowApprovalTemplateAccess(BaseAccess):
         return self.user in obj.workflow_job_template.execute_role
 
     def filtered_queryset(self):
-        return self.model.objects.filter(workflowjobtemplatenodes__workflow_job_template__in=WorkflowJobTemplate.accessible_pk_qs(self.user, 'read_role'))
+        return self.model.objects.filter(workflowjobtemplatenodes__workflow_job_template__in=WorkflowJobTemplate.access_ids_qs(self.user, 'view'))
 
 
 for cls in BaseAccess.__subclasses__():
