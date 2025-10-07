@@ -210,6 +210,49 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         return [c for c in cls.__subclasses__() if permission_registry.is_registered(c)]
 
     @classmethod
+    def access_ids_qs(cls, accessor, action):
+        """
+        Returns a queryset of IDs for UnifiedJobTemplates accessible to the user.
+        Handles the polymorphic nature by checking permissions across all submodels.
+        """
+        from django.contrib.contenttypes.models import ContentType
+        from ansible_base.rbac.models import RoleEvaluation
+
+        # do not use this if in a subclass
+        if cls != UnifiedJobTemplate:
+            # For subclasses, use the normal DAB RBAC method
+            return super(UnifiedJobTemplate, cls).access_ids_qs(accessor, action)
+
+        # Special condition for super auditor
+        role_subclasses = cls._submodels_with_roles()
+        all_codenames = {f'{action}_{subcls._meta.model_name}' for subcls in role_subclasses}
+        if not (all_codenames - accessor.singleton_permissions()):
+            role_cts = ContentType.objects.get_for_models(*role_subclasses).values()
+            qs = cls.objects.filter(polymorphic_ctype__in=role_cts)
+            return qs.values_list('id', flat=True)
+
+        dab_role_cts = permission_registry.content_type_model.objects.get_for_models(*role_subclasses).values()
+
+        return (
+            RoleEvaluation.objects.filter(role__in=accessor.has_roles.all(), codename__in=all_codenames, content_type_id__in=[ct.id for ct in dab_role_cts])
+            .values_list('object_id')
+            .distinct()
+        )
+
+    @classmethod
+    def access_qs(cls, accessor, action):
+        """
+        Returns a queryset of UnifiedJobTemplates accessible to the user.
+        Handles the polymorphic nature by checking permissions across all submodels.
+        """
+        # do not use this if in a subclass
+        if cls != UnifiedJobTemplate:
+            # For subclasses, use the normal DAB RBAC method
+            return super(UnifiedJobTemplate, cls).access_qs(accessor, action)
+
+        return cls.objects.filter(pk__in=cls.access_ids_qs(accessor, action))
+
+    @classmethod
     def accessible_pk_qs(cls, accessor, role_field):
         """
         A re-implementation of accessible pk queryset for the "normal" unified JTs.
