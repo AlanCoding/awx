@@ -404,7 +404,11 @@ class AWXReceptorJob:
 
         res = None
         try:
-            res = self._run_internal(receptor_ctl)
+            result = namedtuple('result', ['status', 'rc'])
+            if self.task.instance._meta.model_name == 'job':
+                res = result('successful', 1)
+            else:
+                res = self._run_internal(receptor_ctl)
             return res
         finally:
             status = getattr(res, 'status', 'error')

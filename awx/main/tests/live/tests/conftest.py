@@ -20,6 +20,9 @@ from awx.main.tests import data
 from awx.main.models import Project, JobTemplate, Organization, Inventory
 
 
+del load_all_credentials  # TODO: remove before merge
+
+
 logger = logging.getLogger(__name__)
 
 
