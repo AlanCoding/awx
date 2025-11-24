@@ -27,9 +27,13 @@ def test_many_fast_launch(demo_inv, project_factory, live_tmp_folder, admin):
 
     jobs = []
     for i in range(N):
+        print(f'creating {i}')
         job = jt.create_unified_job()
-        job.signal_start()
         jobs.append(job)
+
+    for i, job in enumerate(jobs):
+        print(f'signl_start {i}')
+        job.signal_start()
 
     start_times = []
     run_times = []
