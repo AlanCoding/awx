@@ -3,6 +3,7 @@
 import logging
 import yaml
 import os
+import copy
 
 import redis
 
@@ -109,6 +110,12 @@ class Command(BaseCommand):
                 return
 
         if flag_enabled('FEATURE_DISPATCHERD_ENABLED'):
+            # Apply special log rule for the parent process
+            special_logging = copy.deepcopy(settings.LOGGING)
+            if 'dynamic_level_filter' in special_logging['handlers']['console']['filters']:
+                special_logging['handlers']['console']['filters'].remove('dynamic_level_filter')
+            logging.config.dictConfig(special_logging)
+
             dispatcher_setup(get_dispatcherd_config(for_service=True))
             run_service()
         else:

@@ -810,6 +810,8 @@ LOGGING = {
         'social': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
         'system_tracking_migrations': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
         'rbac_migrations': {'handlers': ['console', 'file', 'tower_warnings'], 'level': 'DEBUG'},
+        # NOTE: the dispatcherd main process will turn off the dynamic log filter
+        # so the level here is the way to control its verbosity
         'dispatcherd': {'handlers': ['dispatcher', 'console'], 'level': 'INFO'},
     },
 }
