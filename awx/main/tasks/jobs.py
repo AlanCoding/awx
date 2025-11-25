@@ -117,11 +117,17 @@ def with_path_cleanup(f):
 
 @task(on_duplicate='queue_one', bind=True, queue=get_task_queuename)
 def dispatch_waiting_jobs(binder):
+    start_time = time.monotonic()
+    job_id_list = []
     for uj in UnifiedJob.objects.filter(status='waiting', controller_node=settings.CLUSTER_HOST_ID).only('id', 'status', 'polymorphic_ctype', 'celery_task_id'):
+        logger.info(f' moving job {uj.id}, from start {time.monotonic() - start_time}')
         kwargs = uj.get_start_kwargs()
         if not kwargs:
             kwargs = {}
+        job_id_list.append(uj.pk)
         binder.control('run', data={'task': serialize_task(uj._get_task_class()), 'args': [uj.id], 'kwargs': kwargs, 'uuid': uj.celery_task_id})
+    if job_id_list:
+        logger.info(f'Kicking off jobs {job_id_list}, in time {time.monotonic() - start_time}')
 
 
 class BaseTask(object):
