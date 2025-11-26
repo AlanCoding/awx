@@ -119,8 +119,9 @@ def with_path_cleanup(f):
 def dispatch_waiting_jobs(binder):
     start_time = time.monotonic()
     job_id_list = []
-    for uj in UnifiedJob.objects.filter(status='waiting', controller_node=settings.CLUSTER_HOST_ID).only('id', 'status', 'polymorphic_ctype', 'celery_task_id'):
-        logger.info(f' moving job {uj.id}, from start {time.monotonic() - start_time}')
+    for uj in UnifiedJob.objects.filter(status='waiting', controller_node=settings.CLUSTER_HOST_ID).only('id', 'status', 'polymorphic_ctype', 'celery_task_id')[
+        :10
+    ]:
         kwargs = uj.get_start_kwargs()
         if not kwargs:
             kwargs = {}
@@ -128,6 +129,9 @@ def dispatch_waiting_jobs(binder):
         binder.control('run', data={'task': serialize_task(uj._get_task_class()), 'args': [uj.id], 'kwargs': kwargs, 'uuid': uj.celery_task_id})
     if job_id_list:
         logger.info(f'Kicking off jobs {job_id_list}, in time {time.monotonic() - start_time}')
+        # If this is a burst, the task manager may still be producing more jobs so reschedule
+        if len(job_id_list) > 1:
+            binder.control('run', data={'task': serialize_task(dispatch_waiting_jobs), 'args': [], 'kwargs': {}})
 
 
 class BaseTask(object):
