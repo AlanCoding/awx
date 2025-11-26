@@ -2,6 +2,9 @@ import time
 import statistics
 
 import pytest
+import psutil
+
+from dispatcherd.factories import get_control_from_settings
 
 from django.test import override_settings
 
@@ -9,12 +12,43 @@ from awx.api.versioning import reverse
 
 from awx.main.models import Job, JobTemplate, WorkflowJob
 
-from awx.main.tests.live.tests.conftest import wait_for_job
+from awx.main.tests.live.tests.conftest import wait_for_job, wait_to_leave_status
 
 N = 100
 
 N_series = [1, 5, 10, 20, 30, 45, 50, 75, 100, 150, 200]
 # N_series = [10]
+
+
+def find_dispatcher_pid():
+    return get_control_from_settings().control_with_reply('status')[0]['main']['pid']
+
+
+def sample_process_tree_rss(root_pid: int) -> int:
+    """
+    Returns total RSS (bytes) for root process + all its descendants.
+
+    This is usually what you want for "background task service memory".
+    """
+    try:
+        root = psutil.Process(root_pid)
+    except psutil.NoSuchProcess:
+        return 0
+
+    procs = [root]
+    try:
+        procs += root.children(recursive=True)
+    except psutil.NoSuchProcess:
+        pass
+
+    rss_total = 0
+    for p in procs:
+        try:
+            if p.is_running() and p.status() != psutil.STATUS_ZOMBIE:
+                rss_total += p.memory_info().rss
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return rss_total
 
 
 @pytest.fixture
@@ -65,18 +99,64 @@ def test_many_fast_launch(perf_jt):
     raise Exception({'start_mean': statistics.mean(start_times), 'run_mean': statistics.mean(run_times)})
 
 
-def test_workflow_bulk_launch(perf_jt, post, admin):
-    print('N      time')
-    for N_local in N_series:
-        with override_settings(BULK_JOB_MAX_LAUNCH=N_local + 1):
-            jobs = [{'unified_job_template': perf_jt.id} for _ in range(N_local)]
-
+@pytest.fixture
+def bulk_launcher(post, admin, perf_jt):
+    def _rf(num: int) -> WorkflowJob:
+        with override_settings(BULK_JOB_MAX_LAUNCH=num + 1):
+            jobs = [{'unified_job_template': perf_jt.id} for _ in range(num)]
             response = post(url=reverse('api:bulk_job_launch'), data={'name': 'Bulk Job Launch', 'jobs': jobs}, user=admin, expect=201)
-
             data = response.data
             wj_id = data['id']
             wj = WorkflowJob.objects.get(id=wj_id)
-            wait_for_job(wj)
-            delta = (wj.finished - wj.created).total_seconds()
-            print(f'{N_local}    {delta}')
+            return wj
+
+    return _rf
+
+
+def test_workflow_bulk_launch(bulk_launcher):
+    print('N      time')
+    for N_local in N_series:
+        wj = bulk_launcher(N_local)
+        wait_for_job(wj)
+        delta = (wj.finished - wj.created).total_seconds()
+        print(f'{N_local}    {delta}')
+    raise Exception('alan!')
+
+
+def test_workflow_memory_use(bulk_launcher):
+    print('N      time')
+    mems = []
+    for N_local in N_series:
+        wj = bulk_launcher(N_local)
+
+        wait_to_leave_status(wj, 'pending')
+
+        wait_time = 120
+
+        # wait until all the jobs are in the running status
+        for i in range(wait_time):
+            time.sleep(1)
+            running_ct = Job.objects.filter(status__in=['running', 'successful'], unified_job_node__workflow_job=wj.id).count()
+            if running_ct == N_local:
+                break
+        else:
+            total_ct = Job.objects.filter(unified_job_node__workflow_job=wj.id).count()
+            raise RuntimeError(f'Jobs from {wj.id} never hit running status in {wait_time}s, running {running_ct}, of {total_ct}, expected {N_local}')
+
+        # Get the memory use and print it, everything is in running status
+        # pid = find_dispatcher_pid()
+        pid = 24522
+        mem = sample_process_tree_rss(pid)
+        print(f'{N_local}    {mem}')
+        mems.append(mem)
+
+        # Clean up after ourselves
+        wj.cancel()
+        time.sleep(2)
+
+    print('')
+    print('N      time')
+    for N, mem in zip(N_series, mems):
+        print(f'{N}   {mem}')
+
     raise Exception('alan!')
