@@ -384,6 +384,37 @@ def worker_cleanup(node_name, vargs):
     return stdout
 
 
+import signal
+
+
+def sleep_ignoring_sigterm_for_40s():
+    got_sigterm = False
+
+    def _temp_sigterm_handler(signum, frame):
+        nonlocal got_sigterm
+        got_sigterm = True  # just record and keep going
+        logger.info('hack got the sigterm this time')
+
+    # Save the old handler so we can restore it later
+    old_handler1 = signal.getsignal(signal.SIGUSR1)
+    old_handler2 = signal.getsignal(signal.SIGTERM)
+
+    try:
+        # Install our temporary handler
+        signal.signal(signal.SIGUSR1, _temp_sigterm_handler)
+        signal.signal(signal.SIGTERM, _temp_sigterm_handler)
+
+        deadline = time.monotonic() + 140.0
+        while not got_sigterm and time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            # Sleep in small chunks so we can react quickly to SIGTERM
+            time.sleep(min(1.0, max(0.0, remaining)))
+    finally:
+        # Restore whatever handler was there before
+        signal.signal(signal.SIGUSR1, old_handler1)
+        signal.signal(signal.SIGTERM, old_handler2)
+
+
 class AWXReceptorJob:
     def __init__(self, task, runner_params=None):
         self.task = task
@@ -404,8 +435,9 @@ class AWXReceptorJob:
 
         res = None
         try:
-            result = namedtuple('result', ['status', 'rc'])
             if self.task.instance._meta.model_name == 'job':
+                sleep_ignoring_sigterm_for_40s()
+                result = namedtuple('result', ['status', 'rc'])
                 res = result('successful', 1)
             else:
                 res = self._run_internal(receptor_ctl)
