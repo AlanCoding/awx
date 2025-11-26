@@ -1502,9 +1502,15 @@ class UnifiedJob(
         if not connection.get_autocommit():
             if flag_enabled('FEATURE_DISPATCHERD_ENABLED'):
                 try:
-                    from dispatcherd.factories import get_control_from_settings
+                    # NOTE: temporary hack to go over pg_notify
+                    from dispatcherd.config import settings as dsettings
+                    from dispatcherd.control import Control
 
-                    ctl = get_control_from_settings()
+                    ctl = Control(broker_name='pg_notify', broker_config=dsettings.brokers['pg_notify'])
+
+                    # from dispatcherd.factories import get_control_from_settings
+
+                    # ctl = get_control_from_settings()
                     ctl.control('cancel', data={'uuid': self.celery_task_id})
                 except Exception:
                     logger.exception("Error sending cancel command to new dispatcher")
