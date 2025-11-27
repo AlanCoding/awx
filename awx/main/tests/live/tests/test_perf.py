@@ -7,6 +7,7 @@ import psutil
 from dispatcherd.factories import get_control_from_settings
 
 from django.test import override_settings
+from django.utils.timezone import now
 
 from awx.api.versioning import reverse
 
@@ -126,7 +127,10 @@ def test_workflow_bulk_launch(bulk_launcher):
 def test_workflow_memory_use(bulk_launcher):
     print('N      time')
     mems = []
+    start_times = []
     for N_local in N_series:
+        start_time = time.monotonic()
+        start_tz = now()
         wj = bulk_launcher(N_local)
 
         wait_to_leave_status(wj, 'pending')
@@ -143,20 +147,33 @@ def test_workflow_memory_use(bulk_launcher):
             total_ct = Job.objects.filter(unified_job_node__workflow_job=wj.id).count()
             raise RuntimeError(f'Jobs from {wj.id} never hit running status in {wait_time}s, running {running_ct}, of {total_ct}, expected {N_local}')
 
-        # Get the memory use and print it, everything is in running status
-        # pid = find_dispatcher_pid()
-        pid = 24522
+        # # Get the memory use and print it, everything is in running status
+        pid = find_dispatcher_pid()
+        # # pid = 28341
         mem = sample_process_tree_rss(pid)
-        print(f'{N_local}    {mem}')
         mems.append(mem)
+
+        # Record start time metrics
+        delta = time.monotonic() - start_time
+        start_times.append(delta)
+        if delta > 20:
+            last_job = Job.objects.filter(unified_job_node__workflow_job=wj.id).order_by('-started').first()
+            print(f'Job with latest starting time: {last_job.id}')
+            print(last_job.celery_task_id)
+            for fd_name in ('created', 'started', 'finished'):
+                val = getattr(last_job, fd_name)
+                if val is None:
+                    continue
+                rel_t = (val - start_tz).total_seconds()
+                print(f'{fd_name}    {rel_t}')
 
         # Clean up after ourselves
         wj.cancel()
         time.sleep(2)
 
     print('')
-    print('N      time')
-    for N, mem in zip(N_series, mems):
-        print(f'{N}   {mem}')
+    print('N      memory      start_time    long_job')
+    for N, mem, st in zip(N_series, mems, start_times):
+        print(f'{N}   {mem}    {st}')
 
     raise Exception('alan!')

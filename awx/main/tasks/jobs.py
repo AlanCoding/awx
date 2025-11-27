@@ -132,6 +132,8 @@ def dispatch_waiting_jobs(binder):
         # If this is a burst, the task manager may still be producing more jobs so reschedule
         if len(job_id_list) > 1:
             binder.control('run', data={'task': serialize_task(dispatch_waiting_jobs), 'args': [], 'kwargs': {}})
+    else:
+        logger.info('No jobs to launch for this node')
 
 
 class BaseTask(object):
