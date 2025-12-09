@@ -169,7 +169,15 @@ def test_workflow_memory_use(bulk_launcher):
 
         # Clean up after ourselves
         wj.cancel()
-        time.sleep(2)
+
+        # Wait until we have nothing in progress
+        for i in range(20):
+            if not Job.objects.filter(status__in=['pending', 'waiting', 'running']).exists():
+                break
+            time.sleep(1)
+        else:
+            ct = Job.objects.filter(status__in=['pending', 'waiting', 'running']).count()
+            raise RuntimeError(f'In progress jobs never finished {ct}')
 
     print('')
     print('N      memory      start_time    long_job')
