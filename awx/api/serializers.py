@@ -1344,7 +1344,7 @@ class ProjectSerializer(UnifiedJobTemplateSerializer, ProjectOptionsSerializer):
     last_update_failed = serializers.BooleanField(read_only=True)
     last_updated = serializers.DateTimeField(read_only=True)
     show_capabilities = ['start', 'schedule', 'edit', 'delete', 'copy']
-    capabilities_prefetch = ['admin', 'update', {'copy': 'organization.project_admin'}]
+    capabilities_prefetch = [{'edit': 'change'}, {'start': 'update_project'}, {'copy': 'organization.add_project'}]
 
     class Meta:
         model = Project
@@ -1543,7 +1543,7 @@ class LabelsListMixin(object):
 
 class InventorySerializer(LabelsListMixin, BaseSerializerWithVariables, OpaQueryPathMixin):
     show_capabilities = ['edit', 'delete', 'adhoc', 'copy']
-    capabilities_prefetch = ['admin', 'adhoc', {'copy': 'organization.inventory_admin'}]
+    capabilities_prefetch = [{'edit': 'change'}, {'adhoc': 'adhoc_inventory'}, {'copy': 'organization.add_inventory'}]
 
     class Meta:
         model = Inventory
@@ -1787,7 +1787,7 @@ class InventoryScriptSerializer(InventorySerializer):
 
 class HostSerializer(BaseSerializerWithVariables):
     show_capabilities = ['edit', 'delete']
-    capabilities_prefetch = ['inventory.admin']
+    capabilities_prefetch = [{'edit': 'inventory.change'}]
 
     has_active_failures = serializers.SerializerMethodField()
     has_inventory_sources = serializers.SerializerMethodField()
@@ -1948,7 +1948,7 @@ class AnsibleFactsSerializer(BaseSerializer):
 
 class GroupSerializer(BaseSerializerWithVariables):
     show_capabilities = ['copy', 'edit', 'delete']
-    capabilities_prefetch = ['inventory.admin', 'inventory.adhoc']
+    capabilities_prefetch = [{'edit': 'inventory.change'}, {'adhoc': 'inventory.adhoc_inventory'}]
 
     class Meta:
         model = Group
@@ -2338,7 +2338,7 @@ class InventorySourceSerializer(UnifiedJobTemplateSerializer, InventorySourceOpt
     last_update_failed = serializers.BooleanField(read_only=True)
     last_updated = serializers.DateTimeField(read_only=True)
     show_capabilities = ['start', 'schedule', 'edit', 'delete']
-    capabilities_prefetch = [{'admin': 'inventory.admin'}, {'start': 'inventory.update'}]
+    capabilities_prefetch = [{'edit': 'inventory.change'}, {'start': 'inventory.update_inventory'}]
 
     class Meta:
         model = InventorySource
@@ -2944,7 +2944,7 @@ class CredentialTypeSerializer(BaseSerializer):
 
 class CredentialSerializer(BaseSerializer):
     show_capabilities = ['edit', 'delete', 'copy', 'use']
-    capabilities_prefetch = ['admin', 'use']
+    capabilities_prefetch = [{'edit': 'change'}, {'use': 'use_credential'}]
     managed = serializers.ReadOnlyField()
 
     class Meta:
@@ -3285,7 +3285,11 @@ class JobTemplateMixin(object):
 
 class JobTemplateSerializer(JobTemplateMixin, UnifiedJobTemplateSerializer, JobOptionsSerializer):
     show_capabilities = ['start', 'schedule', 'copy', 'edit', 'delete']
-    capabilities_prefetch = ['admin', 'execute', {'copy': ['project.use', 'inventory.use']}]
+    capabilities_prefetch = [
+        {'edit': 'change'},
+        {'start': 'execute_jobtemplate'},
+        {'copy': ['project.use_project', 'inventory.use_inventory']},
+    ]
 
     status = serializers.ChoiceField(choices=JobTemplate.JOB_TEMPLATE_STATUS_CHOICES, read_only=True, required=False)
 
@@ -3774,7 +3778,11 @@ class SystemJobCancelSerializer(SystemJobSerializer):
 
 class WorkflowJobTemplateSerializer(JobTemplateMixin, LabelsListMixin, UnifiedJobTemplateSerializer):
     show_capabilities = ['start', 'schedule', 'edit', 'copy', 'delete']
-    capabilities_prefetch = ['admin', 'execute', {'copy': 'organization.workflow_admin'}]
+    capabilities_prefetch = [
+        {'edit': 'change'},
+        {'start': 'execute_workflowjobtemplate'},
+        {'copy': 'organization.add_workflowjobtemplate'},
+    ]
     limit = serializers.CharField(allow_blank=True, allow_null=True, required=False, default=None)
     scm_branch = serializers.CharField(allow_blank=True, allow_null=True, required=False, default=None)
 
@@ -5079,7 +5087,7 @@ class BulkJobLaunchSerializer(serializers.Serializer):
 
 class NotificationTemplateSerializer(BaseSerializer):
     show_capabilities = ['edit', 'delete', 'copy']
-    capabilities_prefetch = [{'copy': 'organization.admin'}]
+    capabilities_prefetch = [{'copy': 'organization.add_notificationtemplate'}]
 
     class Meta:
         model = NotificationTemplate
