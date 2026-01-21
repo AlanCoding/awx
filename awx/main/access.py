@@ -1814,7 +1814,8 @@ class JobLaunchConfigAccess(UnifiedCredentialsMixin, BaseAccess):
         if cls is Label:
             return LabelAccess(self.user).filtered_queryset()
         else:
-            return cls._accessible_pk_qs(cls, self.user, 'use_role')
+            action = f'use_{cls._meta.model_name}'
+            return cls.access_qs(self.user, action)
 
     def has_obj_m2m_access(self, obj):
         for relationship, cls in self.M2M_CHECKS.items():
