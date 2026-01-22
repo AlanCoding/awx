@@ -23,6 +23,7 @@ from django.core.exceptions import NON_FIELD_ERRORS
 from django.utils.translation import gettext_lazy as _
 from django.utils.timezone import now
 from django.utils.encoding import smart_str
+from django.contrib.contenttypes.models import ContentType
 from flags.state import flag_enabled
 
 # REST Framework
@@ -33,6 +34,7 @@ from polymorphic.models import PolymorphicModel
 
 from ansible_base.lib.utils.models import prevent_search, get_type_for_model
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleEvaluation
 
 # AWX
 from awx.main.models.base import CommonModelNameNotUnique, PasswordFieldsModel, NotificationFieldsModel
@@ -212,9 +214,6 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
         Returns a queryset of IDs for UnifiedJobTemplates accessible to the user.
         Handles the polymorphic nature by checking permissions across all submodels.
         """
-        from django.contrib.contenttypes.models import ContentType
-        from ansible_base.rbac.models import RoleEvaluation
-
         # do not use this if in a subclass
         if cls != UnifiedJobTemplate:
             # For subclasses, use the normal DAB RBAC method

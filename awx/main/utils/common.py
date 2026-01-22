@@ -608,13 +608,35 @@ def prefetch_page_capabilities(model, page, prefetch_list, user):
     prefetch_list = [{'copy': ['inventory.use_inventory', 'project.use_project']}]
       --> prefetch logical combination of use permission to inventory AND
           project, put into cache dictionary as "copy"
+
+    Notes:
+    - This helper is only intended for list views where approximate capabilities
+      are acceptable. It does not encode the full set of runtime checks used
+      for "start" on jobs; those are validated at request time and may still
+      return 403.
+    - UnifiedJobTemplate lists are polymorphic (JobTemplate/WorkflowJobTemplate).
+      For those lists we only normalize codenames into verb actions; we do not
+      attempt to OR different verbs (e.g., execute vs update) for a generic
+      "start" capability.
     """
     page_ids = [obj.id for obj in page]
     mapping = {}
     for obj in page:
         mapping[obj.id] = {}
 
-    def normalize_action(model_cls, action_name):
+    def normalize_action(model_cls: type, action_name: str) -> str:
+        """
+        Normalize permission strings for polymorphic UnifiedJobTemplate access checks.
+
+        UnifiedJobTemplate.access_qs expects action verbs (e.g., 'execute', 'change'),
+        but capabilities_prefetch uses full permission codenames (e.g., 'execute_jobtemplate').
+        For UJT only, trim known verb prefixes when the action follows the
+        <verb>_<model> codename pattern to keep access checks compatible.
+
+        This does not attempt to reconcile different verbs for a generic
+        capability (e.g., "start" across execute/update); list views that need
+        that behavior should avoid prefetching or accept approximate results.
+        """
         if model_cls.__name__ != 'UnifiedJobTemplate':
             return action_name
         if '_' not in action_name:
