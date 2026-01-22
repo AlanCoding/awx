@@ -2387,7 +2387,8 @@ class ReceptorAddressAccess(BaseAccess):
     model = ReceptorAddress
 
     def filtered_queryset(self):
-        return self.model.objects.filter(Q(instance__in=Instance.access_ids_qs(self.user, 'view')))
+        instance_qs = InstanceAccess(self.user).filtered_queryset()
+        return self.model.objects.filter(Q(instance__in=instance_qs))
 
     @check_superuser
     def can_add(self, data):
