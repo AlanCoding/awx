@@ -30,7 +30,6 @@ logger = logging.getLogger('awx.main.models.mixins')
 
 
 __all__ = [
-    'ResourceMixin',
     'SurveyJobTemplateMixin',
     'SurveyJobMixin',
     'TaskManagerUnifiedJobMixin',
@@ -41,11 +40,6 @@ __all__ = [
     'CustomVirtualEnvMixin',
     'OpaQueryPathMixin',
 ]
-
-
-class ResourceMixin(models.Model):
-    class Meta:
-        abstract = True
 
 
 class SurveyJobTemplateMixin(models.Model):

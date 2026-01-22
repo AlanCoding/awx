@@ -74,7 +74,6 @@ from awx.main.models import (
     WorkflowApproval,
     WorkflowApprovalTemplate,
 )
-from awx.main.models.mixins import ResourceMixin
 
 __all__ = [
     'get_user_queryset',
@@ -1265,7 +1264,7 @@ class TeamAccess(BaseAccess):
             if sub_obj.content_object is None:
                 raise PermissionDenied(_("The {} role cannot be assigned to a team").format(sub_obj.name))
 
-            if isinstance(sub_obj.content_object, ResourceMixin):
+            if permission_registry.is_registered(sub_obj.content_object):
                 role_access = RoleAccess(self.user)
                 return role_access.can_attach(sub_obj, obj, 'member_role.parents', *args, **kwargs)
         if self.user.is_superuser:
@@ -1281,7 +1280,7 @@ class TeamAccess(BaseAccess):
     def can_unattach(self, obj, sub_obj, relationship, *args, **kwargs):
         # MANAGE_ORGANIZATION_AUTH setting checked in RoleAccess
         if isinstance(sub_obj, Role):
-            if isinstance(sub_obj.content_object, ResourceMixin):
+            if permission_registry.is_registered(sub_obj.content_object):
                 role_access = RoleAccess(self.user)
                 return role_access.can_unattach(sub_obj, obj, 'member_role.parents', *args, **kwargs)
 
@@ -2812,7 +2811,7 @@ class RoleAccess(BaseAccess):
             if not settings.MANAGE_ORGANIZATION_AUTH and not self.user.is_superuser:
                 return False
 
-        if isinstance(obj.content_object, ResourceMixin) and self.user in obj.content_object.admin_role:
+        if permission_registry.is_registered(obj.content_object) and self.user in obj.content_object.admin_role:
             return True
         return False
 
