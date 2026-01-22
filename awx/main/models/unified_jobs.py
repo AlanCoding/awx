@@ -23,7 +23,6 @@ from django.core.exceptions import NON_FIELD_ERRORS
 from django.utils.translation import gettext_lazy as _
 from django.utils.timezone import now
 from django.utils.encoding import smart_str
-from django.contrib.contenttypes.models import ContentType
 from flags.state import flag_enabled
 
 # REST Framework
@@ -34,7 +33,6 @@ from polymorphic.models import PolymorphicModel
 
 from ansible_base.lib.utils.models import prevent_search, get_type_for_model
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import RoleEvaluation
 
 # AWX
 from awx.main.models.base import CommonModelNameNotUnique, PasswordFieldsModel, NotificationFieldsModel
@@ -42,7 +40,6 @@ from awx.main.dispatch import get_task_queuename
 from awx.main.dispatch.control import Control as ControlDispatcher
 from awx.main.registrar import activity_stream_registrar
 from awx.main.models.mixins import TaskManagerUnifiedJobMixin, ExecutionEnvironmentMixin
-from awx.main.models.rbac import to_permissions
 from awx.main.utils.common import (
     camelcase_to_underscore,
     get_model_for_type,
@@ -251,37 +248,6 @@ class UnifiedJobTemplate(PolymorphicModel, CommonModelNameNotUnique, ExecutionEn
             return super(UnifiedJobTemplate, cls).access_qs(accessor, action)
 
         return cls.objects.filter(pk__in=cls.access_ids_qs(accessor, action))
-
-    @classmethod
-    def accessible_pk_qs(cls, accessor, role_field):
-        """
-        A re-implementation of accessible pk queryset for the "normal" unified JTs.
-        Does not return inventory sources or system JTs, these should
-        be handled inside of get_queryset where it is utilized.
-
-        This method forwards to access_ids_qs from django-ansible-base.
-        """
-        # do not use this if in a subclass
-        if cls != UnifiedJobTemplate:
-            return cls.access_ids_qs(accessor, to_permissions[role_field])
-
-        action = to_permissions[role_field]
-
-        # Special condition for super auditor
-        role_subclasses = cls._submodels_with_roles()
-        all_codenames = {f'{action}_{cls._meta.model_name}' for cls in role_subclasses}
-        if not (all_codenames - accessor.singleton_permissions()):
-            role_cts = ContentType.objects.get_for_models(*role_subclasses).values()
-            qs = cls.objects.filter(polymorphic_ctype__in=role_cts)
-            return qs.values_list('id', flat=True)
-
-        dab_role_cts = permission_registry.content_type_model.objects.get_for_models(*role_subclasses).values()
-
-        return (
-            RoleEvaluation.objects.filter(role__in=accessor.has_roles.all(), codename__in=all_codenames, content_type_id__in=[ct.id for ct in dab_role_cts])
-            .values_list('object_id')
-            .distinct()
-        )
 
     def _perform_unique_checks(self, unique_checks):
         # Handle the list of unique fields returned above. Replace with an
