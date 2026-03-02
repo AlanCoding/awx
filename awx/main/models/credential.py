@@ -20,7 +20,6 @@ from django.utils.encoding import force_str
 from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.contrib.auth.models import User
-from flags.state import flag_enabled
 
 # DRF
 from rest_framework.serializers import ValidationError as DRFValidationError
@@ -649,9 +648,13 @@ class CredentialInputSource(PrimordialModel):
 
         backend_kwargs.update(self.metadata)
 
-        if flag_enabled("FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED"):
-            if workload_identity_token := context.get('workload_identity_token'):
-                backend_kwargs['workload_identity_token'] = workload_identity_token
+        # Resolve internal fields from the type definition
+        # These are fields not stored in inputs but resolved at runtime
+        for field in self.source_credential.credential_type.inputs.get('fields', []):
+            if field.get('internal'):
+                value = context.get(field['id'])
+                if value is not None:
+                    backend_kwargs[field['id']] = value
 
         with set_environ(**settings.AWX_TASK_ENV):
             return backend(**backend_kwargs)
