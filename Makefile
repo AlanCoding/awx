@@ -160,6 +160,7 @@ clean-api:
 	find . -type f -regex ".*\.py[co]$$" -delete
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	rm -f awx/awx_test.sqlite3*
+	rm -f awx/awx.sqlite3*
 	rm -rf requirements/vendor
 	rm -rf awx/projects
 
