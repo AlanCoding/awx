@@ -1665,11 +1665,12 @@ class JobAccess(BaseAccess):
     def filtered_queryset(self):
         qs = self.model.objects
 
-        qs_jt = qs.filter(job_template__in=JobTemplate.access_qs(self.user, 'view'))
-
-        org_access_qs = Organization.objects.filter(Q(admin_role__members=self.user) | Q(auditor_role__members=self.user))
+        # Use access_ids_qs subqueries instead of role__members traversal to avoid LEFT OUTER JOINs
+        org_access_qs = Organization.objects.filter(
+            Q(pk__in=Organization.access_ids_qs(self.user, 'change')) | Q(pk__in=Organization.access_ids_qs(self.user, 'audit_organization'))
+        )
         if not org_access_qs.exists():
-            return qs_jt
+            return qs.filter(job_template__in=JobTemplate.access_qs(self.user, 'view'))
 
         return qs.filter(Q(job_template__in=JobTemplate.access_qs(self.user, 'view')) | Q(organization__in=org_access_qs)).distinct()
 
@@ -2319,9 +2320,10 @@ class JobEventAccess(BaseAccess):
     )
 
     def filtered_queryset(self):
+        # Use pk__in subqueries instead of host__/job__ traversal to avoid LEFT OUTER JOINs on nullable FKs
         return self.model.objects.filter(
-            Q(host__inventory__in=Inventory.accessible_pk_qs(self.user, 'read_role'))
-            | Q(job__job_template__in=JobTemplate.accessible_pk_qs(self.user, 'read_role'))
+            Q(host_id__in=Host.objects.filter(inventory__in=Inventory.access_ids_qs(self.user, 'view')).values('pk'))
+            | Q(job_id__in=Job.objects.filter(job_template__in=JobTemplate.access_ids_qs(self.user, 'view')).values('pk'))
         )
 
     def can_add(self, data):
@@ -2449,9 +2451,14 @@ class UnifiedJobTemplateAccess(BaseAccess):
     # )
 
     def filtered_queryset(self):
+        # Use pk__in subquery instead of inventorysource__ traversal to avoid LEFT OUTER JOIN on child table
         return self.model.objects.filter(
             Q(pk__in=self.model.accessible_pk_qs(self.user, 'read_role'))
-            | Q(inventorysource__inventory__id__in=Inventory._accessible_pk_qs(Inventory, self.user, 'read_role'))
+            | Q(
+                pk__in=InventorySource.objects.filter(
+                    inventory__id__in=Inventory.access_ids_qs(self.user, 'view'),
+                ).values('unifiedjobtemplate_ptr_id')
+            )
         )
 
     def can_start(self, obj, validate_license=True):
@@ -2497,7 +2504,8 @@ class UnifiedJobAccess(BaseAccess):
     # )
 
     def filtered_queryset(self):
-        inv_pk_qs = Inventory._accessible_pk_qs(Inventory, self.user, 'read_role')
+        # Use pk__in subqueries instead of inventoryupdate__/adhoccommand__ traversal to avoid LEFT OUTER JOINs on child tables
+        inv_pk_qs = Inventory.access_ids_qs(self.user, 'view')
         qs = self.model.objects.filter(
             Q(unified_job_template_id__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
             | Q(
@@ -2510,7 +2518,7 @@ class UnifiedJobAccess(BaseAccess):
                     inventory__id__in=inv_pk_qs,
                 ).values('pk')
             )
-            | Q(organization__in=Organization.accessible_pk_qs(self.user, 'auditor_role'))
+            | Q(organization__in=Organization.access_ids_qs(self.user, 'audit_organization'))
         )
         return qs
 
@@ -2629,10 +2637,15 @@ class LabelAccess(BaseAccess):
     )
 
     def filtered_queryset(self):
+        # Use pk__in subquery instead of unifiedjobtemplate_labels__ traversal to avoid LEFT OUTER JOIN on M2M table
         return self.model.objects.filter(
-            Q(organization__in=Organization.accessible_pk_qs(self.user, 'read_role'))
-            | Q(unifiedjobtemplate_labels__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'))
-        ).distinct()
+            Q(organization__in=Organization.access_ids_qs(self.user, 'view'))
+            | Q(
+                pk__in=UnifiedJobTemplate.labels.through.objects.filter(
+                    unifiedjobtemplate_id__in=UnifiedJobTemplate.accessible_pk_qs(self.user, 'read_role'),
+                ).values('label_id')
+            )
+        )
 
     @check_superuser
     def can_add(self, data):
