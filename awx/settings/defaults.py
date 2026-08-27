@@ -887,6 +887,10 @@ AWX_RUNNER_SUPPRESS_OUTPUT_FILE = True
 # ansible-runner will send
 AWX_RUNNER_KEEPALIVE_SECONDS = 0
 
+# Tag key/value used by execution nodes to advertise themselves on the receptor mesh.
+# inspect_execution_and_hop_nodes uses this to auto-register nodes it hasn't seen before.
+RECEPTOR_EXECUTION_KIND_TAG = "execution"
+
 # Delete completed work units in receptor
 RECEPTOR_RELEASE_WORK = True
 RECEPTOR_KEEP_WORK_ON_ERROR = False

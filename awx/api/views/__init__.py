@@ -400,7 +400,7 @@ class InstanceList(ListCreateAPIView):
 
     @extend_schema_if_available(
         extensions={
-            "x-ai-description": "Register an execution or hop node instance. Only available on openshift based AAP deployments. Use the install bundle playbook to further provision the instance"
+            "x-ai-description": "Deprecated for execution nodes: execution nodes are now automatically registered when they appear on the receptor mesh with the appropriate label. This endpoint remains available but is no longer required for execution node provisioning. Creating hop nodes via this endpoint is still supported."
         }
     )
     def post(self, request, *args, **kwargs):

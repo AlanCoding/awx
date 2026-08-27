@@ -79,10 +79,6 @@ if [[ -n "$RUN_MIGRATIONS" ]]; then
         awx-manage provision_instance --hostname="receptor-hop" --node_type="hop"
         awx-manage add_receptor_address --instance="receptor-hop" --address="receptor-hop" --port=5555 --canonical
         awx-manage register_peers "receptor-hop" --peers "awx-1"
-        for (( e=1; e<=$EXECUTION_NODE_COUNT; e++ )); do
-            awx-manage provision_instance --hostname="receptor-$e" --node_type="execution"
-            awx-manage register_peers "receptor-$e" --peers "receptor-hop"
-        done
     fi
 fi
 

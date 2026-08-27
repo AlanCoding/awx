@@ -1,6 +1,5 @@
 ---
 - node:
-    id: awx-{{ item }}
     firewallrules:
       - action: "reject"
         tonode: awx-{{ item }}

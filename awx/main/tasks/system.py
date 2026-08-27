@@ -613,8 +613,14 @@ def inspect_execution_and_hop_nodes(instance_list, receptor_ctl):
             if hostname in node_lookup:
                 instance = node_lookup[hostname]
             else:
-                logger.warning(f"Unrecognized node advertising on mesh: {hostname}")
-                continue
+                tags = ad.get('Tags', {}) or {}
+                if tags.get('kind') == settings.RECEPTOR_EXECUTION_KIND_TAG:
+                    logger.info(f"Auto-registering execution node {hostname} discovered via receptor mesh tags.")
+                    _, instance = Instance.objects.register(hostname=hostname, node_type='execution')
+                    node_lookup[hostname] = instance
+                else:
+                    logger.warning(f"Unrecognized node advertising on mesh: {hostname}")
+                    continue
 
             # Control-plane nodes are dealt with via local_health_check instead.
             if instance.node_type in (Instance.Types.CONTROL, Instance.Types.HYBRID):

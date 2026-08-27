@@ -1,12 +1,14 @@
 ---
-- node:
-    id: receptor-{{ item }}
-
 - log-level: info
 
 - tcp-peer:
     address: tools_receptor_hop:5555
     redial: true
+
+- tcp-listener:
+    service: worker-svc
+    tags:
+      kind: execution
 
 {% if sign_work|bool %}
 - work-verification:
