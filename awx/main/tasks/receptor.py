@@ -952,10 +952,12 @@ def _get_or_create_private_data_dir(job):
 def _finalize_adopted_job(job, callback, exit_code, process_phase_failed):
     """Write terminal status, timestamps, and delayed callback fields to DB.
 
-    Only runs when the job is still 'running' in the DB after _process_phase
-    returns — meaning the async callback receiver hasn't committed status yet.
-    Uses get_delayed_update_fields() to mirror what BaseTask.run() writes via
-    update_model(**get_delayed_update_fields()).
+    Adoption counterpart to the status-commit block in BaseTask.run(). Differences:
+    - Guards on job.status != 'running': the async callback receiver may have already
+      committed the final status via the event stream, in which case nothing to do.
+    - Uses job.save() directly instead of update_model() — no BaseTask context, no
+      retry logic needed; adoption runs in its own background task with a fresh DB connection.
+    - Skips post_run_hook / final_run_hook (those belong to the original BaseTask).
     """
     job.refresh_from_db(fields=['status'])
     if job.status != 'running':

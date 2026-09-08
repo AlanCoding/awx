@@ -627,11 +627,14 @@ class BaseTask(object):
     def should_use_fact_cache(self):
         return False
 
-    @with_path_cleanup
-    @with_signal_handling
-    def run(self, pk, **kwargs):
+    def prepare_for_transmit(self, pk, **kwargs):
         """
-        Run the job/task and capture its output.
+        Prepare the job for execution: transition to running, build credentials and
+        working directory, transmit to the EE, process events, and run post-run hooks.
+
+        Returns (status, rc, private_data_dir) on normal completion, or None on early
+        exit (job not runnable, already canceled, or pending retry via exceeded quota).
+        Final status commit is handled by run().
         """
 
         if not self.instance:  # Used to skip fetch for local runs
@@ -646,12 +649,12 @@ class BaseTask(object):
 
         if self.instance.status != 'running':
             logger.error(f'Not starting {self.instance.status} task pk={pk} because its status "{self.instance.status}" is not expected')
-            return
+            return None
 
         if self.instance.cancel_flag:
             self.instance = self.update_model(pk, status='canceled')
             self.instance.websocket_emit_status('canceled')
-            return
+            return None
 
         self.instance.websocket_emit_status("running")
         status, rc = 'error', None
@@ -790,7 +793,7 @@ class BaseTask(object):
                 self.unit_id = receptor_job.unit_id
 
                 if not res:
-                    return
+                    return None
 
             status = res.status
             rc = res.rc
@@ -827,11 +830,21 @@ class BaseTask(object):
         except Exception:
             logger.exception('{} Post run hook errored.'.format(self.instance.log_format))
 
+        return status, rc, private_data_dir
+
+    @with_path_cleanup
+    @with_signal_handling
+    def run(self, pk, **kwargs):
+        result = self.prepare_for_transmit(pk, **kwargs)
+        if result is None:
+            return
+        status, rc, private_data_dir = result
+
         self.instance = self.update_model(pk)
         self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
 
-        # Field host_status_counts is used as a metric to check if event processing is finished
-        # we send notifications if it is, if not, callback receiver will send them
+        # host_status_counts is set when events are already processed; if absent,
+        # the callback receiver handles notifications when it finishes.
         if not self.instance:
             logger.error(f'Unified job pk={pk} appears to be deleted while running')
             return
