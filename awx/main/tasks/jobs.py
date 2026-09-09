@@ -205,6 +205,29 @@ def dispatch_waiting_jobs(binder):
         UnifiedJob.objects.filter(pk=uj.pk, status='waiting').update(status='running', start_args='')
 
 
+def _finalize_job_run(instance, runner_callback, status, rc):
+    """Commit terminal status to DB, trigger notifications, and emit websocket status.
+
+    Shared by BaseTask.run() (normal job path) and adoption (_finalize_adopted_job in
+    receptor.py). Returns the updated instance, or None if the instance was deleted.
+    Callers add path-specific concerns around this: BaseTask.run() adds final_run_hook
+    and raises on non-successful; adoption adds a guard for the async callback race.
+    """
+    max_attempts = int(getattr(settings, 'DISPATCHER_DB_DOWNTOWN_TOLLERANCE', settings.DISPATCHER_DB_DOWNTIME_TOLERANCE) / 5)
+    instance = update_model(type(instance), instance.pk, _max_attempts=max_attempts)
+    instance = update_model(
+        type(instance), instance.pk, status=status, select_for_update=True, _max_attempts=max_attempts, **runner_callback.get_delayed_update_fields()
+    )
+    if not instance:
+        return None
+    # host_status_counts is set when events are already processed; if absent,
+    # the callback receiver handles notifications when it finishes.
+    if (instance.host_status_counts is not None) or (not runner_callback.wrapup_event_dispatched):
+        events_processed_hook(instance)
+    instance.websocket_emit_status(status)
+    return instance
+
+
 class BaseTask(object):
     model = None
     event_model = None
@@ -840,23 +863,16 @@ class BaseTask(object):
             return
         status, rc, private_data_dir = result
 
-        self.instance = self.update_model(pk)
-        self.instance = self.update_model(pk, status=status, select_for_update=True, **self.runner_callback.get_delayed_update_fields())
-
-        # host_status_counts is set when events are already processed; if absent,
-        # the callback receiver handles notifications when it finishes.
+        self.instance = _finalize_job_run(self.instance, self.runner_callback, status, rc)
         if not self.instance:
             logger.error(f'Unified job pk={pk} appears to be deleted while running')
             return
-        if (self.instance.host_status_counts is not None) or (not self.runner_callback.wrapup_event_dispatched):
-            events_processed_hook(self.instance)
 
         try:
             self.final_run_hook(self.instance, status, private_data_dir)
         except Exception:
             logger.exception('{} Final run hook errored.'.format(self.instance.log_format))
 
-        self.instance.websocket_emit_status(status)
         if status != 'successful':
             if status == 'canceled':
                 raise AwxTaskError.TaskCancel(self.instance, rc)

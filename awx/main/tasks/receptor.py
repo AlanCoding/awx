@@ -950,34 +950,21 @@ def _get_or_create_private_data_dir(job):
 
 
 def _finalize_adopted_job(job, callback, exit_code, process_phase_failed):
-    """Write terminal status, timestamps, and delayed callback fields to DB.
+    """Commit terminal status for an adopted job via the shared _finalize_job_run path.
 
-    Adoption counterpart to the status-commit block in BaseTask.run(). Differences:
-    - Guards on job.status != 'running': the async callback receiver may have already
-      committed the final status via the event stream, in which case nothing to do.
-    - Uses job.save() directly instead of update_model() — no BaseTask context, no
-      retry logic needed; adoption runs in its own background task with a fresh DB connection.
-    - Skips post_run_hook / final_run_hook (those belong to the original BaseTask).
+    Guards before calling: if the async callback receiver already committed the final
+    status via the event stream, there is nothing left to do (and calling _finalize_job_run
+    would double-send notifications). final_run_hook is skipped — it belongs to the
+    original BaseTask invocation that no longer exists on this controller.
     """
+    from awx.main.tasks.jobs import _finalize_job_run
+
     job.refresh_from_db(fields=['status'])
     if job.status != 'running':
         return
 
     final_status = 'successful' if exit_code == 0 else 'failed'
-    finished_at = now()
-
-    delayed = {k: v for k, v in callback.get_delayed_update_fields().items() if k != 'status'}
-    update_kwargs = {'status': final_status, 'finished': finished_at, **delayed}
-    if job.started:
-        update_kwargs['elapsed'] = (finished_at - job.started).total_seconds()
-    for field, value in update_kwargs.items():
-        setattr(job, field, value)
-    job.save(update_fields=list(update_kwargs.keys()))
-
-    if hasattr(job, 'send_notification_templates'):
-        job.send_notification_templates('succeeded' if final_status == 'successful' else 'failed')
-    job.websocket_emit_status(final_status)
-
+    _finalize_job_run(job, callback, final_status, None)
     label = 'exit_code (process phase raised)' if process_phase_failed else 'adoption'
     logger.info(f'Job {job.id} finalized via {label}: {final_status}')
 
